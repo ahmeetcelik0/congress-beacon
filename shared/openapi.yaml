@@ -1,0 +1,28 @@
+openapi: 3.0.3
+info:
+  title: Kongre Beacon API
+  description: Kongre Beacon Sistemi backend API sozlesmesi.
+  version: 0.1.0
+servers:
+  - url: http://localhost:3001
+    description: Yerel gelistirme
+paths:
+  /health:
+    get:
+      summary: Servis saglik kontrolu
+      operationId: getHealth
+      tags:
+        - Health
+      responses:
+        '200':
+          description: Servis ayakta.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                properties:
+                  status:
+                    type: string
+                    example: ok

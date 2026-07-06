@@ -53,6 +53,43 @@ git checkout develop
 git pull origin develop
 ```
 
+## Backend ve Panel Çalıştırma
+
+Servisleri başlatma sırası:
+
+1. MySQL ve Redis'i ayağa kaldır (kök dizinde):
+
+   ```bash
+   cp .env.example .env
+   docker compose up -d
+   docker compose ps
+   ```
+
+2. Backend (NestJS, varsayılan port `3001`):
+
+   ```bash
+   cd backend
+   cp .env.example .env
+   npm install
+   npx prisma generate
+   npm run start:dev
+   ```
+
+   Sağlık kontrolü: `curl http://localhost:3001/health` → `{"status":"ok"}`
+
+3. Panel (Next.js, varsayılan port `3000`):
+
+   ```bash
+   cd web
+   cp .env.example .env.local
+   npm install
+   npm run dev
+   ```
+
+   Tarayıcıda: `http://localhost:3000`
+
+**Not:** `3000`/`3001` portları yerelde başka bir uygulamayla çakışırsa, ilgili `.env`/`.env.local` dosyasındaki `PORT` / `NEXT_PUBLIC_API_URL` değerini güncelleyin (panel `next dev -p <port>` ile de başlatılabilir).
+
 ---
 
 # Sıralı Proje Checklist'i
@@ -72,7 +109,7 @@ git pull origin develop
 - [x] `docs/decisions.md` Türkçe proje kararları ile oluşturuldu.
 - [ ] GitHub Project / Issues panosu oluşturuldu.
 - [ ] Etiketler oluşturuldu: `mobile`, `backend`, `web`, `database`, `beacon`, `ios`, `integration`, `bug`.
-- [ ] Bu README ve `CLAUDE.md` `develop` branch'ine merge edildi.
+- [x] Bu README `develop` branch'ine merge edildi. `CLAUDE.md` ekip kararıyla repoya commit edilmiyor (bkz. kök `.gitignore`); içeriği gerekirse repo dışında paylaşılır.
 
 ### Mobil geliştirici
 
@@ -82,8 +119,8 @@ git pull origin develop
 
 ### Backend / panel geliştiricisi
 
-- [ ] `CLAUDE.md` dosyası repo köküne eklendi.
-- [ ] Backend geliştirici `feature/backend-project-setup` branch'ini oluşturdu.
+- [x] `CLAUDE.md` dosyası repo köküne eklendi (repoya commit edilmiyor, bkz. not yukarıda).
+- [x] Backend geliştirici `feature/backend-project-setup` branch'ini oluşturdu.
 
 **Faz 0 tamamlanma koşulu:** İki bilgisayarda da `develop` güncel; mobil proje repodan çalışıyor; backend geliştirici kendi branch'ine hazır.
 
@@ -99,18 +136,18 @@ git pull origin develop
 
 ### Backend / panel geliştiricisi
 
-- [ ] `backend/` içinde NestJS projesi oluşturuldu.
-- [ ] `web/` içinde Next.js projesi oluşturuldu.
-- [ ] Kök dizinde `docker-compose.yml` oluşturuldu.
-- [ ] Docker Compose içine MySQL eklendi.
-- [ ] Docker Compose içine Redis eklendi.
-- [ ] Prisma kuruldu ve MySQL bağlantısı yapıldı.
-- [ ] `GET /health` endpoint'i eklendi.
-- [ ] Backend `.env.example` oluşturuldu.
-- [ ] Web `.env.example` oluşturuldu.
-- [ ] Backend ve panel için çalışma komutları README'ye eklendi.
-- [ ] Backend kurulumu test edildi.
-- [ ] Panel kurulumu test edildi.
+- [x] `backend/` içinde NestJS projesi oluşturuldu.
+- [x] `web/` içinde Next.js projesi oluşturuldu.
+- [x] Kök dizinde `docker-compose.yml` oluşturuldu.
+- [x] Docker Compose içine MySQL eklendi.
+- [x] Docker Compose içine Redis eklendi.
+- [x] Prisma kuruldu ve MySQL bağlantısı yapıldı.
+- [x] `GET /health` endpoint'i eklendi.
+- [x] Backend `.env.example` oluşturuldu.
+- [x] Web `.env.example` oluşturuldu.
+- [x] Backend ve panel için çalışma komutları README'ye eklendi.
+- [x] Backend kurulumu test edildi.
+- [x] Panel kurulumu test edildi.
 - [ ] Faz 1 PR'ı açıldı.
 
 ### Ortak entegrasyon
