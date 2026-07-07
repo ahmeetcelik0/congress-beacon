@@ -27,7 +27,10 @@ export class ObservationsController {
     const result = await this.ingestionService.ingest(user, dto);
 
     if (result.acceptedSnapshots.length > 0) {
-      await this.attendanceProcessingService.processSnapshots(user.id, result.acceptedSnapshots);
+      await this.attendanceProcessingService.processSnapshots(
+        user.id,
+        result.acceptedSnapshots,
+      );
     }
 
     return {

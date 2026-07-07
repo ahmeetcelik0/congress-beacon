@@ -27,7 +27,9 @@ export class ObservationIngestionService {
   constructor(private readonly prisma: PrismaService) {}
 
   async ingest(user: User, dto: ObservationBatchDto): Promise<IngestionResult> {
-    const device = await this.prisma.device.findUnique({ where: { id: dto.deviceId } });
+    const device = await this.prisma.device.findUnique({
+      where: { id: dto.deviceId },
+    });
     if (!device || device.userId !== user.id) {
       throw new ForbiddenException('Bu cihaz bu kullaniciya ait degil');
     }
@@ -107,7 +109,10 @@ export class ObservationIngestionService {
           })),
         });
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002'
+        ) {
           duplicateCount++;
         } else {
           rejectedCount++;

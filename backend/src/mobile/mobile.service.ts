@@ -6,7 +6,9 @@ export class MobileService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getBootstrap(congressId: string) {
-    const congress = await this.prisma.congress.findUnique({ where: { id: congressId } });
+    const congress = await this.prisma.congress.findUnique({
+      where: { id: congressId },
+    });
     if (!congress) {
       throw new NotFoundException(`Congress ${congressId} bulunamadi`);
     }

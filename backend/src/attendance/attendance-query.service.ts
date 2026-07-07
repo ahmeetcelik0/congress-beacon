@@ -114,7 +114,10 @@ export class AttendanceQueryService {
         })();
 
     const halls = await this.prisma.hall.findMany({
-      where: { congressId: query.congressId, ...(query.hallId ? { id: query.hallId } : {}) },
+      where: {
+        congressId: query.congressId,
+        ...(query.hallId ? { id: query.hallId } : {}),
+      },
     });
 
     const visits = await this.prisma.hallVisit.findMany({
@@ -128,9 +131,14 @@ export class AttendanceQueryService {
     });
 
     const bucketMs = bucketMinutes * 60 * 1000;
-    const points: { bucketStart: string; values: Record<string, number> }[] = [];
+    const points: { bucketStart: string; values: Record<string, number> }[] =
+      [];
 
-    for (let bucketStart = from.getTime(); bucketStart < to.getTime(); bucketStart += bucketMs) {
+    for (
+      let bucketStart = from.getTime();
+      bucketStart < to.getTime();
+      bucketStart += bucketMs
+    ) {
       const bucketEnd = bucketStart + bucketMs;
       const values: Record<string, number> = {};
 

@@ -11,8 +11,13 @@ const EXIT_STREAK_THRESHOLD = 2;
 export class AttendanceProcessingService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async processSnapshots(userId: string, snapshots: AcceptedSnapshot[]): Promise<void> {
-    const ordered = [...snapshots].sort((a, b) => a.observedAt.getTime() - b.observedAt.getTime());
+  async processSnapshots(
+    userId: string,
+    snapshots: AcceptedSnapshot[],
+  ): Promise<void> {
+    const ordered = [...snapshots].sort(
+      (a, b) => a.observedAt.getTime() - b.observedAt.getTime(),
+    );
 
     for (const snapshot of ordered) {
       const candidateHallId = await this.resolveCandidateHall(snapshot);
@@ -20,7 +25,9 @@ export class AttendanceProcessingService {
     }
   }
 
-  private async resolveCandidateHall(snapshot: AcceptedSnapshot): Promise<string | null> {
+  private async resolveCandidateHall(
+    snapshot: AcceptedSnapshot,
+  ): Promise<string | null> {
     const matchedBeaconIds = snapshot.readings
       .filter((reading) => reading.beaconId)
       .map((reading) => reading.beaconId as string);
@@ -38,14 +45,24 @@ export class AttendanceProcessingService {
       return null;
     }
 
-    const hallStats = new Map<string, { sum: number; count: number; threshold: number }>();
+    const hallStats = new Map<
+      string,
+      { sum: number; count: number; threshold: number }
+    >();
 
     for (const assignment of activeAssignments) {
-      const reading = snapshot.readings.find((r) => r.beaconId === assignment.beaconId);
+      const reading = snapshot.readings.find(
+        (r) => r.beaconId === assignment.beaconId,
+      );
       if (!reading) continue;
 
-      const threshold = assignment.rssiThreshold ?? assignment.hall.rssiThreshold;
-      const entry = hallStats.get(assignment.hallId) ?? { sum: 0, count: 0, threshold };
+      const threshold =
+        assignment.rssiThreshold ?? assignment.hall.rssiThreshold;
+      const entry = hallStats.get(assignment.hallId) ?? {
+        sum: 0,
+        count: 0,
+        threshold,
+      };
       entry.sum += reading.rssi;
       entry.count += 1;
       hallStats.set(assignment.hallId, entry);
@@ -76,18 +93,28 @@ export class AttendanceProcessingService {
         (await tx.userPresenceState.create({ data: { userId } }));
 
       const openVisit = state.openHallVisitId
-        ? await tx.hallVisit.findUnique({ where: { id: state.openHallVisitId } })
+        ? await tx.hallVisit.findUnique({
+            where: { id: state.openHallVisitId },
+          })
         : null;
 
       // Aday, acik ziyaretin salonuyla ayni: dogrulama, aday takibini sifirla.
-      if (openVisit && candidateHallId && candidateHallId === openVisit.hallId) {
+      if (
+        openVisit &&
+        candidateHallId &&
+        candidateHallId === openVisit.hallId
+      ) {
         await tx.hallVisit.update({
           where: { id: openVisit.id },
           data: { lastConfirmedAt: observedAt },
         });
         await tx.userPresenceState.update({
           where: { userId },
-          data: { nonQualifyingStreak: 0, candidateHallId: null, candidateStreak: 0 },
+          data: {
+            nonQualifyingStreak: 0,
+            candidateHallId: null,
+            candidateStreak: 0,
+          },
         });
         return;
       }
@@ -130,7 +157,9 @@ export class AttendanceProcessingService {
         return;
       }
 
-      const currentState = await tx.userPresenceState.findUniqueOrThrow({ where: { userId } });
+      const currentState = await tx.userPresenceState.findUniqueOrThrow({
+        where: { userId },
+      });
 
       if (currentState.candidateHallId !== candidateHallId) {
         await tx.userPresenceState.update({
