@@ -196,6 +196,7 @@ export const api = {
     hallId?: string;
     userId?: string;
     isOpen?: boolean;
+    search?: string;
     page?: number;
     pageSize?: number;
   }) => request<HallVisitPage>(`/attendance/hall-visits${buildQuery(params)}`),

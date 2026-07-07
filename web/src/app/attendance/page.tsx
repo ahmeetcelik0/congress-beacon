@@ -4,6 +4,7 @@ import { KpiRow } from './components/kpi-row';
 import { HallOccupancyGrid } from './components/hall-occupancy-grid';
 import { LiveBadge } from './components/live-badge';
 import { OccupancyChart } from './components/occupancy-chart';
+import { HallVisitsTable } from './components/hall-visits-table';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -64,6 +65,13 @@ export default async function AttendancePage({
               <OccupancyChart series={occupancySeries} />
             </section>
           )}
+
+          <section className="tp-section">
+            <div className="tp-section-title">
+              <h2>Katılımcı Salon Geçmişi</h2>
+            </div>
+            <HallVisitsTable congressId={congressId} halls={summary.hallOccupancy} />
+          </section>
         </>
       )}
     </main>

@@ -59,6 +59,16 @@ export class AttendanceQueryService {
       ...(query.hallId ? { hallId: query.hallId } : {}),
       ...(query.userId ? { userId: query.userId } : {}),
       ...(query.isOpen !== undefined ? { isOpen: query.isOpen } : {}),
+      ...(query.search
+        ? {
+            user: {
+              OR: [
+                { firstName: { contains: query.search } },
+                { lastName: { contains: query.search } },
+              ],
+            },
+          }
+        : {}),
     };
 
     const [items, total] = await Promise.all([

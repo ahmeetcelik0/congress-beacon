@@ -225,6 +225,12 @@ paths:
           required: false
           schema:
             type: boolean
+        - name: search
+          in: query
+          required: false
+          description: Katilimci ad/soyad icinde arama (kismi eslesme).
+          schema:
+            type: string
         - name: page
           in: query
           required: false
