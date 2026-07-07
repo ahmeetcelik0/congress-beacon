@@ -94,6 +94,55 @@ paths:
         '401':
           description: Token eksik, gecersiz veya suresi dolmus.
 
+  /observations:
+    get:
+      summary: Ham beacon gozlem akisi (debug/panel icin, sayfalanmis)
+      operationId: listObservations
+      tags:
+        - Observations
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          description: Bu salona su an veya gecmiste atanmis beacon'lara ait gozlemlerle filtreler.
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Sayfalanmis ham gozlem listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationPage'
+
   /observations/batch:
     post:
       summary: Ham iBeacon anlik goruntu batch'ini gonder
@@ -901,6 +950,72 @@ components:
         duplicateCount:
           type: integer
         rejectedCount:
+          type: integer
+
+    ObservationSummary:
+      type: object
+      required:
+        - id
+        - observationId
+        - userId
+        - observedAt
+        - serverReceivedAt
+        - uuid
+        - major
+        - minor
+        - rssi
+      properties:
+        id:
+          type: string
+          format: uuid
+        observationId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        observedAt:
+          type: string
+          format: date-time
+        serverReceivedAt:
+          type: string
+          format: date-time
+        beaconId:
+          type: string
+          format: uuid
+          nullable: true
+        uuid:
+          type: string
+        major:
+          type: integer
+        minor:
+          type: integer
+        rssi:
+          type: integer
+        txPower:
+          type: integer
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+
+    ObservationPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservationSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
           type: integer
 
     RegisterDeviceRequest:
