@@ -76,6 +76,86 @@ export type HallBeacon = {
   beacon: Beacon;
 };
 
+export type HallOccupancy = {
+  hallId: string;
+  hallName: string;
+  count: number;
+};
+
+export type AttendanceSummary = {
+  activeHalls: number;
+  currentlyInsideTotal: number;
+  hallOccupancy: HallOccupancy[];
+  participantsSeenToday: number;
+  lastObservationAt: string | null;
+};
+
+export type HallVisitSummary = {
+  id: string;
+  userFirstName: string;
+  userLastName: string;
+  hallId: string;
+  hallName: string;
+  startedAt: string;
+  endedAt: string | null;
+  isOpen: boolean;
+  confidenceLevel: string | null;
+  algorithmVersion: string;
+};
+
+export type HallVisitPage = {
+  items: HallVisitSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type OccupancySeriesPoint = {
+  bucketStart: string;
+  values: Record<string, number>;
+};
+
+export type OccupancySeries = {
+  from: string;
+  to: string;
+  bucketMinutes: number;
+  halls: { hallId: string; hallName: string }[];
+  points: OccupancySeriesPoint[];
+};
+
+export type ObservationSummary = {
+  id: string;
+  observationId: string;
+  userId: string;
+  observedAt: string;
+  serverReceivedAt: string;
+  beaconId: string | null;
+  uuid: string;
+  major: number;
+  minor: number;
+  rssi: number;
+  txPower: number | null;
+  appVersion: string | null;
+};
+
+export type ObservationPage = {
+  items: ObservationSummary[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') {
+      search.set(key, String(value));
+    }
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export const api = {
   listCongresses: () => request<Congress[]>('/congresses'),
   createCongress: (data: { name: string; code: string; accessCode: string; beaconUuid: string }) =>
@@ -107,4 +187,32 @@ export const api = {
     request<HallBeacon>(`/halls/${hallId}/beacons/${beaconId}`, { method: 'POST' }),
   unassignBeaconFromHall: (hallId: string, beaconId: string) =>
     request<HallBeacon>(`/halls/${hallId}/beacons/${beaconId}`, { method: 'DELETE' }),
+
+  getAttendanceSummary: (congressId: string) =>
+    request<AttendanceSummary>(`/attendance/summary${buildQuery({ congressId })}`),
+
+  listHallVisits: (params: {
+    congressId: string;
+    hallId?: string;
+    userId?: string;
+    isOpen?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => request<HallVisitPage>(`/attendance/hall-visits${buildQuery(params)}`),
+
+  getOccupancySeries: (params: {
+    congressId: string;
+    hallId?: string;
+    bucketMinutes?: number;
+    from?: string;
+    to?: string;
+  }) => request<OccupancySeries>(`/attendance/occupancy-series${buildQuery(params)}`),
+
+  listObservations: (params: {
+    congressId: string;
+    hallId?: string;
+    userId?: string;
+    page?: number;
+    pageSize?: number;
+  }) => request<ObservationPage>(`/observations${buildQuery(params)}`),
 };
