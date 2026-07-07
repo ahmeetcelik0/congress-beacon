@@ -12,6 +12,7 @@ import { MobileModule } from './mobile/mobile.module';
 import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { ObservationsModule } from './observations/observations.module';
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { ObservationsModule } from './observations/observations.module';
     AuthModule,
     DevicesModule,
     ObservationsModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -125,6 +125,80 @@ paths:
         '403':
           description: deviceId bu kullaniciya ait degil.
 
+  /attendance/summary:
+    get:
+      summary: Kongre icin canli katilim/doluluk ozeti (panel KPI'lari)
+      operationId: getAttendanceSummary
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ozet veri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceSummary'
+
+  /attendance/hall-visits:
+    get:
+      summary: Katilimci salon ziyaret gecmisi (sayfalanmis)
+      operationId: listHallVisits
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: isOpen
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Sayfalanmis ziyaret listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallVisitPage'
+
   /mobile/bootstrap:
     get:
       summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
@@ -551,6 +625,103 @@ components:
         format: uuid
 
   schemas:
+    HallOccupancy:
+      type: object
+      required:
+        - hallId
+        - hallName
+        - count
+      properties:
+        hallId:
+          type: string
+          format: uuid
+        hallName:
+          type: string
+        count:
+          type: integer
+
+    AttendanceSummary:
+      type: object
+      required:
+        - activeHalls
+        - currentlyInsideTotal
+        - hallOccupancy
+        - participantsSeenToday
+        - lastObservationAt
+      properties:
+        activeHalls:
+          type: integer
+        currentlyInsideTotal:
+          type: integer
+        hallOccupancy:
+          type: array
+          items:
+            $ref: '#/components/schemas/HallOccupancy'
+        participantsSeenToday:
+          type: integer
+        lastObservationAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    HallVisitSummary:
+      type: object
+      required:
+        - id
+        - userFirstName
+        - userLastName
+        - hallId
+        - hallName
+        - startedAt
+        - isOpen
+        - algorithmVersion
+      properties:
+        id:
+          type: string
+          format: uuid
+        userFirstName:
+          type: string
+        userLastName:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        hallName:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isOpen:
+          type: boolean
+        confidenceLevel:
+          type: string
+          nullable: true
+        algorithmVersion:
+          type: string
+
+    HallVisitPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HallVisitSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
     ObservedBeacon:
       type: object
       required:
