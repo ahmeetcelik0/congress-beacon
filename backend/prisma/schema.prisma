@@ -48,6 +48,12 @@ model User {
   congress Congress @relation(fields: [congressId], references: [id])
   devices  Device[]
 
+  observationBatches ObservationBatch[]
+  beaconObservations BeaconObservation[]
+  attendanceEvents   AttendanceEvent[]
+  hallVisits         HallVisit[]
+  presenceState      UserPresenceState?
+
   @@unique([congressId, firstName, lastName, phoneLast4])
 }
 
@@ -69,6 +75,8 @@ model Device {
 
   user User @relation(fields: [userId], references: [id])
 
+  observationBatches ObservationBatch[]
+
   @@index([userId])
 }
 
@@ -82,6 +90,9 @@ model Hall {
 
   congress    Congress     @relation(fields: [congressId], references: [id])
   hallBeacons HallBeacon[]
+
+  attendanceEvents AttendanceEvent[]
+  hallVisits       HallVisit[]
 
   @@index([congressId])
 }
@@ -98,6 +109,8 @@ model Beacon {
 
   congress    Congress     @relation(fields: [congressId], references: [id])
   hallBeacons HallBeacon[]
+
+  beaconObservations BeaconObservation[]
 
   @@unique([congressId, uuid, major, minor])
 }
@@ -120,4 +133,103 @@ model HallBeacon {
 
   @@index([hallId])
   @@index([beaconId])
+}
+
+model ObservationBatch {
+  id             String   @id @default(uuid())
+  clientBatchId  String
+  deviceId       String
+  userId         String
+  receivedAt     DateTime @default(now())
+  acceptedCount  Int
+  duplicateCount Int
+  rejectedCount  Int
+
+  device             Device              @relation(fields: [deviceId], references: [id])
+  user               User                @relation(fields: [userId], references: [id])
+  beaconObservations BeaconObservation[]
+
+  @@index([deviceId])
+  @@index([userId])
+}
+
+model BeaconObservation {
+  id               String   @id @default(uuid())
+  observationId    String
+  batchId          String
+  userId           String
+  congressId       String
+  observedAt       DateTime
+  serverReceivedAt DateTime @default(now())
+  beaconId         String?
+  uuid             String
+  major            Int
+  minor            Int
+  rssi             Int
+  txPower          Int?
+  appVersion       String?
+  createdAt        DateTime @default(now())
+
+  batch  ObservationBatch @relation(fields: [batchId], references: [id])
+  user   User             @relation(fields: [userId], references: [id])
+  beacon Beacon?          @relation(fields: [beaconId], references: [id])
+
+  @@unique([observationId, uuid, major, minor])
+  @@index([userId, observedAt])
+  @@index([beaconId])
+}
+
+enum AttendanceEventType {
+  ENTRY
+  EXIT
+}
+
+model AttendanceEvent {
+  id               String              @id @default(uuid())
+  userId           String
+  hallId           String
+  type             AttendanceEventType
+  occurredAt       DateTime
+  confidenceScore  Float?
+  algorithmVersion String
+  createdAt        DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  hall Hall @relation(fields: [hallId], references: [id])
+
+  @@index([userId, occurredAt])
+  @@index([hallId])
+}
+
+model HallVisit {
+  id               String    @id @default(uuid())
+  userId           String
+  hallId           String
+  startedAt        DateTime
+  lastConfirmedAt  DateTime
+  endedAt          DateTime?
+  isOpen           Boolean   @default(true)
+  confidenceLevel  String?
+  algorithmVersion String
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user          User               @relation(fields: [userId], references: [id])
+  hall          Hall               @relation(fields: [hallId], references: [id])
+  presenceState UserPresenceState?
+
+  @@index([userId, startedAt])
+  @@index([hallId])
+}
+
+model UserPresenceState {
+  userId              String   @id
+  candidateHallId     String?
+  candidateStreak     Int      @default(0)
+  nonQualifyingStreak Int      @default(0)
+  openHallVisitId     String?  @unique
+  updatedAt           DateTime @updatedAt
+
+  user          User       @relation(fields: [userId], references: [id])
+  openHallVisit HallVisit? @relation(fields: [openHallVisitId], references: [id])
 }
