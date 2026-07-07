@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { CongressModule } from './congress/congress.module';
 import { HallModule } from './hall/hall.module';
 import { BeaconModule } from './beacon/beacon.module';
+import { HallBeaconModule } from './hall-beacon/hall-beacon.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { BeaconModule } from './beacon/beacon.module';
     CongressModule,
     HallModule,
     BeaconModule,
+    HallBeaconModule,
   ],
   controllers: [AppController],
   providers: [AppService],

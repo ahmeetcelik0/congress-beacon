@@ -313,6 +313,73 @@ paths:
         '404':
           description: Beacon bulunamadi.
 
+  /halls/{hallId}/beacons:
+    get:
+      summary: Salona aktif olarak atanmis beacon'lari listele
+      operationId: listActiveHallBeacons
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+      responses:
+        '200':
+          description: Aktif atama listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Salon bulunamadi.
+
+  /halls/{hallId}/beacons/{beaconId}:
+    post:
+      summary: Beacon'i salona ata
+      description: >-
+        Beacon'in zaten baska bir salonda aktif bir atamasi varsa 409 doner;
+        once o atama DELETE ile kaldirilmalidir.
+      operationId: assignHallBeacon
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+        - $ref: '#/components/parameters/BeaconIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallBeaconAssign'
+      responses:
+        '201':
+          description: Atama olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Salon veya beacon bulunamadi.
+        '409':
+          description: Beacon zaten baska bir salona aktif olarak atanmis.
+    delete:
+      summary: Beacon'in bu salondaki aktif atamasini kaldir
+      operationId: unassignHallBeacon
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+        - $ref: '#/components/parameters/BeaconIdPath'
+      responses:
+        '200':
+          description: Atama kaldirildi (isActive=false, removedAt set edildi).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Bu salon icin aktif bir atama bulunamadi.
+
 components:
   parameters:
     CongressId:
@@ -331,6 +398,20 @@ components:
         format: uuid
     BeaconId:
       name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HallIdPath:
+      name: hallId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BeaconIdPath:
+      name: beaconId
       in: path
       required: true
       schema:
@@ -546,4 +627,65 @@ components:
           minimum: 0
           maximum: 65535
         label:
+          type: string
+
+    HallBeacon:
+      type: object
+      description: Bir beacon'in belirli bir salona atanmasini temsil eder.
+      required:
+        - id
+        - hallId
+        - beaconId
+        - isActive
+        - installedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        beaconId:
+          type: string
+          format: uuid
+        isActive:
+          type: boolean
+        installedAt:
+          type: string
+          format: date-time
+        removedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rssiThreshold:
+          type: integer
+          nullable: true
+          description: Salonun varsayilan esigini bu atama icin override eder.
+        calibrationNote:
+          type: string
+          nullable: true
+        placementNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        beacon:
+          $ref: '#/components/schemas/Beacon'
+
+    HallBeaconAssign:
+      type: object
+      properties:
+        rssiThreshold:
+          type: integer
+          minimum: -100
+          maximum: 0
+        calibrationNote:
+          type: string
+        placementNote:
           type: string
