@@ -173,25 +173,25 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] Prisma modelleri oluşturuldu: `Congress`, `Hall`, `Beacon`, `HallBeacon`.
-- [ ] Migration oluşturuldu.
-- [ ] Kongre CRUD API'leri yazıldı.
-- [ ] Salon CRUD API'leri yazıldı.
-- [ ] Beacon CRUD API'leri yazıldı.
-- [ ] Beacon-salon eşleştirme API'si yazıldı.
-- [ ] Panelde kongre yönetimi ekranı yapıldı.
-- [ ] Panelde salon yönetimi ekranı yapıldı.
-- [ ] Panelde beacon yönetimi ekranı yapıldı.
-- [ ] `GET /mobile/bootstrap` endpoint'i yazıldı.
-- [ ] Bootstrap endpoint'i OpenAPI dosyasına eklendi.
+- [x] Prisma modelleri oluşturuldu: `Congress`, `Hall`, `Beacon`, `HallBeacon`.
+- [x] Migration oluşturuldu.
+- [x] Kongre CRUD API'leri yazıldı.
+- [x] Salon CRUD API'leri yazıldı.
+- [x] Beacon CRUD API'leri yazıldı.
+- [x] Beacon-salon eşleştirme API'si yazıldı.
+- [x] Panelde kongre yönetimi ekranı yapıldı.
+- [x] Panelde salon yönetimi ekranı yapıldı.
+- [x] Panelde beacon yönetimi ekranı yapıldı.
+- [x] `GET /mobile/bootstrap` endpoint'i yazıldı.
+- [x] Bootstrap endpoint'i OpenAPI dosyasına eklendi.
 
 ### Ortak entegrasyon
 
 - [ ] Mobil bootstrap response sözleşmesi onaylandı.
 - [ ] Mobil mock veri yerine bootstrap endpoint'ini kullanıyor.
-- [ ] Panelden test kongresi oluşturuldu.
-- [ ] Salon 1 ve Salon 2 oluşturuldu.
-- [ ] Test beacon'ları salonlara bağlandı.
+- [x] Panelden test kongresi oluşturuldu.
+- [x] Salon 1 ve Salon 2 oluşturuldu.
+- [x] Test beacon'ları salonlara bağlandı.
 
 **Faz 2 tamamlanma koşulu:** Panelde tanımlanan beacon/salon ayarları mobil uygulamaya API ile geliyor.
 

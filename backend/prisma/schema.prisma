@@ -4,10 +4,74 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "mysql"
+}
+
+model Congress {
+  id         String    @id @default(uuid())
+  name       String
+  beaconUuid String
+  startDate  DateTime?
+  endDate    DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  halls   Hall[]
+  beacons Beacon[]
+}
+
+model Hall {
+  id            String   @id @default(uuid())
+  congressId    String
+  name          String
+  rssiThreshold Int      @default(-70)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  congress    Congress     @relation(fields: [congressId], references: [id])
+  hallBeacons HallBeacon[]
+
+  @@index([congressId])
+}
+
+model Beacon {
+  id         String   @id @default(uuid())
+  congressId String
+  uuid       String
+  major      Int
+  minor      Int
+  label      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  congress    Congress     @relation(fields: [congressId], references: [id])
+  hallBeacons HallBeacon[]
+
+  @@unique([congressId, uuid, major, minor])
+}
+
+model HallBeacon {
+  id              String    @id @default(uuid())
+  hallId          String
+  beaconId        String
+  isActive        Boolean   @default(true)
+  installedAt     DateTime  @default(now())
+  removedAt       DateTime?
+  rssiThreshold   Int?
+  calibrationNote String?
+  placementNote   String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  hall   Hall   @relation(fields: [hallId], references: [id])
+  beacon Beacon @relation(fields: [beaconId], references: [id])
+
+  @@index([hallId])
+  @@index([beaconId])
 }

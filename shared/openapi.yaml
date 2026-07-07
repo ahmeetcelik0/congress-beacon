@@ -26,3 +26,746 @@ paths:
                   status:
                     type: string
                     example: ok
+
+  /mobile/bootstrap:
+    get:
+      summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
+      description: >-
+        Mobil uygulamanin bir kongredeki salonlari ve her salona aktif olarak
+        atanmis beacon'larin major/minor degerlerini tek response'ta almasini saglar.
+      operationId: getMobileBootstrap
+      tags:
+        - Mobile
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bootstrap verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileBootstrap'
+        '400':
+          description: congressId gecersiz veya eksik.
+        '404':
+          description: Kongre bulunamadi.
+
+  /congresses:
+    post:
+      summary: Yeni kongre olustur
+      operationId: createCongress
+      tags:
+        - Congress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressCreate'
+      responses:
+        '201':
+          description: Kongre olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '400':
+          description: Gecersiz istek govdesi.
+    get:
+      summary: Kongreleri listele
+      operationId: listCongresses
+      tags:
+        - Congress
+      responses:
+        '200':
+          description: Kongre listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Congress'
+
+  /congresses/{id}:
+    get:
+      summary: Tek bir kongreyi getir
+      operationId: getCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      responses:
+        '200':
+          description: Kongre bulundu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '404':
+          description: Kongre bulunamadi.
+    patch:
+      summary: Kongreyi guncelle
+      operationId: updateCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressUpdate'
+      responses:
+        '200':
+          description: Kongre guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '404':
+          description: Kongre bulunamadi.
+    delete:
+      summary: Kongreyi sil
+      operationId: deleteCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      responses:
+        '204':
+          description: Kongre silindi.
+        '404':
+          description: Kongre bulunamadi.
+
+  /halls:
+    post:
+      summary: Yeni salon olustur
+      operationId: createHall
+      tags:
+        - Hall
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallCreate'
+      responses:
+        '201':
+          description: Salon olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '400':
+          description: Gecersiz istek govdesi.
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+    get:
+      summary: Salonlari listele
+      operationId: listHalls
+      tags:
+        - Hall
+      parameters:
+        - name: congressId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Salon listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Hall'
+
+  /halls/{id}:
+    get:
+      summary: Tek bir salonu getir
+      operationId: getHall
+      tags:
+        - Hall
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      responses:
+        '200':
+          description: Salon bulundu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '404':
+          description: Salon bulunamadi.
+    patch:
+      summary: Salonu guncelle (isim, rssiThreshold)
+      operationId: updateHall
+      tags:
+        - Hall
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallUpdate'
+      responses:
+        '200':
+          description: Salon guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hall'
+        '404':
+          description: Salon bulunamadi.
+    delete:
+      summary: Salonu sil
+      operationId: deleteHall
+      tags:
+        - Hall
+      parameters:
+        - $ref: '#/components/parameters/HallId'
+      responses:
+        '204':
+          description: Salon silindi.
+        '404':
+          description: Salon bulunamadi.
+
+  /beacons:
+    post:
+      summary: Yeni beacon olustur
+      operationId: createBeacon
+      tags:
+        - Beacon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeaconCreate'
+      responses:
+        '201':
+          description: Beacon olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '400':
+          description: Gecersiz istek govdesi.
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+        '409':
+          description: Ayni kongrede ayni (uuid, major, minor) kombinasyonu zaten var.
+    get:
+      summary: Beacon'lari listele
+      operationId: listBeacons
+      tags:
+        - Beacon
+      parameters:
+        - name: congressId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Beacon listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Beacon'
+
+  /beacons/{id}:
+    get:
+      summary: Tek bir beacon'i getir
+      operationId: getBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      responses:
+        '200':
+          description: Beacon bulundu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '404':
+          description: Beacon bulunamadi.
+    patch:
+      summary: Beacon'i guncelle (congressId haric)
+      operationId: updateBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeaconUpdate'
+      responses:
+        '200':
+          description: Beacon guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '404':
+          description: Beacon bulunamadi.
+        '409':
+          description: Ayni kongrede ayni (uuid, major, minor) kombinasyonu zaten var.
+    delete:
+      summary: Beacon'i sil
+      operationId: deleteBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      responses:
+        '204':
+          description: Beacon silindi.
+        '404':
+          description: Beacon bulunamadi.
+
+  /halls/{hallId}/beacons:
+    get:
+      summary: Salona aktif olarak atanmis beacon'lari listele
+      operationId: listActiveHallBeacons
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+      responses:
+        '200':
+          description: Aktif atama listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Salon bulunamadi.
+
+  /halls/{hallId}/beacons/{beaconId}:
+    post:
+      summary: Beacon'i salona ata
+      description: >-
+        Beacon'in zaten baska bir salonda aktif bir atamasi varsa 409 doner;
+        once o atama DELETE ile kaldirilmalidir.
+      operationId: assignHallBeacon
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+        - $ref: '#/components/parameters/BeaconIdPath'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HallBeaconAssign'
+      responses:
+        '201':
+          description: Atama olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Salon veya beacon bulunamadi.
+        '409':
+          description: Beacon zaten baska bir salona aktif olarak atanmis.
+    delete:
+      summary: Beacon'in bu salondaki aktif atamasini kaldir
+      operationId: unassignHallBeacon
+      tags:
+        - HallBeacon
+      parameters:
+        - $ref: '#/components/parameters/HallIdPath'
+        - $ref: '#/components/parameters/BeaconIdPath'
+      responses:
+        '200':
+          description: Atama kaldirildi (isActive=false, removedAt set edildi).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallBeacon'
+        '404':
+          description: Bu salon icin aktif bir atama bulunamadi.
+
+components:
+  parameters:
+    CongressId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HallId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BeaconId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HallIdPath:
+      name: hallId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BeaconIdPath:
+      name: beaconId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Congress:
+      type: object
+      required:
+        - id
+        - name
+        - beaconUuid
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        beaconUuid:
+          type: string
+          format: uuid
+          description: Kongreye ait ortak iBeacon UUID'i.
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CongressCreate:
+      type: object
+      required:
+        - name
+        - beaconUuid
+      properties:
+        name:
+          type: string
+          minLength: 2
+        beaconUuid:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+
+    CongressUpdate:
+      type: object
+      description: CongressCreate ile ayni alanlar, hepsi opsiyonel (PATCH).
+      properties:
+        name:
+          type: string
+          minLength: 2
+        beaconUuid:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+
+    Hall:
+      type: object
+      required:
+        - id
+        - congressId
+        - name
+        - rssiThreshold
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        rssiThreshold:
+          type: integer
+          description: Salon icinde kabul edilen minimum RSSI (dBm). Varsayilan -70.
+          example: -70
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    HallCreate:
+      type: object
+      required:
+        - congressId
+        - name
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 2
+        rssiThreshold:
+          type: integer
+          minimum: -100
+          maximum: 0
+          description: Verilmezse -70 kullanilir.
+
+    HallUpdate:
+      type: object
+      description: HallCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        name:
+          type: string
+          minLength: 2
+        rssiThreshold:
+          type: integer
+          minimum: -100
+          maximum: 0
+
+    Beacon:
+      type: object
+      required:
+        - id
+        - congressId
+        - uuid
+        - major
+        - minor
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+          description: Fiziksel beacon cihazinin iBeacon UUID'i.
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BeaconCreate:
+      type: object
+      required:
+        - congressId
+        - uuid
+        - major
+        - minor
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+
+    BeaconUpdate:
+      type: object
+      description: BeaconCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+
+    HallBeacon:
+      type: object
+      description: Bir beacon'in belirli bir salona atanmasini temsil eder.
+      required:
+        - id
+        - hallId
+        - beaconId
+        - isActive
+        - installedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        beaconId:
+          type: string
+          format: uuid
+        isActive:
+          type: boolean
+        installedAt:
+          type: string
+          format: date-time
+        removedAt:
+          type: string
+          format: date-time
+          nullable: true
+        rssiThreshold:
+          type: integer
+          nullable: true
+          description: Salonun varsayilan esigini bu atama icin override eder.
+        calibrationNote:
+          type: string
+          nullable: true
+        placementNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        beacon:
+          $ref: '#/components/schemas/Beacon'
+
+    HallBeaconAssign:
+      type: object
+      properties:
+        rssiThreshold:
+          type: integer
+          minimum: -100
+          maximum: 0
+        calibrationNote:
+          type: string
+        placementNote:
+          type: string
+
+    MobileBootstrap:
+      type: object
+      required:
+        - congress
+        - halls
+      properties:
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - beaconUuid
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            beaconUuid:
+              type: string
+              format: uuid
+        halls:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - rssiThreshold
+              - beacons
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              rssiThreshold:
+                type: integer
+              beacons:
+                type: array
+                description: Bu salona su an aktif olarak atanmis beacon'larin major/minor degerleri.
+                items:
+                  type: object
+                  required:
+                    - major
+                    - minor
+                  properties:
+                    major:
+                      type: integer
+                    minor:
+                      type: integer
