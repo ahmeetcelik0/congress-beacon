@@ -27,6 +27,104 @@ paths:
                     type: string
                     example: ok
 
+  /auth/pilot-login:
+    post:
+      summary: Pilot/test girisi (katilimci onceden kayitli degil)
+      description: >-
+        Kongre kodu + ortak pilot erisim kodu dogrulanir; ayni kongrede
+        firstName+lastName+phoneLast4 ile mevcut kullanici aranir, yoksa
+        olusturulur. Bu akis yalnizca pilot/test icindir; gercek kongrede
+        kayit sistemi entegrasyonu veya kisiye ozel dogrulama ile degistirilecektir.
+      operationId: pilotLogin
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PilotLoginRequest'
+      responses:
+        '201':
+          description: Giris basarili.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PilotLoginResponse'
+        '400':
+          description: Istek govdesi gecersiz (eksik/yanlis formatli alan).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: congressCode dogru ama congressAccessCode yanlis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: congressCode ile eslesen bir kongre yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /devices/register:
+    post:
+      summary: Mobil cihazi giris yapmis kullaniciya kaydet
+      operationId: registerDevice
+      tags:
+        - Devices
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '201':
+          description: Cihaz kaydedildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+
+  /observations/batch:
+    post:
+      summary: Ham iBeacon anlik goruntu batch'ini gonder
+      description: >-
+        Mobil uygulama salon karari vermez; yalnizca o anda gorulen beacon'larin
+        uuid/major/minor/rssi degerlerini icerir. Salon giris/cikis/sure hesabi
+        backend'de yapilir. `observationId` idempotency anahtaridir; ayni deger
+        tekrar gonderilirse duplicateCount'a sayilir, yeniden kayit olusturulmaz.
+      operationId: submitObservationBatch
+      tags:
+        - Observations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObservationBatchRequest'
+      responses:
+        '201':
+          description: Batch islendi (kismi kabul mumkun; sayaclara bakin).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationBatchResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+        '403':
+          description: deviceId bu kullaniciya ait degil.
+
   /mobile/bootstrap:
     get:
       summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
@@ -409,6 +507,12 @@ paths:
           description: Bu salon icin aktif bir atama bulunamadi.
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   parameters:
     CongressId:
       name: id
@@ -447,11 +551,246 @@ components:
         format: uuid
 
   schemas:
+    ObservedBeacon:
+      type: object
+      required:
+        - uuid
+        - major
+        - minor
+        - rssi
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        rssi:
+          type: integer
+        txPower:
+          type: integer
+          nullable: true
+
+    ObservationSnapshot:
+      type: object
+      required:
+        - observationId
+        - observedAt
+        - beacons
+      properties:
+        observationId:
+          type: string
+          format: uuid
+          description: Idempotency anahtari.
+        observedAt:
+          type: string
+          format: date-time
+        beacons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ObservedBeacon'
+        appVersion:
+          type: string
+
+    ObservationBatchRequest:
+      type: object
+      required:
+        - clientBatchId
+        - deviceId
+        - observations
+      properties:
+        clientBatchId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        observations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ObservationSnapshot'
+
+    ObservationBatchResponse:
+      type: object
+      required:
+        - acceptedCount
+        - duplicateCount
+        - rejectedCount
+      properties:
+        acceptedCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        rejectedCount:
+          type: integer
+
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - platform
+      properties:
+        platform:
+          type: string
+          enum: [IOS, ANDROID]
+        deviceModel:
+          type: string
+        osVersion:
+          type: string
+        appVersion:
+          type: string
+        pushToken:
+          type: string
+
+    Device:
+      type: object
+      required:
+        - id
+        - userId
+        - platform
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          enum: [IOS, ANDROID]
+        deviceModel:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        pushToken:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    PilotLoginRequest:
+      type: object
+      required:
+        - congressCode
+        - congressAccessCode
+        - firstName
+        - lastName
+        - phoneLast4
+      properties:
+        congressCode:
+          type: string
+          minLength: 2
+        congressAccessCode:
+          type: string
+          minLength: 4
+        firstName:
+          type: string
+          minLength: 1
+        lastName:
+          type: string
+          minLength: 1
+        phoneLast4:
+          type: string
+          pattern: '^\d{4}$'
+          description: Telefon numarasinin son 4 hanesi (yalnizca eslestirme icin, raporlarda gosterilmez).
+
+    PilotLoginResponse:
+      type: object
+      required:
+        - accessToken
+        - user
+        - congress
+      properties:
+        accessToken:
+          type: string
+          description: >-
+            JWT (7 gun gecerli). Sonraki isteklerde "Authorization: Bearer
+            <accessToken>" basligi olarak gonderilir.
+        user:
+          type: object
+          required:
+            - id
+            - firstName
+            - lastName
+            - role
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+            lastName:
+              type: string
+            role:
+              type: string
+              enum: [PARTICIPANT, ADMIN]
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - code
+            - beaconUuid
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            code:
+              type: string
+            beaconUuid:
+              type: string
+              format: uuid
+
+    ErrorResponse:
+      type: object
+      description: NestJS varsayilan hata govdesi formati.
+      required:
+        - statusCode
+        - message
+        - error
+      properties:
+        statusCode:
+          type: integer
+          example: 401
+        message:
+          description: >-
+            Tek bir hata icin string, class-validator dogrulama hatalari
+            icin (400) string dizisi olabilir.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+          example: Unauthorized
+
     Congress:
       type: object
       required:
         - id
         - name
+        - code
+        - accessCode
         - beaconUuid
         - createdAt
         - updatedAt
@@ -461,6 +800,12 @@ components:
           format: uuid
         name:
           type: string
+        code:
+          type: string
+          description: Kisa, insan-okunabilir kongre kodu (pilot login icin kullanilir).
+        accessCode:
+          type: string
+          description: Pilot ortak erisim kodu (gercek kongrede kayit sistemiyle degisecek).
         beaconUuid:
           type: string
           format: uuid
@@ -484,11 +829,19 @@ components:
       type: object
       required:
         - name
+        - code
+        - accessCode
         - beaconUuid
       properties:
         name:
           type: string
           minLength: 2
+        code:
+          type: string
+          minLength: 2
+        accessCode:
+          type: string
+          minLength: 4
         beaconUuid:
           type: string
           format: uuid
@@ -506,6 +859,12 @@ components:
         name:
           type: string
           minLength: 2
+        code:
+          type: string
+          minLength: 2
+        accessCode:
+          type: string
+          minLength: 4
         beaconUuid:
           type: string
           format: uuid

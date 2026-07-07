@@ -9,6 +9,9 @@ import { HallModule } from './hall/hall.module';
 import { BeaconModule } from './beacon/beacon.module';
 import { HallBeaconModule } from './hall-beacon/hall-beacon.module';
 import { MobileModule } from './mobile/mobile.module';
+import { AuthModule } from './auth/auth.module';
+import { DevicesModule } from './devices/devices.module';
+import { ObservationsModule } from './observations/observations.module';
 
 @Module({
   imports: [
@@ -20,6 +23,9 @@ import { MobileModule } from './mobile/mobile.module';
     BeaconModule,
     HallBeaconModule,
     MobileModule,
+    AuthModule,
+    DevicesModule,
+    ObservationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

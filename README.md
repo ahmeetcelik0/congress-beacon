@@ -212,20 +212,20 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] `Device` modeli oluşturuldu.
-- [ ] `PresenceObservation` modeli oluşturuldu.
-- [ ] Observation source enum'ları eklendi.
-- [ ] `POST /devices/register` endpoint'i yazıldı.
-- [ ] `POST /observations/batch` request/response sözleşmesi hazırlandı.
-- [ ] JWT mobil doğrulama altyapısı başlatıldı.
-- [ ] OpenAPI observation şeması güncellendi.
+- [x] `Device` modeli oluşturuldu.
+- [x] `PresenceObservation` modeli oluşturuldu (`ObservationBatch` + `BeaconObservation` olarak; ayrıca `AttendanceEvent`/`HallVisit` ile salon karari backend'de uretiliyor — bkz. `docs/decisions.md`).
+- [ ] Observation source enum'ları eklendi. (Mimari karari geregi mobil kaynak/confidence bilgisi göndermiyor, yalnizca ham RSSI; bkz. `docs/decisions.md`.)
+- [x] `POST /devices/register` endpoint'i yazıldı.
+- [x] `POST /observations/batch` request/response sözleşmesi hazırlandı (gercek ingestion dahil, bkz. Faz notlari).
+- [x] JWT mobil doğrulama altyapısı başlatıldı (pilot-login, access token).
+- [x] OpenAPI observation şeması güncellendi.
 
 ### Ortak entegrasyon
 
-- [ ] Observation JSON alanları kesinleştirildi.
+- [ ] Observation JSON alanları kesinleştirildi. (Backend tarafinda sabit; mobil gelistiriciyle (Ahmet) karsilikli onay bekleniyor.)
 - [ ] Mobil cihaz kaydı yapıyor.
 - [ ] Mobil foreground observation üretiyor.
-- [ ] Örnek observation backend DTO doğrulamasından geçiyor.
+- [x] Örnek observation backend DTO doğrulamasından geçiyor. (curl ile gercek batch gonderilip dogrulandi.)
 
 **Faz 3 tamamlanma koşulu:** Mobil ve backend aynı observation sözleşmesini kullanıyor.
 

@@ -10,14 +10,16 @@ export async function createCongressAction(
   formData: FormData,
 ): Promise<FormState> {
   const name = String(formData.get('name') ?? '').trim();
+  const code = String(formData.get('code') ?? '').trim();
+  const accessCode = String(formData.get('accessCode') ?? '').trim();
   const beaconUuid = String(formData.get('beaconUuid') ?? '').trim();
 
-  if (!name || !beaconUuid) {
-    return { error: 'İsim ve beacon UUID zorunludur.' };
+  if (!name || !code || !accessCode || !beaconUuid) {
+    return { error: 'İsim, kongre kodu, erişim kodu ve beacon UUID zorunludur.' };
   }
 
   try {
-    await api.createCongress({ name, beaconUuid });
+    await api.createCongress({ name, code, accessCode, beaconUuid });
   } catch (error) {
     return { error: error instanceof ApiError ? error.message : 'Kongre oluşturulamadı.' };
   }

@@ -34,6 +34,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export type Congress = {
   id: string;
   name: string;
+  code: string;
+  accessCode: string;
   beaconUuid: string;
   startDate: string | null;
   endDate: string | null;
@@ -76,7 +78,7 @@ export type HallBeacon = {
 
 export const api = {
   listCongresses: () => request<Congress[]>('/congresses'),
-  createCongress: (data: { name: string; beaconUuid: string }) =>
+  createCongress: (data: { name: string; code: string; accessCode: string; beaconUuid: string }) =>
     request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
