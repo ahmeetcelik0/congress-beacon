@@ -452,6 +452,8 @@ components:
       required:
         - id
         - name
+        - code
+        - accessCode
         - beaconUuid
         - createdAt
         - updatedAt
@@ -461,6 +463,12 @@ components:
           format: uuid
         name:
           type: string
+        code:
+          type: string
+          description: Kisa, insan-okunabilir kongre kodu (pilot login icin kullanilir).
+        accessCode:
+          type: string
+          description: Pilot ortak erisim kodu (gercek kongrede kayit sistemiyle degisecek).
         beaconUuid:
           type: string
           format: uuid
@@ -484,11 +492,19 @@ components:
       type: object
       required:
         - name
+        - code
+        - accessCode
         - beaconUuid
       properties:
         name:
           type: string
           minLength: 2
+        code:
+          type: string
+          minLength: 2
+        accessCode:
+          type: string
+          minLength: 4
         beaconUuid:
           type: string
           format: uuid
@@ -506,6 +522,12 @@ components:
         name:
           type: string
           minLength: 2
+        code:
+          type: string
+          minLength: 2
+        accessCode:
+          type: string
+          minLength: 4
         beaconUuid:
           type: string
           format: uuid

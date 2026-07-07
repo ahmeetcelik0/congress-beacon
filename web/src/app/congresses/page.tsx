@@ -15,6 +15,7 @@ export default async function CongressesPage() {
         <thead>
           <tr>
             <th>Ad</th>
+            <th>Kod</th>
             <th>Beacon UUID</th>
             <th>Başlangıç</th>
             <th>Bitiş</th>
@@ -27,6 +28,7 @@ export default async function CongressesPage() {
               <td>
                 <Link href={`/halls?congressId=${congress.id}`}>{congress.name}</Link>
               </td>
+              <td>{congress.code}</td>
               <td>{congress.beaconUuid}</td>
               <td>{congress.startDate ?? '-'}</td>
               <td>{congress.endDate ?? '-'}</td>
@@ -39,7 +41,7 @@ export default async function CongressesPage() {
           ))}
           {congresses.length === 0 && (
             <tr>
-              <td colSpan={5}>Henüz kongre yok.</td>
+              <td colSpan={6}>Henüz kongre yok.</td>
             </tr>
           )}
         </tbody>

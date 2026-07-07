@@ -15,6 +15,14 @@ export function CongressForm() {
         <input type="text" name="name" required minLength={2} />
       </label>
       <label>
+        Kongre kodu
+        <input type="text" name="code" required minLength={2} placeholder="MEDCON2026" />
+      </label>
+      <label>
+        Pilot erişim kodu
+        <input type="text" name="accessCode" required minLength={4} />
+      </label>
+      <label>
         Beacon UUID
         <input
           type="text"

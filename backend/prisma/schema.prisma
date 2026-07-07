@@ -16,6 +16,8 @@ datasource db {
 model Congress {
   id         String    @id @default(uuid())
   name       String
+  code       String    @unique
+  accessCode String
   beaconUuid String
   startDate  DateTime?
   endDate    DateTime?
@@ -24,6 +26,50 @@ model Congress {
 
   halls   Hall[]
   beacons Beacon[]
+  users   User[]
+}
+
+enum UserRole {
+  PARTICIPANT
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid())
+  congressId   String
+  firstName    String
+  lastName     String
+  phoneLast4   String
+  role         UserRole @default(PARTICIPANT)
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+  devices  Device[]
+
+  @@unique([congressId, firstName, lastName, phoneLast4])
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+model Device {
+  id          String         @id @default(uuid())
+  userId      String
+  platform    DevicePlatform
+  deviceModel String?
+  osVersion   String?
+  appVersion  String?
+  pushToken   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
 }
 
 model Hall {

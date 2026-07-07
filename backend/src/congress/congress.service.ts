@@ -11,6 +11,8 @@ export class CongressService {
     return this.prisma.congress.create({
       data: {
         name: dto.name,
+        code: dto.code,
+        accessCode: dto.accessCode,
         beaconUuid: dto.beaconUuid,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
