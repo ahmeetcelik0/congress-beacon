@@ -26,3 +26,171 @@ paths:
                   status:
                     type: string
                     example: ok
+
+  /congresses:
+    post:
+      summary: Yeni kongre olustur
+      operationId: createCongress
+      tags:
+        - Congress
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressCreate'
+      responses:
+        '201':
+          description: Kongre olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '400':
+          description: Gecersiz istek govdesi.
+    get:
+      summary: Kongreleri listele
+      operationId: listCongresses
+      tags:
+        - Congress
+      responses:
+        '200':
+          description: Kongre listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Congress'
+
+  /congresses/{id}:
+    get:
+      summary: Tek bir kongreyi getir
+      operationId: getCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      responses:
+        '200':
+          description: Kongre bulundu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '404':
+          description: Kongre bulunamadi.
+    patch:
+      summary: Kongreyi guncelle
+      operationId: updateCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressUpdate'
+      responses:
+        '200':
+          description: Kongre guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Congress'
+        '404':
+          description: Kongre bulunamadi.
+    delete:
+      summary: Kongreyi sil
+      operationId: deleteCongress
+      tags:
+        - Congress
+      parameters:
+        - $ref: '#/components/parameters/CongressId'
+      responses:
+        '204':
+          description: Kongre silindi.
+        '404':
+          description: Kongre bulunamadi.
+
+components:
+  parameters:
+    CongressId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Congress:
+      type: object
+      required:
+        - id
+        - name
+        - beaconUuid
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        beaconUuid:
+          type: string
+          format: uuid
+          description: Kongreye ait ortak iBeacon UUID'i.
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CongressCreate:
+      type: object
+      required:
+        - name
+        - beaconUuid
+      properties:
+        name:
+          type: string
+          minLength: 2
+        beaconUuid:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+
+    CongressUpdate:
+      type: object
+      description: CongressCreate ile ayni alanlar, hepsi opsiyonel (PATCH).
+      properties:
+        name:
+          type: string
+          minLength: 2
+        beaconUuid:
+          type: string
+          format: uuid
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
