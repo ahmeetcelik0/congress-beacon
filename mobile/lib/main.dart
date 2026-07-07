@@ -4,6 +4,10 @@ import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
 
+import 'core/storage/secure_storage_service.dart';
+import 'features/auth/presentation/pilot_login_page.dart';
+import 'features/home/presentation/participant_home_page.dart';
+
 void main() {
   runApp(const BeaconTestApp());
 }
@@ -15,7 +19,7 @@ class BeaconTestApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Kongre Beacon Testi',
+      title: 'Kongre Beacon',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.blue,
@@ -23,7 +27,56 @@ class BeaconTestApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const BeaconTestPage(),
+      home: const SplashPage(),
+    );
+  }
+}
+
+class SplashPage extends StatefulWidget {
+  const SplashPage({super.key});
+
+  @override
+  State<SplashPage> createState() => _SplashPageState();
+}
+
+class _SplashPageState extends State<SplashPage> {
+  @override
+  void initState() {
+    super.initState();
+    _checkSession();
+  }
+
+  Future<void> _checkSession() async {
+    final storage = SecureStorageService();
+    final accessToken = await storage.getAccessToken();
+    final deviceId = await storage.getDeviceId();
+    final participantName = await storage.getParticipantName();
+    final congressName = await storage.getCongressName();
+
+    if (!mounted) return;
+
+    if (accessToken != null && deviceId != null && participantName != null && congressName != null) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ParticipantHomePage(
+            participantName: participantName,
+            congressName: congressName,
+          ),
+        ),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const PilotLoginPage()),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: CircularProgressIndicator(),
+      ),
     );
   }
 }
