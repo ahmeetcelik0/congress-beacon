@@ -212,6 +212,107 @@ paths:
         '404':
           description: Salon bulunamadi.
 
+  /beacons:
+    post:
+      summary: Yeni beacon olustur
+      operationId: createBeacon
+      tags:
+        - Beacon
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeaconCreate'
+      responses:
+        '201':
+          description: Beacon olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '400':
+          description: Gecersiz istek govdesi.
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+        '409':
+          description: Ayni kongrede ayni (uuid, major, minor) kombinasyonu zaten var.
+    get:
+      summary: Beacon'lari listele
+      operationId: listBeacons
+      tags:
+        - Beacon
+      parameters:
+        - name: congressId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Beacon listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Beacon'
+
+  /beacons/{id}:
+    get:
+      summary: Tek bir beacon'i getir
+      operationId: getBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      responses:
+        '200':
+          description: Beacon bulundu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '404':
+          description: Beacon bulunamadi.
+    patch:
+      summary: Beacon'i guncelle (congressId haric)
+      operationId: updateBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BeaconUpdate'
+      responses:
+        '200':
+          description: Beacon guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Beacon'
+        '404':
+          description: Beacon bulunamadi.
+        '409':
+          description: Ayni kongrede ayni (uuid, major, minor) kombinasyonu zaten var.
+    delete:
+      summary: Beacon'i sil
+      operationId: deleteBeacon
+      tags:
+        - Beacon
+      parameters:
+        - $ref: '#/components/parameters/BeaconId'
+      responses:
+        '204':
+          description: Beacon silindi.
+        '404':
+          description: Beacon bulunamadi.
+
 components:
   parameters:
     CongressId:
@@ -222,6 +323,13 @@ components:
         type: string
         format: uuid
     HallId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BeaconId:
       name: id
       in: path
       required: true
@@ -357,3 +465,85 @@ components:
           type: integer
           minimum: -100
           maximum: 0
+
+    Beacon:
+      type: object
+      required:
+        - id
+        - congressId
+        - uuid
+        - major
+        - minor
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+          description: Fiziksel beacon cihazinin iBeacon UUID'i.
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BeaconCreate:
+      type: object
+      required:
+        - congressId
+        - uuid
+        - major
+        - minor
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string
+
+    BeaconUpdate:
+      type: object
+      description: BeaconCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        label:
+          type: string

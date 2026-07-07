@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CongressModule } from './congress/congress.module';
 import { HallModule } from './hall/hall.module';
+import { BeaconModule } from './beacon/beacon.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { HallModule } from './hall/hall.module';
     HealthModule,
     CongressModule,
     HallModule,
+    BeaconModule,
   ],
   controllers: [AppController],
   providers: [AppService],
