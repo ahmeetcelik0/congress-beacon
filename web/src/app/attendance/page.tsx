@@ -5,6 +5,7 @@ import { HallOccupancyGrid } from './components/hall-occupancy-grid';
 import { LiveBadge } from './components/live-badge';
 import { OccupancyChart } from './components/occupancy-chart';
 import { HallVisitsTable } from './components/hall-visits-table';
+import { RawObservationFeed } from './components/raw-observation-feed';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -72,6 +73,8 @@ export default async function AttendancePage({
             </div>
             <HallVisitsTable congressId={congressId} halls={summary.hallOccupancy} />
           </section>
+
+          <RawObservationFeed congressId={congressId} />
         </>
       )}
     </main>
