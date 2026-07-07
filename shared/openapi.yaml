@@ -199,6 +199,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/HallVisitPage'
 
+  /attendance/occupancy-series:
+    get:
+      summary: Zaman-dilimli salon doluluk serisi (yogunluk grafigi icin)
+      description: >-
+        HallVisit araliklarindan hesaplanir; her bucket icin salon basina
+        o an icerideki tahmini kisi sayisini doner. `from`/`to` verilmezse
+        varsayilan bugun 00:00 - simdi araligidir.
+      operationId: getOccupancySeries
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: bucketMinutes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+            default: 15
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Zaman serisi verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OccupancySeries'
+
   /mobile/bootstrap:
     get:
       summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
@@ -721,6 +772,56 @@ components:
           type: integer
         pageSize:
           type: integer
+
+    OccupancySeriesPoint:
+      type: object
+      required:
+        - bucketStart
+        - values
+      properties:
+        bucketStart:
+          type: string
+          format: date-time
+        values:
+          type: object
+          description: hallId -> o bucket'taki tahmini kisi sayisi.
+          additionalProperties:
+            type: integer
+
+    OccupancySeries:
+      type: object
+      required:
+        - from
+        - to
+        - bucketMinutes
+        - halls
+        - points
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        bucketMinutes:
+          type: integer
+        halls:
+          type: array
+          items:
+            type: object
+            required:
+              - hallId
+              - hallName
+            properties:
+              hallId:
+                type: string
+                format: uuid
+              hallName:
+                type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/OccupancySeriesPoint'
 
     ObservedBeacon:
       type: object

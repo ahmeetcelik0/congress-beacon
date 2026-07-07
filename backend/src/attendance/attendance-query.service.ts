@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HallVisitsQueryDto } from './dto/hall-visits-query.dto';
+import { OccupancySeriesQueryDto } from './dto/occupancy-series-query.dto';
 
 @Injectable()
 export class AttendanceQueryService {
@@ -87,6 +88,63 @@ export class AttendanceQueryService {
       total,
       page,
       pageSize,
+    };
+  }
+
+  async getOccupancySeries(query: OccupancySeriesQueryDto) {
+    const bucketMinutes = query.bucketMinutes ?? 15;
+
+    const to = query.to ? new Date(query.to) : new Date();
+    const from = query.from
+      ? new Date(query.from)
+      : (() => {
+          const start = new Date();
+          start.setHours(0, 0, 0, 0);
+          return start;
+        })();
+
+    const halls = await this.prisma.hall.findMany({
+      where: { congressId: query.congressId, ...(query.hallId ? { id: query.hallId } : {}) },
+    });
+
+    const visits = await this.prisma.hallVisit.findMany({
+      where: {
+        hall: { congressId: query.congressId },
+        ...(query.hallId ? { hallId: query.hallId } : {}),
+        startedAt: { lt: to },
+        OR: [{ endedAt: null }, { endedAt: { gt: from } }],
+      },
+      select: { hallId: true, startedAt: true, endedAt: true },
+    });
+
+    const bucketMs = bucketMinutes * 60 * 1000;
+    const points: { bucketStart: string; values: Record<string, number> }[] = [];
+
+    for (let bucketStart = from.getTime(); bucketStart < to.getTime(); bucketStart += bucketMs) {
+      const bucketEnd = bucketStart + bucketMs;
+      const values: Record<string, number> = {};
+
+      for (const hall of halls) {
+        values[hall.id] = 0;
+      }
+
+      for (const visit of visits) {
+        const start = visit.startedAt.getTime();
+        const end = visit.endedAt ? visit.endedAt.getTime() : Infinity;
+        if (start < bucketEnd && end > bucketStart) {
+          values[visit.hallId] = (values[visit.hallId] ?? 0) + 1;
+        }
+      }
+
+      points.push({ bucketStart: new Date(bucketStart).toISOString(), values });
+    }
+
+    return {
+      from: from.toISOString(),
+      to: to.toISOString(),
+      bucketMinutes,
+      halls: halls.map((hall) => ({ hallId: hall.id, hallName: hall.name })),
+      points,
     };
   }
 }
