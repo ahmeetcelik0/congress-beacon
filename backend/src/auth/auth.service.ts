@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { PilotLoginDto } from './dto/pilot-login.dto';
@@ -10,6 +10,22 @@ export type JwtPayload = {
   tokenVersion: number;
 };
 
+export type PilotLoginResult = {
+  accessToken: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    role: string;
+  };
+  congress: {
+    id: string;
+    name: string;
+    code: string;
+    beaconUuid: string;
+  };
+};
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -17,13 +33,17 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async pilotLogin(dto: PilotLoginDto): Promise<{ accessToken: string }> {
+  async pilotLogin(dto: PilotLoginDto): Promise<PilotLoginResult> {
     const congress = await this.prisma.congress.findUnique({
       where: { code: dto.congressCode },
     });
 
-    if (!congress || congress.accessCode !== dto.congressAccessCode) {
-      throw new UnauthorizedException('Gecersiz kongre kodu veya erisim kodu');
+    if (!congress) {
+      throw new NotFoundException('Kongre bulunamadi');
+    }
+
+    if (congress.accessCode !== dto.congressAccessCode) {
+      throw new UnauthorizedException('Erisim kodu gecersiz');
     }
 
     let user = await this.prisma.user.findUnique({
@@ -56,6 +76,21 @@ export class AuthService {
     };
 
     const accessToken = await this.jwtService.signAsync(payload);
-    return { accessToken };
+
+    return {
+      accessToken,
+      user: {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      },
+      congress: {
+        id: congress.id,
+        name: congress.name,
+        code: congress.code,
+        beaconUuid: congress.beaconUuid,
+      },
+    };
   }
 }

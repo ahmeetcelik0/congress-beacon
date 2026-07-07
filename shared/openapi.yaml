@@ -51,8 +51,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PilotLoginResponse'
+        '400':
+          description: Istek govdesi gecersiz (eksik/yanlis formatli alan).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Kongre kodu veya erisim kodu gecersiz.
+          description: congressCode dogru ama congressAccessCode yanlis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: congressCode ile eslesen bir kongre yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /devices/register:
     post:
@@ -699,12 +715,74 @@ components:
       type: object
       required:
         - accessToken
+        - user
+        - congress
       properties:
         accessToken:
           type: string
           description: >-
             JWT (7 gun gecerli). Sonraki isteklerde "Authorization: Bearer
             <accessToken>" basligi olarak gonderilir.
+        user:
+          type: object
+          required:
+            - id
+            - firstName
+            - lastName
+            - role
+          properties:
+            id:
+              type: string
+              format: uuid
+            firstName:
+              type: string
+            lastName:
+              type: string
+            role:
+              type: string
+              enum: [PARTICIPANT, ADMIN]
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - code
+            - beaconUuid
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            code:
+              type: string
+            beaconUuid:
+              type: string
+              format: uuid
+
+    ErrorResponse:
+      type: object
+      description: NestJS varsayilan hata govdesi formati.
+      required:
+        - statusCode
+        - message
+        - error
+      properties:
+        statusCode:
+          type: integer
+          example: 401
+        message:
+          description: >-
+            Tek bir hata icin string, class-validator dogrulama hatalari
+            icin (400) string dizisi olabilir.
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        error:
+          type: string
+          example: Unauthorized
 
     Congress:
       type: object
