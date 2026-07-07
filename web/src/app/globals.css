@@ -128,3 +128,27 @@ a {
 .panel-select {
   margin-bottom: 1.5rem;
 }
+
+.panel-inline-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.panel-inline-form input {
+  width: 5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+}
+
+.panel-inline-form button {
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid rgba(128, 128, 128, 0.4);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
