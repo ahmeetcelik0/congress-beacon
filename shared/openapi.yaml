@@ -54,6 +54,30 @@ paths:
         '401':
           description: Kongre kodu veya erisim kodu gecersiz.
 
+  /devices/register:
+    post:
+      summary: Mobil cihazi giris yapmis kullaniciya kaydet
+      operationId: registerDevice
+      tags:
+        - Devices
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '201':
+          description: Cihaz kaydedildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+
   /mobile/bootstrap:
     get:
       summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
@@ -480,6 +504,60 @@ components:
         format: uuid
 
   schemas:
+    RegisterDeviceRequest:
+      type: object
+      required:
+        - platform
+      properties:
+        platform:
+          type: string
+          enum: [IOS, ANDROID]
+        deviceModel:
+          type: string
+        osVersion:
+          type: string
+        appVersion:
+          type: string
+        pushToken:
+          type: string
+
+    Device:
+      type: object
+      required:
+        - id
+        - userId
+        - platform
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        platform:
+          type: string
+          enum: [IOS, ANDROID]
+        deviceModel:
+          type: string
+          nullable: true
+        osVersion:
+          type: string
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+        pushToken:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
     PilotLoginRequest:
       type: object
       required:
