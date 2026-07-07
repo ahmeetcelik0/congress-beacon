@@ -78,6 +78,37 @@ paths:
         '401':
           description: Token eksik, gecersiz veya suresi dolmus.
 
+  /observations/batch:
+    post:
+      summary: Ham iBeacon anlik goruntu batch'ini gonder
+      description: >-
+        Mobil uygulama salon karari vermez; yalnizca o anda gorulen beacon'larin
+        uuid/major/minor/rssi degerlerini icerir. Salon giris/cikis/sure hesabi
+        backend'de yapilir. `observationId` idempotency anahtaridir; ayni deger
+        tekrar gonderilirse duplicateCount'a sayilir, yeniden kayit olusturulmaz.
+      operationId: submitObservationBatch
+      tags:
+        - Observations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ObservationBatchRequest'
+      responses:
+        '201':
+          description: Batch islendi (kismi kabul mumkun; sayaclara bakin).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationBatchResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+        '403':
+          description: deviceId bu kullaniciya ait degil.
+
   /mobile/bootstrap:
     get:
       summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
@@ -504,6 +535,86 @@ components:
         format: uuid
 
   schemas:
+    ObservedBeacon:
+      type: object
+      required:
+        - uuid
+        - major
+        - minor
+        - rssi
+      properties:
+        uuid:
+          type: string
+          format: uuid
+        major:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        minor:
+          type: integer
+          minimum: 0
+          maximum: 65535
+        rssi:
+          type: integer
+        txPower:
+          type: integer
+          nullable: true
+
+    ObservationSnapshot:
+      type: object
+      required:
+        - observationId
+        - observedAt
+        - beacons
+      properties:
+        observationId:
+          type: string
+          format: uuid
+          description: Idempotency anahtari.
+        observedAt:
+          type: string
+          format: date-time
+        beacons:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ObservedBeacon'
+        appVersion:
+          type: string
+
+    ObservationBatchRequest:
+      type: object
+      required:
+        - clientBatchId
+        - deviceId
+        - observations
+      properties:
+        clientBatchId:
+          type: string
+          format: uuid
+        deviceId:
+          type: string
+          format: uuid
+        observations:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ObservationSnapshot'
+
+    ObservationBatchResponse:
+      type: object
+      required:
+        - acceptedCount
+        - duplicateCount
+        - rejectedCount
+      properties:
+        acceptedCount:
+          type: integer
+        duplicateCount:
+          type: integer
+        rejectedCount:
+          type: integer
+
     RegisterDeviceRequest:
       type: object
       required:
