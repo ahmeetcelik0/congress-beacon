@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CongressService } from '../congress/congress.service';
 import { Prisma } from '../../generated/prisma/client';
@@ -25,7 +29,10 @@ export class BeaconService {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException(
           'Bu kongrede ayni uuid/major/minor kombinasyonuna sahip bir beacon zaten var',
         );
@@ -57,7 +64,10 @@ export class BeaconService {
         data: dto,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException(
           'Bu kongrede ayni uuid/major/minor kombinasyonuna sahip bir beacon zaten var',
         );

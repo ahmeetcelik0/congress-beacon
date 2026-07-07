@@ -94,6 +94,55 @@ paths:
         '401':
           description: Token eksik, gecersiz veya suresi dolmus.
 
+  /observations:
+    get:
+      summary: Ham beacon gozlem akisi (debug/panel icin, sayfalanmis)
+      operationId: listObservations
+      tags:
+        - Observations
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          description: Bu salona su an veya gecmiste atanmis beacon'lara ait gozlemlerle filtreler.
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Sayfalanmis ham gozlem listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ObservationPage'
+
   /observations/batch:
     post:
       summary: Ham iBeacon anlik goruntu batch'ini gonder
@@ -124,6 +173,137 @@ paths:
           description: Token eksik, gecersiz veya suresi dolmus.
         '403':
           description: deviceId bu kullaniciya ait degil.
+
+  /attendance/summary:
+    get:
+      summary: Kongre icin canli katilim/doluluk ozeti (panel KPI'lari)
+      operationId: getAttendanceSummary
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ozet veri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceSummary'
+
+  /attendance/hall-visits:
+    get:
+      summary: Katilimci salon ziyaret gecmisi (sayfalanmis)
+      operationId: listHallVisits
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: isOpen
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          required: false
+          description: Katilimci ad/soyad icinde arama (kismi eslesme).
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Sayfalanmis ziyaret listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallVisitPage'
+
+  /attendance/occupancy-series:
+    get:
+      summary: Zaman-dilimli salon doluluk serisi (yogunluk grafigi icin)
+      description: >-
+        HallVisit araliklarindan hesaplanir; her bucket icin salon basina
+        o an icerideki tahmini kisi sayisini doner. `from`/`to` verilmezse
+        varsayilan bugun 00:00 - simdi araligidir.
+      operationId: getOccupancySeries
+      tags:
+        - Attendance
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: bucketMinutes
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1440
+            default: 15
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Zaman serisi verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OccupancySeries'
 
   /mobile/bootstrap:
     get:
@@ -551,6 +731,153 @@ components:
         format: uuid
 
   schemas:
+    HallOccupancy:
+      type: object
+      required:
+        - hallId
+        - hallName
+        - count
+      properties:
+        hallId:
+          type: string
+          format: uuid
+        hallName:
+          type: string
+        count:
+          type: integer
+
+    AttendanceSummary:
+      type: object
+      required:
+        - activeHalls
+        - currentlyInsideTotal
+        - hallOccupancy
+        - participantsSeenToday
+        - lastObservationAt
+      properties:
+        activeHalls:
+          type: integer
+        currentlyInsideTotal:
+          type: integer
+        hallOccupancy:
+          type: array
+          items:
+            $ref: '#/components/schemas/HallOccupancy'
+        participantsSeenToday:
+          type: integer
+        lastObservationAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    HallVisitSummary:
+      type: object
+      required:
+        - id
+        - userFirstName
+        - userLastName
+        - hallId
+        - hallName
+        - startedAt
+        - isOpen
+        - algorithmVersion
+      properties:
+        id:
+          type: string
+          format: uuid
+        userFirstName:
+          type: string
+        userLastName:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        hallName:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isOpen:
+          type: boolean
+        confidenceLevel:
+          type: string
+          nullable: true
+        algorithmVersion:
+          type: string
+
+    HallVisitPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HallVisitSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    OccupancySeriesPoint:
+      type: object
+      required:
+        - bucketStart
+        - values
+      properties:
+        bucketStart:
+          type: string
+          format: date-time
+        values:
+          type: object
+          description: hallId -> o bucket'taki tahmini kisi sayisi.
+          additionalProperties:
+            type: integer
+
+    OccupancySeries:
+      type: object
+      required:
+        - from
+        - to
+        - bucketMinutes
+        - halls
+        - points
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        bucketMinutes:
+          type: integer
+        halls:
+          type: array
+          items:
+            type: object
+            required:
+              - hallId
+              - hallName
+            properties:
+              hallId:
+                type: string
+                format: uuid
+              hallName:
+                type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/OccupancySeriesPoint'
+
     ObservedBeacon:
       type: object
       required:
@@ -629,6 +956,72 @@ components:
         duplicateCount:
           type: integer
         rejectedCount:
+          type: integer
+
+    ObservationSummary:
+      type: object
+      required:
+        - id
+        - observationId
+        - userId
+        - observedAt
+        - serverReceivedAt
+        - uuid
+        - major
+        - minor
+        - rssi
+      properties:
+        id:
+          type: string
+          format: uuid
+        observationId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        observedAt:
+          type: string
+          format: date-time
+        serverReceivedAt:
+          type: string
+          format: date-time
+        beaconId:
+          type: string
+          format: uuid
+          nullable: true
+        uuid:
+          type: string
+        major:
+          type: integer
+        minor:
+          type: integer
+        rssi:
+          type: integer
+        txPower:
+          type: integer
+          nullable: true
+        appVersion:
+          type: string
+          nullable: true
+
+    ObservationPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ObservationSummary'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
           type: integer
 
     RegisterDeviceRequest:

@@ -316,17 +316,17 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] `AttendanceInterval` modeli oluşturuldu.
-- [ ] Observation'ları zaman sırasına koyan servis yazıldı.
-- [ ] Aynı salon observation'larını birleştirme kuralı yazıldı.
-- [ ] Salon geçiş kuralı yazıldı.
-- [ ] Uzun veri boşluğu `unknown` kabul ediliyor.
-- [ ] Çok kısa observation'lar filtreleniyor.
-- [ ] Oturum zamanlarıyla salon aralıkları eşleştiriliyor.
+- [x] `AttendanceInterval` modeli oluşturuldu. (`HallVisit` + `AttendanceEvent` olarak; bkz. `docs/decisions.md`.)
+- [x] Observation'ları zaman sırasına koyan servis yazıldı. (`AttendanceProcessingService`.)
+- [x] Aynı salon observation'larını birleştirme kuralı yazıldı.
+- [x] Salon geçiş kuralı yazıldı.
+- [ ] Uzun veri boşluğu `unknown` kabul ediliyor. (Şu an bosluklar kesin cikis saymiyor ama ayri bir "unknown" durumu modellenmedi.)
+- [ ] Çok kısa observation'lar filtreleniyor. (Ardışık-2 giriş kuralı tekil sıçramaları dolaylı süzüyor ama özel bir filtre yok.)
+- [ ] Oturum zamanlarıyla salon aralıkları eşleştiriliyor. (`Session` modeli henüz yok.)
 - [ ] Katılım yüzdesi hesaplanıyor.
-- [ ] Ortalama ve medyan kalış süresi hesaplanıyor.
-- [ ] Güven seviyesi hesaplanıyor.
-- [ ] Panelde katılımcı salon geçmişi gösteriliyor.
+- [ ] Ortalama ve medyan kalış süresi hesaplanıyor. (Tabloda bireysel süre var, agregat istatistik yok.)
+- [ ] Güven seviyesi hesaplanıyor. (`confidenceLevel` alanı şemada var ama algoritma henüz doldurmuyor.)
+- [x] Panelde katılımcı salon geçmişi gösteriliyor. (`/attendance` sayfası — filtreli/sayfalanmış tablo.)
 
 ### Ortak entegrasyon
 
@@ -392,12 +392,12 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] Kongre özeti dashboard'u yapıldı.
-- [ ] Salon bazlı tahmini kişi sayısı ekranı yapıldı.
-- [ ] Oturum bazlı katılım ekranı yapıldı.
+- [x] Kongre özeti dashboard'u yapıldı. (`/attendance`: KPI kartları + canlı salon doluluğu.)
+- [x] Salon bazlı tahmini kişi sayısı ekranı yapıldı.
+- [ ] Oturum bazlı katılım ekranı yapıldı. (`Session` modeli henüz yok.)
 - [ ] Ortalama/medyan kalış süresi ekranı yapıldı.
-- [ ] Zaman dilimine göre yoğunluk grafikleri yapıldı.
-- [ ] Veri kalite oranı ekranı yapıldı.
+- [x] Zaman dilimine göre yoğunluk grafikleri yapıldı. (Recharts, 15dk bucket'li salon bazlı seri.)
+- [ ] Veri kalite oranı ekranı yapıldı. (Ham gözlem akışında eşleşmeyen beacon'lar işaretleniyor ama ayrı bir oran/kalite ekranı yok.)
 - [ ] Beacon sağlık ekranı yapıldı.
 - [ ] CSV export eklendi.
 - [ ] Excel export eklendi.

@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { HallService } from '../hall/hall.service';
 import { BeaconService } from '../beacon/beacon.service';
@@ -49,7 +53,9 @@ export class HallBeaconService {
       });
 
       if (!activeAssignment) {
-        throw new NotFoundException('Bu salon icin aktif bir beacon atamasi bulunamadi');
+        throw new NotFoundException(
+          'Bu salon icin aktif bir beacon atamasi bulunamadi',
+        );
       }
 
       return tx.hallBeacon.update({

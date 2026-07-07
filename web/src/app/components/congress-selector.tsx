@@ -6,16 +6,18 @@ export function CongressSelector({
   congresses,
   selectedId,
   basePath,
+  className = 'panel-select',
 }: {
   congresses: { id: string; name: string }[];
   selectedId?: string;
   basePath: string;
+  className?: string;
 }) {
   const router = useRouter();
 
   return (
     <select
-      className="panel-select"
+      className={className}
       value={selectedId ?? ''}
       onChange={(event) => router.push(`${basePath}?congressId=${event.target.value}`)}
     >

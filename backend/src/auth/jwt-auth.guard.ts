@@ -1,7 +1,13 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtPayload } from './auth.service';
+import type { AuthenticatedRequest } from './authenticated-request';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -11,8 +17,8 @@ export class JwtAuthGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const authHeader: string | undefined = request.headers['authorization'];
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    const authHeader = request.headers['authorization'];
 
     if (!authHeader?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Yetkilendirme basligi eksik');
@@ -27,7 +33,9 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Gecersiz veya suresi dolmus token');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+    });
     if (!user || user.tokenVersion !== payload.tokenVersion) {
       throw new UnauthorizedException('Token artik gecerli degil');
     }

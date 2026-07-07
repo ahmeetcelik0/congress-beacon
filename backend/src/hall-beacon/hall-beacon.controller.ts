@@ -16,7 +16,10 @@ export class HallBeaconController {
   }
 
   @Delete(':beaconId')
-  unassign(@Param('hallId') hallId: string, @Param('beaconId') beaconId: string) {
+  unassign(
+    @Param('hallId') hallId: string,
+    @Param('beaconId') beaconId: string,
+  ) {
     return this.hallBeaconService.unassign(hallId, beaconId);
   }
 
