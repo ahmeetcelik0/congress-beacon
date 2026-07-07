@@ -8,6 +8,7 @@ import { CongressModule } from './congress/congress.module';
 import { HallModule } from './hall/hall.module';
 import { BeaconModule } from './beacon/beacon.module';
 import { HallBeaconModule } from './hall-beacon/hall-beacon.module';
+import { MobileModule } from './mobile/mobile.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { HallBeaconModule } from './hall-beacon/hall-beacon.module';
     HallModule,
     BeaconModule,
     HallBeaconModule,
+    MobileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

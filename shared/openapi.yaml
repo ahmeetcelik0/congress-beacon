@@ -27,6 +27,34 @@ paths:
                     type: string
                     example: ok
 
+  /mobile/bootstrap:
+    get:
+      summary: Mobil uygulama icin kongre/salon/beacon konfigurasyonu
+      description: >-
+        Mobil uygulamanin bir kongredeki salonlari ve her salona aktif olarak
+        atanmis beacon'larin major/minor degerlerini tek response'ta almasini saglar.
+      operationId: getMobileBootstrap
+      tags:
+        - Mobile
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bootstrap verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileBootstrap'
+        '400':
+          description: congressId gecersiz veya eksik.
+        '404':
+          description: Kongre bulunamadi.
+
   /congresses:
     post:
       summary: Yeni kongre olustur
@@ -689,3 +717,55 @@ components:
           type: string
         placementNote:
           type: string
+
+    MobileBootstrap:
+      type: object
+      required:
+        - congress
+        - halls
+      properties:
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - beaconUuid
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            beaconUuid:
+              type: string
+              format: uuid
+        halls:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - name
+              - rssiThreshold
+              - beacons
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+              rssiThreshold:
+                type: integer
+              beacons:
+                type: array
+                description: Bu salona su an aktif olarak atanmis beacon'larin major/minor degerleri.
+                items:
+                  type: object
+                  required:
+                    - major
+                    - minor
+                  properties:
+                    major:
+                      type: integer
+                    minor:
+                      type: integer
