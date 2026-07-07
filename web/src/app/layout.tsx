@@ -30,6 +30,7 @@ export default function RootLayout({
           <Link href="/congresses">Kongreler</Link>
           <Link href="/halls">Salonlar</Link>
           <Link href="/beacons">Beacon&apos;lar</Link>
+          <Link href="/attendance">Canlı Takip</Link>
         </nav>
         {children}
       </body>
