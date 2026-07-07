@@ -5,6 +5,7 @@ import { AppService } from './app.service';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { CongressModule } from './congress/congress.module';
+import { HallModule } from './hall/hall.module';
 
 @Module({
   imports: [
@@ -12,6 +13,7 @@ import { CongressModule } from './congress/congress.module';
     PrismaModule,
     HealthModule,
     CongressModule,
+    HallModule,
   ],
   controllers: [AppController],
   providers: [AppService],
