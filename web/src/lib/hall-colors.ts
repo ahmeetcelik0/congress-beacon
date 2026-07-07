@@ -1,12 +1,15 @@
+// dataviz skill referans paleti (dark mode), #0a0e14 yuzeyine karsi dogrulanmis
+// (node scripts/validate_palette.js ... --mode dark --surface "#0a0e14" -> ALL CHECKS PASS).
+// Sira CVD-guvenlik mekanizmasidir, degistirilmemeli.
 const HALL_PALETTE = [
-  '#34e2a3', // radar yesili
-  '#f5a623', // amber
-  '#5b8cff', // indigo
-  '#f2545b', // mercan kirmizi
-  '#22d3ee', // cyan
-  '#c084fc', // menekse
-  '#facc15', // sari
-  '#fb7185', // pembe
+  '#3987e5', // blue
+  '#199e70', // aqua
+  '#c98500', // yellow
+  '#008300', // green
+  '#9085e9', // violet
+  '#e66767', // red
+  '#d55181', // magenta
+  '#d95926', // orange
 ];
 
 export function getHallColor(hallId: string): string {

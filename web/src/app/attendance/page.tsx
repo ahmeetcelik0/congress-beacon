@@ -3,6 +3,7 @@ import { CongressSelector } from '../components/congress-selector';
 import { KpiRow } from './components/kpi-row';
 import { HallOccupancyGrid } from './components/hall-occupancy-grid';
 import { LiveBadge } from './components/live-badge';
+import { OccupancyChart } from './components/occupancy-chart';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -13,6 +14,9 @@ export default async function AttendancePage({
   const { congressId } = await searchParams;
   const congresses = await api.listCongresses();
   const summary = congressId ? await api.getAttendanceSummary(congressId) : null;
+  const occupancySeries = congressId
+    ? await api.getOccupancySeries({ congressId, bucketMinutes: 15 })
+    : null;
 
   return (
     <main className="tracking-page">
@@ -50,6 +54,16 @@ export default async function AttendancePage({
             </div>
             <HallOccupancyGrid halls={summary.hallOccupancy} />
           </section>
+
+          {occupancySeries && (
+            <section className="tp-section">
+              <div className="tp-section-title">
+                <h2>Yoğunluk (Bugün)</h2>
+                <span>15 dk aralıklarla</span>
+              </div>
+              <OccupancyChart series={occupancySeries} />
+            </section>
+          )}
         </>
       )}
     </main>

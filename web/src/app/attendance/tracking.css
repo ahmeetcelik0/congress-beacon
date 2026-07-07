@@ -5,10 +5,11 @@
   --tp-border: rgba(148, 163, 184, 0.14);
   --tp-text: #e8ecf3;
   --tp-text-dim: #8b93a7;
-  --tp-accent: #34e2a3;
-  --tp-accent-dim: rgba(52, 226, 163, 0.16);
-  --tp-warn: #f5a623;
-  --tp-danger: #f2545b;
+  /* dataviz skill sabit status paleti (good/warning/critical) - #0a0e14 yuzeyine karsi dogrulanmis */
+  --tp-accent: #0ca30c;
+  --tp-accent-dim: rgba(12, 163, 12, 0.16);
+  --tp-warn: #fab219;
+  --tp-danger: #d03b3b;
 
   min-height: 100vh;
   padding: 2.5rem clamp(1rem, 4vw, 3rem) 4rem;
@@ -266,6 +267,47 @@
   height: 9px;
   border-radius: 2px;
   background: var(--swatch-color, var(--tp-accent));
+}
+
+.tp-chart-tooltip {
+  background: var(--tp-bg-elevated);
+  border: 1px solid var(--tp-border);
+  border-radius: 10px;
+  padding: 0.6rem 0.8rem;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  min-width: 150px;
+}
+
+.tp-chart-tooltip-time {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  color: var(--tp-text-dim);
+  margin-bottom: 0.4rem;
+}
+
+.tp-chart-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  padding: 0.15rem 0;
+}
+
+.tp-chart-tooltip-key {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.tp-chart-tooltip-value {
+  font-family: var(--font-geist-mono), monospace;
+  font-weight: 600;
+  color: var(--tp-text);
+}
+
+.tp-chart-tooltip-name {
+  color: var(--tp-text-dim);
 }
 
 /* Table */
