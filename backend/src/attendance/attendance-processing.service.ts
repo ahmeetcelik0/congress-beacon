@@ -7,6 +7,17 @@ const ALGORITHM_VERSION = 'v1';
 const ENTRY_STREAK_THRESHOLD = 2;
 const EXIT_STREAK_THRESHOLD = 2;
 
+type Candidate = { hallId: string; margin: number };
+
+// RSSI'nin salon esiginin ne kadar uzerinde oldugu (marj, dB) - girisin ne kadar
+// net/gurultusuz oldugunun kaba bir gostergesi. Mobil confidenceScore gondermiyor
+// (mimari karari geregi), bu yuzden bu deger sunucu tarafinda hesaplaniyor.
+function confidenceFromMargin(margin: number): string {
+  if (margin >= 10) return 'yuksek';
+  if (margin >= 4) return 'orta';
+  return 'dusuk';
+}
+
 @Injectable()
 export class AttendanceProcessingService {
   constructor(private readonly prisma: PrismaService) {}
@@ -20,14 +31,14 @@ export class AttendanceProcessingService {
     );
 
     for (const snapshot of ordered) {
-      const candidateHallId = await this.resolveCandidateHall(snapshot);
-      await this.applySnapshot(userId, snapshot.observedAt, candidateHallId);
+      const candidate = await this.resolveCandidateHall(snapshot);
+      await this.applySnapshot(userId, snapshot.observedAt, candidate);
     }
   }
 
   private async resolveCandidateHall(
     snapshot: AcceptedSnapshot,
-  ): Promise<string | null> {
+  ): Promise<Candidate | null> {
     const matchedBeaconIds = snapshot.readings
       .filter((reading) => reading.beaconId)
       .map((reading) => reading.beaconId as string);
@@ -70,23 +81,26 @@ export class AttendanceProcessingService {
 
     let bestHallId: string | null = null;
     let bestAverage = -Infinity;
+    let bestMargin = 0;
 
     for (const [hallId, stats] of hallStats) {
       const average = stats.sum / stats.count;
       if (average >= stats.threshold && average > bestAverage) {
         bestAverage = average;
         bestHallId = hallId;
+        bestMargin = average - stats.threshold;
       }
     }
 
-    return bestHallId;
+    return bestHallId ? { hallId: bestHallId, margin: bestMargin } : null;
   }
 
   private async applySnapshot(
     userId: string,
     observedAt: Date,
-    candidateHallId: string | null,
+    candidate: Candidate | null,
   ): Promise<void> {
+    const candidateHallId = candidate?.hallId ?? null;
     await this.prisma.$transaction(async (tx) => {
       const state =
         (await tx.userPresenceState.findUnique({ where: { userId } })) ??
@@ -208,6 +222,7 @@ export class AttendanceProcessingService {
           startedAt: observedAt,
           lastConfirmedAt: observedAt,
           algorithmVersion: ALGORITHM_VERSION,
+          confidenceLevel: confidenceFromMargin(candidate!.margin),
         },
       });
 
@@ -218,6 +233,7 @@ export class AttendanceProcessingService {
           type: AttendanceEventType.ENTRY,
           occurredAt: observedAt,
           algorithmVersion: ALGORITHM_VERSION,
+          confidenceScore: candidate!.margin,
         },
       });
 
