@@ -1,0 +1,35 @@
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { HealthModule } from './health/health.module';
+import { PrismaModule } from './prisma/prisma.module';
+import { CongressModule } from './congress/congress.module';
+import { HallModule } from './hall/hall.module';
+import { BeaconModule } from './beacon/beacon.module';
+import { HallBeaconModule } from './hall-beacon/hall-beacon.module';
+import { MobileModule } from './mobile/mobile.module';
+import { AuthModule } from './auth/auth.module';
+import { DevicesModule } from './devices/devices.module';
+import { ObservationsModule } from './observations/observations.module';
+import { AttendanceModule } from './attendance/attendance.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    PrismaModule,
+    HealthModule,
+    CongressModule,
+    HallModule,
+    BeaconModule,
+    HallBeaconModule,
+    MobileModule,
+    AuthModule,
+    DevicesModule,
+    ObservationsModule,
+    AttendanceModule,
+  ],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
