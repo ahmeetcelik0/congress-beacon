@@ -17,6 +17,9 @@ export default async function AttendancePage({
   const occupancySeries = congressId
     ? await api.getOccupancySeries({ congressId, bucketMinutes: 15 })
     : null;
+  const roster = congressId
+    ? await api.listHallVisits({ congressId, isOpen: true, pageSize: 100 })
+    : null;
 
   return (
     <main className="tracking-page">
@@ -38,13 +41,14 @@ export default async function AttendancePage({
 
       {!congressId && <div className="tp-empty">Başlamak için yukarıdan bir kongre seçin.</div>}
 
-      {congressId && summary && occupancySeries && (
+      {congressId && summary && occupancySeries && roster && (
         <>
           <LiveDashboard
             key={congressId}
             congressId={congressId}
             initialSummary={summary}
             initialSeries={occupancySeries}
+            initialRoster={roster.items}
           />
 
           <section className="tp-section">

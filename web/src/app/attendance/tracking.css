@@ -239,6 +239,57 @@
   animation: tp-pulse 2s ease-out infinite;
 }
 
+/* Currently-inside roster */
+.tp-roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.tp-roster-card {
+  background: var(--tp-bg-card);
+  border: 1px solid var(--tp-border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  border-left: 3px solid var(--hall-color, var(--tp-accent));
+  animation: tp-rise 0.5s ease both;
+}
+
+.tp-roster-title {
+  font-size: 0.85rem;
+  color: var(--tp-text-dim);
+  margin-bottom: 0.6rem;
+}
+
+.tp-roster-empty {
+  font-size: 0.8rem;
+  color: var(--tp-text-dim);
+  font-style: italic;
+}
+
+.tp-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.tp-roster-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.tp-roster-time {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  color: var(--hall-color, var(--tp-text-dim));
+  white-space: nowrap;
+}
+
 /* Chart card */
 .tp-chart-card {
   background: var(--tp-bg-card);

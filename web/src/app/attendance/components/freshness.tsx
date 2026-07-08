@@ -16,12 +16,27 @@ function formatRelative(iso: string | null, now: number): string {
 }
 
 export function Freshness({ timestamp }: { timestamp: string | null }) {
-  const [now, setNow] = useState(() => Date.now());
+  // now'u dogrudan Date.now() ile seed etmek sunucu render zamani ile istemci
+  // hydrate zamaninin farkli olmasi yuzunden hydration mismatch'e yol aciyordu.
+  // Sunucu ve ilk istemci render'i ayni sabit govdeyi uretsin diye null'dan basliyoruz,
+  // gercek zamana yalnizca mount sonrasi (useEffect icinde) geciyoruz.
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
+    // Ilk gercek deger de bir zamanlayici callback'i icinden gelsin diye
+    // setTimeout(0) kullaniyoruz; boylece setState effect govdesinde degil,
+    // dis bir zamanlayicidan tetiklenmis oluyor (react-hooks/set-state-in-effect).
+    const bootstrap = setTimeout(() => setNow(Date.now()), 0);
     const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    return () => {
+      clearTimeout(bootstrap);
+      clearInterval(interval);
+    };
   }, []);
+
+  if (now === null) {
+    return <span>{timestamp ? '…' : 'veri yok'}</span>;
+  }
 
   const isStale = !timestamp || now - new Date(timestamp).getTime() > STALE_AFTER_MS;
 

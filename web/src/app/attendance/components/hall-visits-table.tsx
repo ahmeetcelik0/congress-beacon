@@ -43,6 +43,12 @@ export function HallVisitsTable({
   // data'yi yenileme sirasinda da eski haliyle gosteririz (skeleton/flash yok),
   // bu yuzden ayri bir "loading" state'i tutmuyoruz.
   const [data, setData] = useState<{ items: HallVisitSummary[]; total: number } | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => setRefreshTick((tick) => tick + 1), 5_000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -88,7 +94,7 @@ export function HallVisitsTable({
     return () => {
       cancelled = true;
     };
-  }, [congressId, hallId, isOpenFilter, search, page]);
+  }, [congressId, hallId, isOpenFilter, search, page, refreshTick]);
 
   const totalPages = useMemo(
     () => (data ? Math.max(1, Math.ceil(data.total / PAGE_SIZE)) : 1),
