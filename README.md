@@ -289,11 +289,11 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] Foreground/background kaynakları raporlamada ayrıldı.
-- [ ] Katılımcı takip sağlığı hesaplandı.
-- [ ] `GET /admin/tracking-health` endpoint'i yazıldı.
-- [ ] Panelde takip sağlığı ekranı yapıldı.
-- [ ] Aktif / sadece arka plan / veri yok / izin sorunu olası durumları eklendi.
+- [ ] Foreground/background kaynakları raporlamada ayrıldı. (Mimari karari geregi mobil bu bilgiyi göndermiyor; bkz. Faz 3 notu.)
+- [x] Katılımcı takip sağlığı hesaplandı.
+- [x] `GET /admin/tracking-health` endpoint'i yazıldı.
+- [x] Panelde takip sağlığı ekranı yapıldı.
+- [x] Aktif / yakın zamanda / veri yok durumları eklendi. (İzin-sorunu ayrimi mobil kaynak bilgisi olmadan yapilamiyor.)
 
 ### Ortak entegrasyon
 
@@ -321,12 +321,12 @@ Servisleri başlatma sırası:
 - [x] Observation'ları zaman sırasına koyan servis yazıldı. (`AttendanceProcessingService`.)
 - [x] Aynı salon observation'larını birleştirme kuralı yazıldı.
 - [x] Salon geçiş kuralı yazıldı.
-- [ ] Uzun veri boşluğu `unknown` kabul ediliyor. (Şu an bosluklar kesin cikis saymiyor ama ayri bir "unknown" durumu modellenmedi.)
+- [x] Uzun veri boşluğu `unknown` kabul ediliyor. (BullMQ `stale-visit-sweep` repeatable job'u, 5dk veri gelmeyen acik ziyaretleri gercekten kapatip `confidenceLevel:'unknown'` isaretliyor.)
 - [ ] Çok kısa observation'lar filtreleniyor. (Ardışık-2 giriş kuralı tekil sıçramaları dolaylı süzüyor ama özel bir filtre yok.)
-- [ ] Oturum zamanlarıyla salon aralıkları eşleştiriliyor. (`Session` modeli henüz yok.)
+- [ ] Oturum zamanlarıyla salon aralıkları eşleştiriliyor. (`Session` modeli artik var ama katilim eslestirme mantigi henuz yazilmadi.)
 - [ ] Katılım yüzdesi hesaplanıyor.
-- [ ] Ortalama ve medyan kalış süresi hesaplanıyor. (Tabloda bireysel süre var, agregat istatistik yok.)
-- [ ] Güven seviyesi hesaplanıyor. (`confidenceLevel` alanı şemada var ama algoritma henüz doldurmuyor.)
+- [x] Ortalama ve medyan kalış süresi hesaplanıyor. (`/attendance/summary`'nin `durationStats` alani, panelde "Kalış Süresi" bölümü.)
+- [x] Güven seviyesi hesaplanıyor. (Giris anindaki RSSI-esik marjina göre yuksek/orta/dusuk.)
 - [x] Panelde katılımcı salon geçmişi gösteriliyor. (`/attendance` sayfası — filtreli/sayfalanmış tablo.)
 
 ### Ortak entegrasyon
@@ -357,16 +357,16 @@ Servisleri başlatma sırası:
 
 ### Backend / panel geliştiricisi
 
-- [ ] `Session` modeli oluşturuldu.
-- [ ] Oturum-salon ilişkisi oluşturuldu.
-- [ ] Bilimsel program yönetim ekranı yapıldı.
-- [ ] Push token endpoint'i yazıldı.
-- [ ] Redis/BullMQ bildirim planlayıcısı kuruldu.
-- [ ] Oturumdan 10 dakika önce bildirim kuralı eklendi.
-- [ ] Oturum başlangıç bildirimi eklendi.
+- [x] `Session` modeli oluşturuldu.
+- [x] Oturum-salon ilişkisi oluşturuldu.
+- [x] Bilimsel program yönetim ekranı yapıldı. (`/sessions`.)
+- [x] Push token endpoint'i yazıldı. (`PUT /devices/push-token`.)
+- [x] Redis/BullMQ bildirim planlayıcısı kuruldu.
+- [x] Oturumdan 10 dakika önce bildirim kuralı eklendi.
+- [ ] Oturum başlangıç bildirimi eklendi. (Su an yalnizca 10dk-once hatirlaticisi var, ayrica baslangic bildirimi yok.)
 - [ ] Program değişikliği bildirimi eklendi.
 - [ ] Bildirim frekans limiti eklendi.
-- [ ] Bildirim gönderim/açılma analitiği eklendi.
+- [x] Bildirim gönderim/açılma analitiği eklendi. (`NotificationLog` + `POST /notifications/opened`; FCM/APNs kimlik bilgisi gelene kadar gonderim `LoggingNotificationSender` ile sadece loglaniyor, gercek gonderim FCM baglaninca kod degisikligi gerekmeden devreye girecek.)
 
 ### Ortak entegrasyon
 
@@ -395,16 +395,16 @@ Servisleri başlatma sırası:
 
 - [x] Kongre özeti dashboard'u yapıldı. (`/attendance`: KPI kartları + canlı salon doluluğu.)
 - [x] Salon bazlı tahmini kişi sayısı ekranı yapıldı.
-- [ ] Oturum bazlı katılım ekranı yapıldı. (`Session` modeli henüz yok.)
-- [ ] Ortalama/medyan kalış süresi ekranı yapıldı.
+- [ ] Oturum bazlı katılım ekranı yapıldı. (`Session` modeli var, ama HallVisit ile oturum eslestirme mantigi henuz yazilmadi.)
+- [x] Ortalama/medyan kalış süresi ekranı yapıldı. (`/attendance` sayfasi, "Kalış Süresi" bölümü.)
 - [x] Zaman dilimine göre yoğunluk grafikleri yapıldı. (Recharts, 15dk bucket'li salon bazlı seri.)
-- [ ] Veri kalite oranı ekranı yapıldı. (Ham gözlem akışında eşleşmeyen beacon'lar işaretleniyor ama ayrı bir oran/kalite ekranı yok.)
-- [ ] Beacon sağlık ekranı yapıldı.
-- [ ] CSV export eklendi.
-- [ ] Excel export eklendi.
-- [ ] PDF rapor export eklendi.
-- [ ] Rol/yetki sistemi tamamlandı.
-- [ ] Audit log eklendi.
+- [x] Veri kalite oranı ekranı yapıldı. (`/reports`.)
+- [x] Beacon sağlık ekranı yapıldı. (`/reports`.)
+- [x] CSV export eklendi. (`/reports/hall-visits.csv`.)
+- [ ] Excel export eklendi. (Bilinçli olarak sonraya birakildi.)
+- [ ] PDF rapor export eklendi. (Bilinçli olarak sonraya birakildi.)
+- [x] Rol/yetki sistemi tamamlandı. (Basit JWT tabanli `AdminUser` girisi, tum yonetim/attendance/rapor endpoint'leri korunuyor.)
+- [x] Audit log eklendi. (`AuditLog` modeli + otomatik interceptor.)
 
 ### Ortak pilot checklist'i
 
