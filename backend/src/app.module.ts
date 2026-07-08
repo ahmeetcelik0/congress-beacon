@@ -13,6 +13,11 @@ import { AuthModule } from './auth/auth.module';
 import { DevicesModule } from './devices/devices.module';
 import { ObservationsModule } from './observations/observations.module';
 import { AttendanceModule } from './attendance/attendance.module';
+import { AdminAuthModule } from './admin-auth/admin-auth.module';
+import { TrackingHealthModule } from './tracking-health/tracking-health.module';
+import { ReportsModule } from './reports/reports.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SessionModule } from './session/session.module';
 
 @Module({
   imports: [
@@ -28,6 +33,11 @@ import { AttendanceModule } from './attendance/attendance.module';
     DevicesModule,
     ObservationsModule,
     AttendanceModule,
+    AdminAuthModule,
+    TrackingHealthModule,
+    ReportsModule,
+    NotificationsModule,
+    SessionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

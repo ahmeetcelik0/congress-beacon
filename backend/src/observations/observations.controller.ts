@@ -7,6 +7,7 @@ import { ObservationQueryService } from './observation-query.service';
 import { ObservationBatchDto } from './dto/observation-batch.dto';
 import { ObservationsQueryDto } from './dto/observations-query.dto';
 import { AttendanceProcessingService } from '../attendance/attendance-processing.service';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 
 @Controller('observations')
 export class ObservationsController {
@@ -17,6 +18,7 @@ export class ObservationsController {
   ) {}
 
   @Get()
+  @UseGuards(AdminJwtGuard)
   getObservations(@Query() query: ObservationsQueryDto) {
     return this.queryService.getObservations(query);
   }

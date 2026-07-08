@@ -9,12 +9,18 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { HallService } from './hall.service';
 import { CreateHallDto } from './dto/create-hall.dto';
 import { UpdateHallDto } from './dto/update-hall.dto';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { AuditLogInterceptor } from '../admin-auth/audit-log.interceptor';
 
 @Controller('halls')
+@UseGuards(AdminJwtGuard)
+@UseInterceptors(AuditLogInterceptor)
 export class HallController {
   constructor(private readonly hallService: HallService) {}
 

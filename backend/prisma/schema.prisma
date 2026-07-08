@@ -24,9 +24,10 @@ model Congress {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  halls   Hall[]
-  beacons Beacon[]
-  users   User[]
+  halls    Hall[]
+  beacons  Beacon[]
+  users    User[]
+  sessions Session[]
 }
 
 enum UserRole {
@@ -53,6 +54,7 @@ model User {
   attendanceEvents   AttendanceEvent[]
   hallVisits         HallVisit[]
   presenceState      UserPresenceState?
+  notificationLogs   NotificationLog[]
 
   @@unique([congressId, firstName, lastName, phoneLast4])
 }
@@ -76,6 +78,7 @@ model Device {
   user User @relation(fields: [userId], references: [id])
 
   observationBatches ObservationBatch[]
+  notificationLogs   NotificationLog[]
 
   @@index([userId])
 }
@@ -93,6 +96,7 @@ model Hall {
 
   attendanceEvents AttendanceEvent[]
   hallVisits       HallVisit[]
+  sessions         Session[]
 
   @@index([congressId])
 }
@@ -222,6 +226,32 @@ model HallVisit {
   @@index([hallId])
 }
 
+model AdminUser {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  adminUserId String
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id])
+
+  @@index([adminUserId, createdAt])
+  @@index([entityType, entityId])
+}
+
 model UserPresenceState {
   userId              String   @id
   candidateHallId     String?
@@ -232,4 +262,49 @@ model UserPresenceState {
 
   user          User       @relation(fields: [userId], references: [id])
   openHallVisit HallVisit? @relation(fields: [openHallVisitId], references: [id])
+}
+
+model Session {
+  id          String   @id @default(uuid())
+  congressId  String
+  hallId      String
+  title       String
+  speaker     String?
+  startTime   DateTime
+  endTime     DateTime
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+  hall     Hall     @relation(fields: [hallId], references: [id])
+
+  notificationLogs NotificationLog[]
+
+  @@index([congressId, startTime])
+  @@index([hallId])
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+}
+
+model NotificationLog {
+  id        String              @id @default(uuid())
+  sessionId String?
+  userId    String
+  deviceId  String
+  title     String
+  body      String
+  status    NotificationStatus
+  sentAt    DateTime            @default(now())
+  openedAt  DateTime?
+
+  session Session? @relation(fields: [sessionId], references: [id])
+  user    User     @relation(fields: [userId], references: [id])
+  device  Device   @relation(fields: [deviceId], references: [id])
+
+  @@index([userId])
+  @@index([sessionId])
 }
