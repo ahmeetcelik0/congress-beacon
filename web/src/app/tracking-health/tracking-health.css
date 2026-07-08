@@ -1,0 +1,28 @@
+.th-summary {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.th-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.th-badge.th-active {
+  background: rgba(12, 163, 12, 0.16);
+  color: #0ca30c;
+}
+
+.th-badge.th-recent {
+  background: rgba(250, 178, 25, 0.16);
+  color: #b8790a;
+}
+
+.th-badge.th-none {
+  background: rgba(208, 59, 59, 0.12);
+  color: #d03b3b;
+}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
+import { adminLogoutAction } from "./admin/login/actions";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,12 @@ export default function RootLayout({
           <Link href="/halls">Salonlar</Link>
           <Link href="/beacons">Beacon&apos;lar</Link>
           <Link href="/attendance">Canlı Takip</Link>
+          <Link href="/tracking-health">Takip Sağlığı</Link>
+          <Link href="/reports">Raporlar</Link>
+          <Link href="/sessions">Bilimsel Program</Link>
+          <form action={adminLogoutAction} style={{ marginLeft: "auto" }}>
+            <button type="submit">Çıkış Yap</button>
+          </form>
         </nav>
         {children}
       </body>

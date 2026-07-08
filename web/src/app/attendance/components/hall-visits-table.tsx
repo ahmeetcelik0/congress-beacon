@@ -135,6 +135,7 @@ export function HallVisitsTable({
             <th>Salon</th>
             <th>Giriş</th>
             <th>Süre</th>
+            <th>Güven</th>
             <th>Durum</th>
           </tr>
         </thead>
@@ -154,6 +155,7 @@ export function HallVisitsTable({
               </td>
               <td>{formatDateTime(visit.startedAt)}</td>
               <td>{formatDuration(visit.startedAt, visit.endedAt)}</td>
+              <td>{visit.confidenceLevel ?? '—'}</td>
               <td>
                 <span className={`tp-badge ${visit.isOpen ? 'tp-open' : 'tp-closed'}`}>
                   {visit.isOpen ? 'içeride' : 'çıktı'}
@@ -163,7 +165,7 @@ export function HallVisitsTable({
           ))}
           {data && data.items.length === 0 && (
             <tr>
-              <td colSpan={5} style={{ textAlign: 'center', color: 'var(--tp-text-dim)' }}>
+              <td colSpan={6} style={{ textAlign: 'center', color: 'var(--tp-text-dim)' }}>
                 Kayıt bulunamadı.
               </td>
             </tr>

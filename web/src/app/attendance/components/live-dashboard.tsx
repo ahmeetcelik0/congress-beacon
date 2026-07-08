@@ -6,6 +6,7 @@ import { KpiRow } from './kpi-row';
 import { HallOccupancyGrid } from './hall-occupancy-grid';
 import { OccupancyChart } from './occupancy-chart';
 import { HallRoster } from './hall-roster';
+import { DurationStatsGrid } from './duration-stats-grid';
 
 const REFRESH_INTERVAL_MS = 5_000;
 const ROSTER_PAGE_SIZE = 100;
@@ -68,6 +69,14 @@ export function LiveDashboard({
           <span>canlı</span>
         </div>
         <HallRoster visits={roster} halls={summary.hallOccupancy} />
+      </section>
+
+      <section className="tp-section">
+        <div className="tp-section-title">
+          <h2>Kalış Süresi</h2>
+          <span>tamamlanmış ziyaretler</span>
+        </div>
+        <DurationStatsGrid stats={summary.durationStats} />
       </section>
 
       <section className="tp-section">
