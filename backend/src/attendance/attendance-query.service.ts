@@ -3,6 +3,15 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HallVisitsQueryDto } from './dto/hall-visits-query.dto';
 import { OccupancySeriesQueryDto } from './dto/occupancy-series-query.dto';
 
+// Bu sureden uzun zamandir yeni gozlem gelmeyen "acik" HallVisit kayitlari,
+// panelde "su an icerde" sayilmaz (yalnizca goruntuleme katmaninda; DB'deki
+// isOpen degeri degistirilmez, gercek kapama hala yeni bir gozlemle olur).
+// Mobil batch araligi (~10sn) ve panel polling'inden (~20sn) kat kat genis
+// tutulmustur; amac yanlislikla erken kapatmamak, yalnizca cihaz tamamen
+// sessiz kaldiginda (uygulama kapandi/Bluetooth kapali/telefon kapandi) panelin
+// o kisiyi sonsuza kadar "icerde" gostermesini engellemektir.
+const STALE_VISIT_THRESHOLD_MS = 5 * 60 * 1000;
+
 @Injectable()
 export class AttendanceQueryService {
   constructor(private readonly prisma: PrismaService) {}
@@ -10,8 +19,14 @@ export class AttendanceQueryService {
   async getSummary(congressId: string) {
     const halls = await this.prisma.hall.findMany({ where: { congressId } });
 
+    const staleCutoff = new Date(Date.now() - STALE_VISIT_THRESHOLD_MS);
+
     const openVisits = await this.prisma.hallVisit.findMany({
-      where: { isOpen: true, hall: { congressId } },
+      where: {
+        isOpen: true,
+        hall: { congressId },
+        lastConfirmedAt: { gte: staleCutoff },
+      },
       select: { hallId: true },
     });
 
@@ -54,11 +69,17 @@ export class AttendanceQueryService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
+    const staleCutoff = new Date(Date.now() - STALE_VISIT_THRESHOLD_MS);
+
     const where = {
       hall: { congressId: query.congressId },
       ...(query.hallId ? { hallId: query.hallId } : {}),
       ...(query.userId ? { userId: query.userId } : {}),
-      ...(query.isOpen !== undefined ? { isOpen: query.isOpen } : {}),
+      ...(query.isOpen !== undefined
+        ? query.isOpen
+          ? { isOpen: true, lastConfirmedAt: { gte: staleCutoff } }
+          : { isOpen: false }
+        : {}),
       ...(query.search
         ? {
             user: {
