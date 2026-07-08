@@ -72,6 +72,7 @@ Servisleri başlatma sırası:
    cp .env.example .env
    npm install
    npx prisma generate
+   npx prisma migrate deploy
    npm run start:dev
    ```
 
