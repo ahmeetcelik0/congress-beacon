@@ -48,6 +48,13 @@
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Yakındaki salon beaconlarını algılamak için konum izni gerekir.</string>
 
+	<!-- Bölge izleme (region monitoring) arka planda/uygulama sonlandırılmışken de
+	     iBeacon giriş-çıkış olaylarının sisteme iletilebilmesi için gereklidir. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
+
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

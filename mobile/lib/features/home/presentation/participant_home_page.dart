@@ -98,6 +98,17 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
     super.dispose();
   }
 
+  Future<void> _logout() async {
+    await _observationService?.stop();
+    await _secureStorage.deleteAll();
+
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const PilotLoginPage()),
+      (route) => false,
+    );
+  }
+
   String _getStatusText() {
     switch (_serviceState.status) {
       case ObservationServiceStatus.initializing:
@@ -117,6 +128,13 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
       appBar: AppBar(
         title: const Text('Katılımcı Paneli'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout),
+            tooltip: 'Çıkış Yap',
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(

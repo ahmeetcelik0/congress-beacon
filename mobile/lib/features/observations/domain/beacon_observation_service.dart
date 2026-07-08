@@ -47,9 +47,11 @@ class BeaconObservationService {
 
   final List<ObservationSnapshot> _queue = [];
   bool _isBatching = false;
-  
+
   StreamSubscription<RangingResult>? _rangingSubscription;
+  StreamSubscription<MonitoringResult>? _monitoringSubscription;
   Timer? _batchTimer;
+  List<Region>? _regions;
 
   final _stateController = StreamController<ObservationServiceState>.broadcast();
 
@@ -92,15 +94,23 @@ class BeaconObservationService {
           proximityUUID: _defaultRegionUuid,
         ),
       ];
+      _regions = regions;
 
-      _rangingSubscription = flutterBeacon.ranging(regions).listen(
-        _onRangingResult,
+      _startRanging(regions);
+
+      // Region monitoring isletim sistemi seviyesinde calisir (Bluetooth acikken
+      // uygulama arka planda/sonlandirilmis olsa bile iOS giris/cikis olaylarini
+      // yakalayabilir - kullanici uygulamayi elle kapatmadigi surece). Ranging tek
+      // basina arka planda guvenilir degildir; monitoring burada, taramanin
+      // herhangi bir nedenle durmus olmasi ihtimaline karsi tetikleyici gorevi gorur.
+      _monitoringSubscription = flutterBeacon.monitoring(regions).listen(
+        _onMonitoringResult,
         onError: (error) {
           _emitState(ObservationServiceState(
-            status: ObservationServiceStatus.error,
+            status: _currentState.status,
             pendingSnapshotCount: _queue.length,
             lastBatchResult: _currentState.lastBatchResult,
-            errorMessage: 'Tarama hatası: $error',
+            errorMessage: 'Bölge izleme hatası: $error',
           ));
         },
       );
@@ -121,6 +131,31 @@ class BeaconObservationService {
         lastBatchResult: _currentState.lastBatchResult,
         errorMessage: 'Başlatma hatası: $e',
       ));
+    }
+  }
+
+  void _startRanging(List<Region> regions) {
+    _rangingSubscription?.cancel();
+    _rangingSubscription = flutterBeacon.ranging(regions).listen(
+      _onRangingResult,
+      onError: (error) {
+        _emitState(ObservationServiceState(
+          status: ObservationServiceStatus.error,
+          pendingSnapshotCount: _queue.length,
+          lastBatchResult: _currentState.lastBatchResult,
+          errorMessage: 'Tarama hatası: $error',
+        ));
+      },
+    );
+  }
+
+  void _onMonitoringResult(MonitoringResult result) {
+    final entered =
+        result.monitoringEventType == MonitoringEventType.didEnterRegion ||
+            result.monitoringState == MonitoringState.inside;
+
+    if (entered && _regions != null) {
+      _startRanging(_regions!);
     }
   }
 
@@ -217,6 +252,7 @@ class BeaconObservationService {
   Future<void> stop() async {
     _batchTimer?.cancel();
     await _rangingSubscription?.cancel();
+    await _monitoringSubscription?.cancel();
     await _stateController.close();
   }
 }
