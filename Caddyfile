@@ -1,0 +1,18 @@
+beacon.photofocustr.com {
+	# /api/* -> backend (NestJS global prefix'i de 'api' oldugu icin
+	# tam yolu (prefix'i kirpmadan) oldugu gibi ilettik).
+	handle /api/* {
+		reverse_proxy backend:3001
+	}
+
+	# /yetkili* -> panel (Next.js basePath'i de '/yetkili' oldugu icin
+	# ayni sekilde tam yolu oldugu gibi iletiyoruz).
+	handle /yetkili* {
+		reverse_proxy web:3000
+	}
+
+	# Bare domain -> panele yonlendir (kolaylik icin).
+	handle / {
+		redir / /yetkili permanent
+	}
+}
