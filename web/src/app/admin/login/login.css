@@ -1,0 +1,209 @@
+.login-page {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-radar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(760px, 100vw);
+  height: min(760px, 100vw);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.login-radar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, var(--signal-glow), transparent 28%, transparent 100%);
+  animation: radar-spin 5s linear infinite;
+  mask: radial-gradient(circle, transparent 0%, black 1%, black 100%);
+}
+
+@keyframes radar-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.login-radar-ring {
+  position: absolute;
+  border: 1px solid rgba(34, 232, 255, 0.16);
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+}
+
+.login-radar-ring.r1 {
+  width: 20%;
+  height: 20%;
+  transform: translate(-50%, -50%);
+}
+.login-radar-ring.r2 {
+  width: 45%;
+  height: 45%;
+  transform: translate(-50%, -50%);
+}
+.login-radar-ring.r3 {
+  width: 70%;
+  height: 70%;
+  transform: translate(-50%, -50%);
+}
+.login-radar-ring.r4 {
+  width: 95%;
+  height: 95%;
+  transform: translate(-50%, -50%);
+}
+
+.login-blip {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 0 10px 2px var(--signal-glow);
+  animation: blip-pulse 2.6s ease-in-out infinite;
+}
+
+.login-blip.b1 {
+  top: 30%;
+  left: 62%;
+  animation-delay: 0s;
+}
+.login-blip.b2 {
+  top: 68%;
+  left: 38%;
+  background: var(--alert);
+  box-shadow: 0 0 10px 2px rgba(255, 61, 104, 0.5);
+  animation-delay: 0.9s;
+}
+.login-blip.b3 {
+  top: 45%;
+  left: 22%;
+  background: var(--success);
+  box-shadow: 0 0 10px 2px rgba(46, 230, 166, 0.5);
+  animation-delay: 1.7s;
+}
+
+@keyframes blip-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.6);
+  }
+}
+
+.login-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.25rem;
+  animation: rise 0.6s ease both;
+}
+
+.login-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: center;
+}
+
+.login-brand-mark {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-brand-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 0 18px 3px var(--signal-glow);
+  z-index: 1;
+}
+
+.login-brand-mark::before,
+.login-brand-mark::after {
+  content: "";
+  position: absolute;
+  border: 1.5px solid var(--signal);
+  border-radius: 999px;
+  inset: 0;
+}
+
+.login-brand-mark::before {
+  animation: shell-ping 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+.login-brand-mark::after {
+  animation: shell-ping 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite 1.2s;
+}
+
+.login-brand h1 {
+  font-family: var(--font-display), sans-serif;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+}
+
+.login-brand p {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.login-card {
+  width: min(360px, 90vw);
+  padding: 2rem 1.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+  background: rgba(16, 22, 31, 0.72);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.login-card .panel-form {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1.15rem;
+}
+
+.login-card .panel-form input {
+  padding: 0.65rem 0.8rem;
+}
+
+.login-card .panel-form button {
+  margin-top: 0.4rem;
+  padding: 0.75rem;
+  width: 100%;
+  text-align: center;
+}

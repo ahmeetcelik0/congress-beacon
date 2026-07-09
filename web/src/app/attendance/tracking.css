@@ -1,29 +1,20 @@
 .tracking-page {
-  --tp-bg: #0a0e14;
-  --tp-bg-elevated: #10151f;
-  --tp-bg-card: #131a26;
-  --tp-border: rgba(148, 163, 184, 0.14);
-  --tp-text: #e8ecf3;
-  --tp-text-dim: #8b93a7;
-  /* dataviz skill sabit status paleti (good/warning/critical) - #0a0e14 yuzeyine karsi dogrulanmis */
-  --tp-accent: #0ca30c;
-  --tp-accent-dim: rgba(12, 163, 12, 0.16);
-  --tp-warn: #fab219;
-  --tp-danger: #d03b3b;
+  /* Global "Signal Console" tokenlarindan besleniyor - kabuk (body) zaten
+     atmosferik arka planı sağlıyor, burada yalnızca eşleme yapılıyor. */
+  --tp-bg-elevated: var(--bg-elevated);
+  --tp-bg-card: var(--surface);
+  --tp-border: var(--border);
+  --tp-text: var(--text);
+  --tp-text-dim: var(--text-dim);
+  --tp-accent: var(--signal);
+  --tp-accent-dim: var(--signal-dim);
+  --tp-warn: var(--warn);
+  --tp-danger: var(--alert);
 
   min-height: 100vh;
   padding: 2.5rem clamp(1rem, 4vw, 3rem) 4rem;
   color: var(--tp-text);
-  background:
-    radial-gradient(circle at 12% -10%, rgba(52, 226, 163, 0.1), transparent 42%),
-    radial-gradient(circle at 88% 8%, rgba(91, 140, 255, 0.09), transparent 45%),
-    repeating-linear-gradient(
-      transparent,
-      transparent 39px,
-      rgba(148, 163, 184, 0.035) 40px
-    ),
-    var(--tp-bg);
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .tp-header {
@@ -56,15 +47,6 @@
   flex-wrap: wrap;
 }
 
-.tp-select {
-  background: var(--tp-bg-card);
-  border: 1px solid var(--tp-border);
-  color: var(--tp-text);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  font-size: 0.875rem;
-}
-
 .tp-live-badge {
   display: inline-flex;
   align-items: center;
@@ -75,7 +57,7 @@
   border: 1px solid var(--tp-border);
   font-size: 0.75rem;
   color: var(--tp-text-dim);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
 }
 
 .tp-live-dot {
@@ -83,7 +65,7 @@
   height: 8px;
   border-radius: 999px;
   background: var(--tp-accent);
-  box-shadow: 0 0 0 0 rgba(52, 226, 163, 0.6);
+  box-shadow: 0 0 0 0 var(--signal-glow);
   animation: tp-pulse 2.2s ease-out infinite;
 }
 
@@ -139,7 +121,7 @@
 
 .tp-kpi-value {
   display: block;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-size: clamp(1.6rem, 2.8vw, 2.15rem);
   font-weight: 600;
   color: var(--card-accent, var(--tp-text));
@@ -151,7 +133,7 @@
   margin-top: 0.5rem;
   font-size: 0.78rem;
   color: var(--tp-text-dim);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
 }
 
 /* Section headings */
@@ -177,7 +159,7 @@
 .tp-section-title span {
   font-size: 0.75rem;
   color: var(--tp-text-dim);
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
 }
 
 /* Hall occupancy cards */
@@ -207,7 +189,7 @@
 }
 
 .tp-hall-count {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-size: 2rem;
   font-weight: 650;
   color: var(--hall-color, var(--tp-text));
@@ -221,7 +203,7 @@
   font-size: 0.7rem;
   font-weight: 400;
   color: var(--tp-text-dim);
-  font-family: var(--font-geist-sans), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .tp-hall-pulse {
@@ -284,7 +266,7 @@
 }
 
 .tp-roster-time {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-size: 0.75rem;
   color: var(--hall-color, var(--tp-text-dim));
   white-space: nowrap;
@@ -330,7 +312,7 @@
 }
 
 .tp-chart-tooltip-time {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-size: 0.75rem;
   color: var(--tp-text-dim);
   margin-bottom: 0.4rem;
@@ -352,7 +334,7 @@
 }
 
 .tp-chart-tooltip-value {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-weight: 600;
   color: var(--tp-text);
 }
@@ -433,12 +415,12 @@
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   font-size: 0.72rem;
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
 }
 
 .tp-badge.tp-open {
-  background: var(--tp-accent-dim);
-  color: var(--tp-accent);
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .tp-badge.tp-closed {
@@ -488,7 +470,7 @@
 }
 
 .tp-raw-row {
-  font-family: var(--font-geist-mono), monospace;
+  font-family: var(--font-mono), monospace;
   font-size: 0.76rem;
   color: var(--tp-text-dim);
   padding: 0.4rem 0;

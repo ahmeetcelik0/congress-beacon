@@ -1,17 +1,24 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import Link from "next/link";
-import { adminLogoutAction } from "./admin/login/actions";
+import { Chakra_Petch, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { AppShell } from "./components/app-shell";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const display = Chakra_Petch({
+  variable: "--font-display",
   subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const body = IBM_Plex_Sans({
+  variable: "--font-body",
   subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
 });
 
 export const metadata: Metadata = {
@@ -25,21 +32,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="tr" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="tr" className={`${display.variable} ${body.variable} ${mono.variable}`}>
       <body>
-        <nav className="panel-nav">
-          <Link href="/congresses">Kongreler</Link>
-          <Link href="/halls">Salonlar</Link>
-          <Link href="/beacons">Beacon&apos;lar</Link>
-          <Link href="/attendance">Canlı Takip</Link>
-          <Link href="/tracking-health">Takip Sağlığı</Link>
-          <Link href="/reports">Raporlar</Link>
-          <Link href="/sessions">Bilimsel Program</Link>
-          <form action={adminLogoutAction} style={{ marginLeft: "auto" }}>
-            <button type="submit">Çıkış Yap</button>
-          </form>
-        </nav>
-        {children}
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

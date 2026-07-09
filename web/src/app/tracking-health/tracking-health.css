@@ -13,16 +13,16 @@
 }
 
 .th-badge.th-active {
-  background: rgba(12, 163, 12, 0.16);
-  color: #0ca30c;
+  background: var(--success-dim);
+  color: var(--success);
 }
 
 .th-badge.th-recent {
-  background: rgba(250, 178, 25, 0.16);
-  color: #b8790a;
+  background: var(--warn-dim);
+  color: var(--warn);
 }
 
 .th-badge.th-none {
-  background: rgba(208, 59, 59, 0.12);
-  color: #d03b3b;
+  background: var(--alert-dim);
+  color: var(--alert);
 }
