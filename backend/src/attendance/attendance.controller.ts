@@ -1,10 +1,12 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AttendanceQueryService } from './attendance-query.service';
 import { CongressScopeDto } from './dto/congress-scope.dto';
 import { HallVisitsQueryDto } from './dto/hall-visits-query.dto';
 import { OccupancySeriesQueryDto } from './dto/occupancy-series-query.dto';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 
 @Controller('attendance')
+@UseGuards(AdminJwtGuard)
 export class AttendanceController {
   constructor(private readonly queryService: AttendanceQueryService) {}
 

@@ -1,3 +1,5 @@
+import { getAdminToken } from './admin-token';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 
 export class ApiError extends Error {
@@ -10,11 +12,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = await getAdminToken();
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
   });
@@ -82,12 +87,53 @@ export type HallOccupancy = {
   count: number;
 };
 
+export type Session = {
+  id: string;
+  congressId: string;
+  hallId: string;
+  title: string;
+  speaker: string | null;
+  startTime: string;
+  endTime: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+  hall?: Hall;
+};
+
+export type HallDurationStats = {
+  hallId: string;
+  hallName: string;
+  visitCount: number;
+  averageMinutes: number | null;
+  medianMinutes: number | null;
+};
+
 export type AttendanceSummary = {
   activeHalls: number;
   currentlyInsideTotal: number;
   hallOccupancy: HallOccupancy[];
   participantsSeenToday: number;
   lastObservationAt: string | null;
+  durationStats: HallDurationStats[];
+};
+
+export type DataQualityReport = {
+  totalObservations: number;
+  matchedObservations: number;
+  unmatchedObservations: number;
+  matchedRatio: number | null;
+};
+
+export type BeaconHealthItem = {
+  beaconId: string;
+  label: string | null;
+  major: number;
+  minor: number;
+  assignedHallName: string | null;
+  isAssigned: boolean;
+  observationCount: number;
+  lastSeenAt: string | null;
 };
 
 export type HallVisitSummary = {
@@ -121,6 +167,23 @@ export type OccupancySeries = {
   bucketMinutes: number;
   halls: { hallId: string; hallName: string }[];
   points: OccupancySeriesPoint[];
+};
+
+export type TrackingHealthStatus = 'aktif' | 'yakin_zamanda' | 'veri_yok';
+
+export type TrackingHealthItem = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  devicePlatform: 'IOS' | 'ANDROID' | null;
+  deviceAppVersion: string | null;
+  lastObservationAt: string | null;
+  status: TrackingHealthStatus;
+};
+
+export type TrackingHealth = {
+  items: TrackingHealthItem[];
+  summary: { aktif: number; yakinZamanda: number; veriYok: number };
 };
 
 export type ObservationSummary = {
@@ -216,4 +279,37 @@ export const api = {
     page?: number;
     pageSize?: number;
   }) => request<ObservationPage>(`/observations${buildQuery(params)}`),
+
+  getTrackingHealth: (congressId: string) =>
+    request<TrackingHealth>(`/admin/tracking-health${buildQuery({ congressId })}`),
+
+  getDataQualityReport: (congressId: string) =>
+    request<DataQualityReport>(`/reports/data-quality${buildQuery({ congressId })}`),
+
+  getBeaconHealthReport: (congressId: string) =>
+    request<BeaconHealthItem[]>(`/reports/beacon-health${buildQuery({ congressId })}`),
+
+  listSessions: (congressId: string) =>
+    request<Session[]>(`/sessions${buildQuery({ congressId })}`),
+  createSession: (data: {
+    congressId: string;
+    hallId: string;
+    title: string;
+    speaker?: string;
+    startTime: string;
+    endTime: string;
+    description?: string;
+  }) => request<Session>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
+  updateSession: (
+    id: string,
+    data: Partial<{
+      hallId: string;
+      title: string;
+      speaker: string;
+      startTime: string;
+      endTime: string;
+      description: string;
+    }>,
+  ) => request<Session>(`/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSession: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
 };

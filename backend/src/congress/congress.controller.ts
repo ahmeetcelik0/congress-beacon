@@ -8,12 +8,18 @@ import {
   Param,
   Patch,
   Post,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { CongressService } from './congress.service';
 import { CreateCongressDto } from './dto/create-congress.dto';
 import { UpdateCongressDto } from './dto/update-congress.dto';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { AuditLogInterceptor } from '../admin-auth/audit-log.interceptor';
 
 @Controller('congresses')
+@UseGuards(AdminJwtGuard)
+@UseInterceptors(AuditLogInterceptor)
 export class CongressController {
   constructor(private readonly congressService: CongressService) {}
 

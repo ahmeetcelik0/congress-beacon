@@ -3,14 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { HallVisitsQueryDto } from './dto/hall-visits-query.dto';
 import { OccupancySeriesQueryDto } from './dto/occupancy-series-query.dto';
 
-// Bu sureden uzun zamandir yeni gozlem gelmeyen "acik" HallVisit kayitlari,
-// panelde "su an icerde" sayilmaz (yalnizca goruntuleme katmaninda; DB'deki
-// isOpen degeri degistirilmez, gercek kapama hala yeni bir gozlemle olur).
-// Mobil batch araligi (~10sn) ve panel polling'inden (~20sn) kat kat genis
-// tutulmustur; amac yanlislikla erken kapatmamak, yalnizca cihaz tamamen
-// sessiz kaldiginda (uygulama kapandi/Bluetooth kapali/telefon kapandi) panelin
-// o kisiyi sonsuza kadar "icerde" gostermesini engellemektir.
-const STALE_VISIT_THRESHOLD_MS = 5 * 60 * 1000;
+function median(sortedValues: number[]): number {
+  const mid = Math.floor(sortedValues.length / 2);
+  return sortedValues.length % 2 !== 0
+    ? sortedValues[mid]
+    : (sortedValues[mid - 1] + sortedValues[mid]) / 2;
+}
 
 @Injectable()
 export class AttendanceQueryService {
@@ -19,14 +17,11 @@ export class AttendanceQueryService {
   async getSummary(congressId: string) {
     const halls = await this.prisma.hall.findMany({ where: { congressId } });
 
-    const staleCutoff = new Date(Date.now() - STALE_VISIT_THRESHOLD_MS);
-
+    // isOpen:true olan ziyaretler artik gercekten acik demektir - bayat olanlar
+    // StaleVisitSweepService (BullMQ repeatable job) tarafindan periyodik olarak
+    // gercekten kapatiliyor, burada ekstra bir zaman filtresine gerek yok.
     const openVisits = await this.prisma.hallVisit.findMany({
-      where: {
-        isOpen: true,
-        hall: { congressId },
-        lastConfirmedAt: { gte: staleCutoff },
-      },
+      where: { isOpen: true, hall: { congressId } },
       select: { hallId: true },
     });
 
@@ -56,12 +51,43 @@ export class AttendanceQueryService {
       select: { serverReceivedAt: true },
     });
 
+    const closedVisits = await this.prisma.hallVisit.findMany({
+      where: { hall: { congressId }, endedAt: { not: null } },
+      select: { hallId: true, startedAt: true, endedAt: true },
+    });
+
+    const durationsByHall = new Map<string, number[]>();
+    for (const visit of closedVisits) {
+      const minutes =
+        (visit.endedAt!.getTime() - visit.startedAt.getTime()) / 60000;
+      const list = durationsByHall.get(visit.hallId) ?? [];
+      list.push(minutes);
+      durationsByHall.set(visit.hallId, list);
+    }
+
+    const durationStats = halls.map((hall) => {
+      const durations = (durationsByHall.get(hall.id) ?? []).sort(
+        (a, b) => a - b,
+      );
+      return {
+        hallId: hall.id,
+        hallName: hall.name,
+        visitCount: durations.length,
+        averageMinutes:
+          durations.length > 0
+            ? durations.reduce((sum, d) => sum + d, 0) / durations.length
+            : null,
+        medianMinutes: durations.length > 0 ? median(durations) : null,
+      };
+    });
+
     return {
       activeHalls: halls.length,
       currentlyInsideTotal: openVisits.length,
       hallOccupancy,
       participantsSeenToday: participantsToday.length,
       lastObservationAt: lastObservation?.serverReceivedAt ?? null,
+      durationStats,
     };
   }
 
@@ -69,17 +95,11 @@ export class AttendanceQueryService {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 20;
 
-    const staleCutoff = new Date(Date.now() - STALE_VISIT_THRESHOLD_MS);
-
     const where = {
       hall: { congressId: query.congressId },
       ...(query.hallId ? { hallId: query.hallId } : {}),
       ...(query.userId ? { userId: query.userId } : {}),
-      ...(query.isOpen !== undefined
-        ? query.isOpen
-          ? { isOpen: true, lastConfirmedAt: { gte: staleCutoff } }
-          : { isOpen: false }
-        : {}),
+      ...(query.isOpen !== undefined ? { isOpen: query.isOpen } : {}),
       ...(query.search
         ? {
             user: {

@@ -174,6 +174,270 @@ paths:
         '403':
           description: deviceId bu kullaniciya ait degil.
 
+  /admin/tracking-health:
+    get:
+      summary: Katilimci bazinda takip sagligi (son gozlem zamani ve durum)
+      operationId: getTrackingHealth
+      tags:
+        - Admin
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Takip sagligi listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrackingHealth'
+
+  /reports/data-quality:
+    get:
+      summary: Gozlemlerin beacon eslesme orani (veri kalitesi)
+      operationId: getDataQualityReport
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Veri kalitesi ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataQualityReport'
+
+  /reports/beacon-health:
+    get:
+      summary: Beacon basina son gorulme zamani ve atama durumu
+      operationId: getBeaconHealthReport
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Beacon sagligi listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BeaconHealthItem'
+
+  /reports/hall-visits.csv:
+    get:
+      summary: Salon ziyaretlerini CSV olarak disa aktar
+      description: >-
+        AdminJwtGuard bu endpoint icin token'i Authorization header'inda veya
+        (indirme linkleri header gonderemedigi icin) `token` query parametresinde kabul eder.
+      operationId: exportHallVisitsCsv
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: isOpen
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: token
+          in: query
+          required: false
+          description: Authorization header yerine kullanilabilecek admin JWT (yalnizca indirme linkleri icin).
+          schema:
+            type: string
+      responses:
+        '200':
+          description: CSV dosyasi.
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /sessions:
+    get:
+      summary: Kongredeki bilimsel program oturumlarini listele
+      operationId: listSessions
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Oturum listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Session'
+    post:
+      summary: Yeni bilimsel program oturumu olustur (10dk oncesi bildirim otomatik zamanlanir)
+      operationId: createSession
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionCreate'
+      responses:
+        '201':
+          description: Olusturulan oturum.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+
+  /sessions/{id}:
+    patch:
+      summary: Oturumu guncelle (bildirim zamanlamasi yeniden hesaplanir)
+      operationId: updateSession
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SessionUpdate'
+      responses:
+        '200':
+          description: Guncellenen oturum.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+    delete:
+      summary: Oturumu sil (zamanlanmis bildirimi de iptal eder)
+      operationId: deleteSession
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+
+  /devices/push-token:
+    put:
+      summary: Cihazin push token'ini guncelle
+      operationId: updatePushToken
+      tags:
+        - Devices
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - deviceId
+                - pushToken
+              properties:
+                deviceId:
+                  type: string
+                  format: uuid
+                pushToken:
+                  type: string
+      responses:
+        '200':
+          description: Guncellenen cihaz.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+        '403':
+          description: deviceId bu kullaniciya ait degil.
+
+  /notifications/opened:
+    post:
+      summary: Katilimci bir bildirime dokundugunda cagirir (analitik icin)
+      operationId: markNotificationOpened
+      tags:
+        - Notifications
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - notificationLogId
+              properties:
+                notificationLogId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Guncellenen bildirim kaydi.
+        '403':
+          description: Bu bildirim bu kullaniciya ait degil.
+
   /attendance/summary:
     get:
       summary: Kongre icin canli katilim/doluluk ozeti (panel KPI'lari)
@@ -746,6 +1010,191 @@ components:
         count:
           type: integer
 
+    TrackingHealthItem:
+      type: object
+      required:
+        - userId
+        - firstName
+        - lastName
+        - devicePlatform
+        - deviceAppVersion
+        - lastObservationAt
+        - status
+      properties:
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        devicePlatform:
+          type: string
+          nullable: true
+          enum: [IOS, ANDROID, null]
+        deviceAppVersion:
+          type: string
+          nullable: true
+        lastObservationAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [aktif, yakin_zamanda, veri_yok]
+
+    TrackingHealth:
+      type: object
+      required:
+        - items
+        - summary
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrackingHealthItem'
+        summary:
+          type: object
+          required:
+            - aktif
+            - yakinZamanda
+            - veriYok
+          properties:
+            aktif:
+              type: integer
+            yakinZamanda:
+              type: integer
+            veriYok:
+              type: integer
+
+    DataQualityReport:
+      type: object
+      required:
+        - totalObservations
+        - matchedObservations
+        - unmatchedObservations
+        - matchedRatio
+      properties:
+        totalObservations:
+          type: integer
+        matchedObservations:
+          type: integer
+        unmatchedObservations:
+          type: integer
+        matchedRatio:
+          type: number
+          nullable: true
+
+    BeaconHealthItem:
+      type: object
+      required:
+        - beaconId
+        - label
+        - major
+        - minor
+        - assignedHallName
+        - isAssigned
+        - observationCount
+        - lastSeenAt
+      properties:
+        beaconId:
+          type: string
+          format: uuid
+        label:
+          type: string
+          nullable: true
+        major:
+          type: integer
+        minor:
+          type: integer
+        assignedHallName:
+          type: string
+          nullable: true
+        isAssigned:
+          type: boolean
+        observationCount:
+          type: integer
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    Session:
+      type: object
+      required:
+        - id
+        - congressId
+        - hallId
+        - title
+        - speaker
+        - startTime
+        - endTime
+        - description
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        speaker:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SessionCreate:
+      type: object
+      required:
+        - congressId
+        - hallId
+        - title
+        - startTime
+        - endTime
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        speaker:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        description:
+          type: string
+
+    SessionUpdate:
+      allOf:
+        - $ref: '#/components/schemas/SessionCreate'
+
     AttendanceSummary:
       type: object
       required:
@@ -754,6 +1203,7 @@ components:
         - hallOccupancy
         - participantsSeenToday
         - lastObservationAt
+        - durationStats
       properties:
         activeHalls:
           type: integer
@@ -769,6 +1219,30 @@ components:
           type: string
           format: date-time
           nullable: true
+        durationStats:
+          type: array
+          items:
+            type: object
+            required:
+              - hallId
+              - hallName
+              - visitCount
+              - averageMinutes
+              - medianMinutes
+            properties:
+              hallId:
+                type: string
+                format: uuid
+              hallName:
+                type: string
+              visitCount:
+                type: integer
+              averageMinutes:
+                type: number
+                nullable: true
+              medianMinutes:
+                type: number
+                nullable: true
 
     HallVisitSummary:
       type: object

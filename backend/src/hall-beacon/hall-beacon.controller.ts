@@ -1,8 +1,21 @@
-import { Body, Controller, Delete, Get, Param, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { HallBeaconService } from './hall-beacon.service';
 import { AssignHallBeaconDto } from './dto/assign-hall-beacon.dto';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { AuditLogInterceptor } from '../admin-auth/audit-log.interceptor';
 
 @Controller('halls/:hallId/beacons')
+@UseGuards(AdminJwtGuard)
+@UseInterceptors(AuditLogInterceptor)
 export class HallBeaconController {
   constructor(private readonly hallBeaconService: HallBeaconService) {}
 

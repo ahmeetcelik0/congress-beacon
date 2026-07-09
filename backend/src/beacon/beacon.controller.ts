@@ -9,12 +9,18 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { BeaconService } from './beacon.service';
 import { CreateBeaconDto } from './dto/create-beacon.dto';
 import { UpdateBeaconDto } from './dto/update-beacon.dto';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { AuditLogInterceptor } from '../admin-auth/audit-log.interceptor';
 
 @Controller('beacons')
+@UseGuards(AdminJwtGuard)
+@UseInterceptors(AuditLogInterceptor)
 export class BeaconController {
   constructor(private readonly beaconService: BeaconService) {}
 

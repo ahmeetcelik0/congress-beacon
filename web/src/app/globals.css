@@ -1,34 +1,32 @@
+/* ===== Signal Console — tasarım tokenları ===== */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --bg: #070a10;
+  --bg-elevated: #0c1119;
+  --surface: #10161f;
+  --surface-2: #141b26;
+  --border: rgba(130, 170, 210, 0.14);
+  --border-strong: rgba(130, 170, 210, 0.28);
+  --text: #eaf2fb;
+  --text-dim: #8ba0bd;
+  --text-faint: #5c6c82;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+  --signal: #22e8ff;
+  --signal-dim: rgba(34, 232, 255, 0.14);
+  --signal-glow: rgba(34, 232, 255, 0.45);
+  --alert: #ff3d68;
+  --alert-dim: rgba(255, 61, 104, 0.14);
+  --warn: #ffb020;
+  --warn-dim: rgba(255, 176, 32, 0.14);
+  --success: #2ee6a6;
+  --success-dim: rgba(46, 230, 166, 0.14);
 
-html {
-  height: 100%;
-}
+  --font-display: "Chakra Petch", sans-serif;
+  --font-body: "IBM Plex Sans", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
 
-html,
-body {
-  max-width: 100vw;
-  overflow-x: hidden;
-}
-
-body {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --radius: 8px;
+  --radius-sm: 5px;
+  color-scheme: dark;
 }
 
 * {
@@ -37,98 +35,387 @@ body {
   margin: 0;
 }
 
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  color: var(--text);
+  background: var(--bg);
+  font-family: var(--font-body), sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 a {
   color: inherit;
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+h1,
+h2,
+h3 {
+  font-family: var(--font-display), sans-serif;
+  letter-spacing: 0.01em;
+}
+
+/* ===== Atmosfer — sabit arka plan dokusu ===== */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(34, 232, 255, 0.09), transparent 55%),
+    radial-gradient(ellipse 700px 500px at 100% 10%, rgba(255, 61, 104, 0.06), transparent 50%),
+    var(--bg);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    transparent,
+    transparent 41px,
+    rgba(130, 170, 210, 0.028) 42px
+  );
+}
+
+/* ===== Kabuk / sidebar ===== */
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.shell-sidebar {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  width: 232px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem 1rem;
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(16, 22, 31, 0.6), rgba(12, 17, 25, 0.6));
+  backdrop-filter: blur(6px);
+}
+
+.shell-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.4rem 0.5rem 1.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.shell-brand-mark {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shell-brand-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--signal);
+  box-shadow: 0 0 8px 1px var(--signal-glow);
+  z-index: 1;
+}
+
+.shell-brand-ring {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid var(--signal);
+  border-radius: 999px;
+  animation: shell-ping 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+
+@keyframes shell-ping {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
   }
 }
 
-.panel-page {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 2rem 1.5rem;
+.shell-brand-text {
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.shell-nav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+  padding-top: 1.4rem;
+  overflow-y: auto;
+}
+
+.shell-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.shell-nav-group-label {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 0.6rem 0.5rem;
+}
+
+.shell-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text-dim);
+  border-left: 2px solid transparent;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.shell-nav-item:hover {
+  color: var(--text);
+  background: rgba(130, 170, 210, 0.06);
+}
+
+.shell-nav-item-active {
+  color: var(--signal);
+  background: var(--signal-dim);
+  border-left-color: var(--signal);
+}
+
+.shell-nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+}
+
+.shell-nav-icon svg {
   width: 100%;
+  height: 100%;
+}
+
+.shell-logout {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.shell-logout button {
+  width: 100%;
+  padding: 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.shell-logout button:hover {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+.shell-main {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ===== Sayfa iskeleti ===== */
+.panel-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem clamp(1.25rem, 3vw, 2.5rem) 4rem;
+  width: 100%;
+  animation: rise 0.5s ease both;
 }
 
 .panel-page h1 {
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.panel-nav {
-  display: flex;
-  gap: 1rem;
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
-}
-
-.panel-nav a {
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
   font-weight: 600;
+  margin-bottom: 1.5rem;
 }
 
+.panel-page h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 2rem 0 1rem;
+  color: var(--text-dim);
+  letter-spacing: 0.02em;
+}
+
+.panel-page h2:first-of-type {
+  margin-top: 0.5rem;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ===== Form ===== */
 .panel-form {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  border: 1px solid rgba(128, 128, 128, 0.3);
-  border-radius: 8px;
+  margin-bottom: 1.75rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .panel-form label {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-  font-size: 0.875rem;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
 }
 
 .panel-form input,
 .panel-form select {
-  padding: 0.4rem 0.5rem;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.88rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.panel-form button {
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  background: transparent;
-  color: inherit;
+.panel-form input:focus,
+.panel-form select:focus {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: 0 0 0 3px var(--signal-dim);
+}
+
+.panel-form button,
+.panel-inline-form button {
+  padding: 0.55rem 1.2rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
   cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.panel-form button:hover,
+.panel-inline-form button:hover {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.panel-form button:active,
+.panel-inline-form button:active {
+  transform: scale(0.97);
+}
+
+.panel-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .panel-error {
-  color: #e5484d;
+  color: var(--alert);
   width: 100%;
-  font-size: 0.875rem;
+  font-size: 0.85rem;
 }
 
+/* ===== Tablo ===== */
 .panel-table {
   width: 100%;
   border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 
 .panel-table th,
 .panel-table td {
   text-align: left;
-  padding: 0.5rem;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid var(--border);
 }
 
+.panel-table th {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  font-weight: 500;
+  background: var(--bg-elevated);
+}
+
+.panel-table tbody tr {
+  transition: background 0.12s ease;
+}
+
+.panel-table tbody tr:hover {
+  background: rgba(130, 170, 210, 0.05);
+}
+
+.panel-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ===== Sayfa üstü kongre seçici ===== */
 .panel-select {
   margin-bottom: 1.5rem;
 }
 
+/* ===== Satır-içi form (RSSI vb.) ===== */
 .panel-inline-form {
   display: flex;
   gap: 0.5rem;
@@ -137,18 +424,104 @@ a {
 
 .panel-inline-form input {
   width: 5rem;
-  padding: 0.25rem 0.4rem;
-  border: 1px solid rgba(128, 128, 128, 0.4);
-  border-radius: 4px;
-  background: transparent;
-  color: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-mono), monospace;
 }
 
 .panel-inline-form button {
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  border: 1px solid rgba(128, 128, 128, 0.4);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+}
+
+/* ===== Genel "sil" / ikincil buton (tablo satırları vb.) ===== */
+.panel-table button[type="submit"] {
+  padding: 0.3rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
   background: transparent;
-  color: inherit;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.78rem;
   cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.panel-table button[type="submit"]:hover {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+/* ===== İndirme linki ===== */
+.panel-download-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  transition: background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.panel-download-link:hover {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+/* ===== KPI/istatistik kartları ===== */
+.panel-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.75rem;
+}
+
+.panel-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.panel-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--signal), transparent 75%);
+  opacity: 0.8;
+}
+
+.panel-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.panel-card-label {
+  display: block;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 0.5rem;
+}
+
+.panel-card-value {
+  display: block;
+  font-family: var(--font-mono), monospace;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--text);
 }

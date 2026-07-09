@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function HallSelector({
   halls,
@@ -14,21 +15,20 @@ export function HallSelector({
   const router = useRouter();
 
   return (
-    <select
-      className="panel-select"
+    <Select
       value={selectedId ?? ''}
-      onChange={(event) =>
-        router.push(`/beacons?congressId=${congressId}&hallId=${event.target.value}`)
-      }
+      onValueChange={(value) => router.push(`/beacons?congressId=${congressId}&hallId=${value}`)}
     >
-      <option value="" disabled>
-        Eşleştirme için salon seçin
-      </option>
-      {halls.map((hall) => (
-        <option key={hall.id} value={hall.id}>
-          {hall.name}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger className="panel-select">
+        <SelectValue placeholder="Eşleştirme için salon seçin" />
+      </SelectTrigger>
+      <SelectContent>
+        {halls.map((hall) => (
+          <SelectItem key={hall.id} value={hall.id}>
+            {hall.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
