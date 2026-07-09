@@ -2,6 +2,7 @@
 
 import { useActionState } from 'react';
 import { createSessionAction, type FormState } from './actions';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const initialState: FormState = { error: null };
 
@@ -19,16 +20,18 @@ export function SessionForm({
       <input type="hidden" name="congressId" value={congressId} />
       <label>
         Salon
-        <select name="hallId" required defaultValue="">
-          <option value="" disabled>
-            Salon seçin
-          </option>
-          {halls.map((hall) => (
-            <option key={hall.id} value={hall.id}>
-              {hall.name}
-            </option>
-          ))}
-        </select>
+        <Select name="hallId" required>
+          <SelectTrigger>
+            <SelectValue placeholder="Salon seçin" />
+          </SelectTrigger>
+          <SelectContent>
+            {halls.map((hall) => (
+              <SelectItem key={hall.id} value={hall.id}>
+                {hall.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
       <label>
         Başlık

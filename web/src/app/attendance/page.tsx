@@ -33,7 +33,6 @@ export default async function AttendancePage({
             congresses={congresses}
             selectedId={congressId}
             basePath="/attendance"
-            className="tp-select"
           />
           <LiveBadge />
         </div>

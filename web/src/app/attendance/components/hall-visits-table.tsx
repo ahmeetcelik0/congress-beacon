@@ -3,8 +3,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type HallVisitSummary } from '@/lib/api';
 import { getHallColor } from '@/lib/hall-colors';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 const PAGE_SIZE = 10;
+const ALL_HALLS_VALUE = 'all';
 
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
@@ -35,7 +37,7 @@ export function HallVisitsTable({
   congressId: string;
   halls: { hallId: string; hallName: string }[];
 }) {
-  const [hallId, setHallId] = useState('');
+  const [hallId, setHallId] = useState(ALL_HALLS_VALUE);
   const [isOpenFilter, setIsOpenFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -74,7 +76,7 @@ export function HallVisitsTable({
     api
       .listHallVisits({
         congressId,
-        hallId: hallId || undefined,
+        hallId: hallId === ALL_HALLS_VALUE ? undefined : hallId,
         isOpen: isOpenFilter === 'all' ? undefined : isOpenFilter === 'open',
         search: search || undefined,
         page,
@@ -104,22 +106,32 @@ export function HallVisitsTable({
   return (
     <div className="tp-table-card">
       <div className="tp-filters">
-        <select value={hallId} onChange={(event) => handleHallChange(event.target.value)}>
-          <option value="">Tüm salonlar</option>
-          {halls.map((hall) => (
-            <option key={hall.hallId} value={hall.hallId}>
-              {hall.hallName}
-            </option>
-          ))}
-        </select>
-        <select
+        <Select value={hallId} onValueChange={handleHallChange}>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_HALLS_VALUE}>Tüm salonlar</SelectItem>
+            {halls.map((hall) => (
+              <SelectItem key={hall.hallId} value={hall.hallId}>
+                {hall.hallName}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
           value={isOpenFilter}
-          onChange={(event) => handleIsOpenChange(event.target.value as typeof isOpenFilter)}
+          onValueChange={(value) => handleIsOpenChange(value as typeof isOpenFilter)}
         >
-          <option value="all">Tümü</option>
-          <option value="open">Şu an içeride</option>
-          <option value="closed">Çıkış yaptı</option>
-        </select>
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tümü</SelectItem>
+            <SelectItem value="open">Şu an içeride</SelectItem>
+            <SelectItem value="closed">Çıkış yaptı</SelectItem>
+          </SelectContent>
+        </Select>
         <input
           type="text"
           placeholder="Katılımcı adı ara…"

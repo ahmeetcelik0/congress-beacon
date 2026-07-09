@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export function CongressSelector({
   congresses,
@@ -16,19 +17,20 @@ export function CongressSelector({
   const router = useRouter();
 
   return (
-    <select
-      className={className}
+    <Select
       value={selectedId ?? ''}
-      onChange={(event) => router.push(`${basePath}?congressId=${event.target.value}`)}
+      onValueChange={(value) => router.push(`${basePath}?congressId=${value}`)}
     >
-      <option value="" disabled>
-        Kongre seçin
-      </option>
-      {congresses.map((congress) => (
-        <option key={congress.id} value={congress.id}>
-          {congress.name}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger className={className}>
+        <SelectValue placeholder="Kongre seçin" />
+      </SelectTrigger>
+      <SelectContent>
+        {congresses.map((congress) => (
+          <SelectItem key={congress.id} value={congress.id}>
+            {congress.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
