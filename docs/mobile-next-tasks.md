@@ -6,6 +6,30 @@ edildi; sözleşme detayları için `shared/openapi.yaml` güncel.
 
 ---
 
+## 0) Production API adresi (ÖNEMLİ — güncelleme)
+
+Backend artık gerçek sunucuda, HTTPS ile canlı:
+
+```
+https://beacon.photofocustr.com/api
+```
+
+- Mobil uygulamadaki base URL artık `http://localhost:3001` veya eski geliştirme
+  adresi **değil**, yukarıdaki adres olmalı. Örn. `POST /auth/login` için tam adres:
+  `https://beacon.photofocustr.com/api/auth/login`.
+- Not: tüm endpoint yollarının başına `/api` eklendi (`API_PREFIX` konfigürasyonu).
+  `shared/openapi.yaml`'daki path'ler önekssiz yazılı (ör. `/auth/login`) — mobil
+  tarafta base URL'e bu prefix'i sen ekleyeceksin: `BASE_URL = https://beacon.photofocustr.com/api`.
+- Yetkili paneli de canlıda: `https://beacon.photofocustr.com/yetkili` (bu adres
+  sana gerekmiyor, sadece bilgi amaçlı).
+- Sertifika Let's Encrypt üzerinden otomatik alındı/yenileniyor, ekstra bir ayar
+  gerekmiyor; `https://` zorunlu, `http://` istekleri otomatik yönlendirilmiyor.
+- Şu an production veritabanı boş — kongre/salon/beacon test verisi panelden
+  yeniden oluşturulacak. Yeni test verisi (UUID'ler) oluşturulunca ayrıca haber
+  vereceğim, eski PILOT1 test verisiyle eşleşmeyecek.
+
+---
+
 ## 1) Push token gönderimi (Faz 7)
 
 Backend'de yeni endpoint hazır:
