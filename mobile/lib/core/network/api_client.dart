@@ -74,6 +74,36 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> put(
+    String endpoint, {
+    Map<String, dynamic>? body,
+    bool requiresAuth = false,
+  }) async {
+    final uri = Uri.parse('${AppConfig.apiBaseUrl}$endpoint');
+    final headers = await _getHeaders(requiresAuth: requiresAuth);
+
+    try {
+      final response = await _client
+          .put(
+            uri,
+            headers: headers,
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(_timeout);
+
+      return _processResponse(response);
+    } on SocketException {
+      throw ApiException('Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+    } on http.ClientException {
+      throw ApiException('Ağ isteği sırasında bir hata oluştu.');
+    } catch (e) {
+      if (e is ApiException) {
+        rethrow;
+      }
+      throw ApiException('Beklenmeyen bir hata oluştu: ${e.toString()}');
+    }
+  }
+
   dynamic _processResponse(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) {

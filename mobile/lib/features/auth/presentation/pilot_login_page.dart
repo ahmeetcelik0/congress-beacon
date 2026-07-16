@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +10,7 @@ import '../../../core/storage/secure_storage_service.dart';
 import '../../../models/auth_models.dart';
 import '../../../models/device_models.dart';
 import '../../home/presentation/participant_home_page.dart';
+import '../../notifications/domain/push_notification_service.dart';
 
 /// Pilot Giriş Ekranı.
 /// 
@@ -92,6 +94,12 @@ class _PilotLoginPageState extends State<PilotLoginPage> {
 
       await _secureStorage.saveParticipantName(participantName);
       await _secureStorage.saveCongressName(congressName);
+
+      // Dummy test for push token infrastructure (Firebase not installed yet)
+      if (kDebugMode) {
+        final pushService = PushNotificationService();
+        await pushService.updateTokenOnServer('dummy_token_123', device.id);
+      }
 
       if (!mounted) return;
 

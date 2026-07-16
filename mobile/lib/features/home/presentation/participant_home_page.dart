@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 // Since the previous agent might have used an absolute import, let's stick to relative imports to avoid package name mismatch
 import '../../../../main.dart';
 import '../../../core/storage/secure_storage_service.dart';
 import '../../auth/presentation/pilot_login_page.dart';
+import '../../notifications/domain/push_notification_service.dart';
 import '../../observations/domain/beacon_observation_service.dart';
+import 'session_detail_page.dart';
 
 /// Katılımcı Girişi Sonrası Ana Sayfa.
 class ParticipantHomePage extends StatefulWidget {
@@ -166,53 +169,86 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Sistem Durumu',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+              if (kDebugMode) ...[
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Sistem Durumu (Debug)',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      if (_isServiceInitializing)
-                        const Center(child: CircularProgressIndicator())
-                      else ...[
-                        Text('Tarama durumu: ${_getStatusText()}'),
-                        const Divider(height: 24),
-                        Text('Bekleyen snapshot: ${_serviceState.pendingSnapshotCount}'),
-                        const Divider(height: 24),
-                        Text('Son batch sonucu: ${_serviceState.lastBatchResult ?? 'Henüz gönderilmedi'}'),
+                        const SizedBox(height: 16),
+                        if (_isServiceInitializing)
+                          const Center(child: CircularProgressIndicator())
+                        else ...[
+                          Text('Tarama durumu: ${_getStatusText()}'),
+                          const Divider(height: 24),
+                          Text('Bekleyen snapshot: ${_serviceState.pendingSnapshotCount}'),
+                          const Divider(height: 24),
+                          Text('Son batch sonucu: ${_serviceState.lastBatchResult ?? 'Henüz gönderilmedi'}'),
+                        ],
                       ],
-                    ],
-                  ),
-                ),
-              ),
-              const Spacer(),
-              FilledButton.icon(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const BeaconTestPage(),
                     ),
-                  );
-                },
-                icon: const Icon(Icons.bluetooth_searching),
-                label: const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12.0),
-                  child: Text(
-                    'Beacon Test Ekranını Aç',
-                    style: TextStyle(fontSize: 16),
                   ),
                 ),
-              ),
+              ],
+              const Spacer(),
+              if (kDebugMode) ...[
+                const SizedBox(height: 32),
+                const Divider(),
+                const Text(
+                  'Geliştirici Araçları',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const BeaconTestPage(),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bluetooth_searching),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text(
+                      'Beacon Test Ekranını Aç',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    // Simulate notification tap
+                    final pushService = PushNotificationService();
+                    await pushService.markNotificationAsOpened('test-log-123');
+                    
+                    if (!context.mounted) return;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const SessionDetailPage(sessionId: 'test-session-456'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.notifications_active),
+                  label: const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 12.0),
+                    child: Text('Test: Bildirime Dokun (Simüle Et)'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

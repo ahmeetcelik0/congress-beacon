@@ -6,4 +6,6 @@ class ApiEndpoints {
   static const String deviceRegister = '/devices/register';
   static const String mobileBootstrap = '/mobile/bootstrap';
   static const String observationsBatch = '/observations/batch';
+  static const String pushToken = '/devices/push-token';
+  static const String notificationOpened = '/notifications/opened';
 }

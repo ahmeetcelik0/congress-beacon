@@ -8,6 +8,8 @@ import 'core/storage/secure_storage_service.dart';
 import 'features/auth/presentation/pilot_login_page.dart';
 import 'features/home/presentation/participant_home_page.dart';
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
 void main() {
   runApp(const BeaconTestApp());
 }
@@ -18,6 +20,7 @@ class BeaconTestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       title: 'Kongre Beacon',
       theme: ThemeData(

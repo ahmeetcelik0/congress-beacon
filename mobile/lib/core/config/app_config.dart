@@ -10,7 +10,7 @@ class AppConfig {
   /// `flutter run --dart-define=API_BASE_URL=http://<IP-ADRESINIZ>:<PORT>`
   static const String _apiBaseUrlFromEnv = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://localhost:3000',
+    defaultValue: 'https://beacon.photofocustr.com/api',
   );
 
   /// API adresinin sonundaki eğik çizgiyi (/) temizleyerek döndürür.

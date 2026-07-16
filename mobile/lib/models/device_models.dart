@@ -37,3 +37,20 @@ class Device {
     );
   }
 }
+
+class PushTokenRequest {
+  const PushTokenRequest({
+    required this.deviceId,
+    required this.pushToken,
+  });
+
+  final String deviceId;
+  final String pushToken;
+
+  Map<String, dynamic> toJson() {
+    return {
+      'deviceId': deviceId,
+      'pushToken': pushToken,
+    };
+  }
+}
