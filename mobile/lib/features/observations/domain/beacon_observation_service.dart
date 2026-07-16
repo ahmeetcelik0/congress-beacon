@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:uuid/uuid.dart';
 
@@ -7,12 +8,7 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../models/observation_models.dart';
 
-enum ObservationServiceStatus {
-  initializing,
-  active,
-  error,
-  unauthorized,
-}
+enum ObservationServiceStatus { initializing, active, error, unauthorized }
 
 class ObservationServiceState {
   const ObservationServiceState({
@@ -28,11 +24,9 @@ class ObservationServiceState {
   final String? errorMessage;
 }
 
-class BeaconObservationService {
-  BeaconObservationService({
-    required this.deviceId,
-    ApiClient? apiClient,
-  }) : _apiClient = apiClient ?? ApiClient();
+class BeaconObservationService with WidgetsBindingObserver {
+  BeaconObservationService({required this.deviceId, ApiClient? apiClient})
+    : _apiClient = apiClient ?? ApiClient();
 
   final String deviceId;
   final ApiClient _apiClient;
@@ -40,20 +34,35 @@ class BeaconObservationService {
 
   // The main region to scan. In reality, we might have multiple, or one open region.
   // The user rule implies scanning for congress beacons, maybe we just scan all beacons or the specific UUID.
-  // We'll use the same UUID from POC, or just listen to all beacons if possible. 
+  // We'll use the same UUID from POC, or just listen to all beacons if possible.
   // Let's use the POC UUID for now, as we don't have the backend beaconUuid injected here yet,
   // or we can just scan for everything. The POC uses 'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0'.
-  static const String _defaultRegionUuid = 'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0';
+  static const String _defaultRegionUuid =
+      'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0';
+
+  // Foreground duty-cycle: surekli tarama yerine periyodik pencere.
+  // Pil uyarisini ve gereksiz surekli Bluetooth taramasini onlemek icin.
+  static const Duration _foregroundDutyCycleInterval = Duration(seconds: 45);
+  static const Duration _foregroundRangingWindow = Duration(seconds: 9);
+
+  // iOS'un didEnterRegion sonrasi arka planda uygulamaya tanidigi calisma
+  // penceresi ~10 saniyedir. beginBackgroundTask ile bunu uzatmaya
+  // CALISMIYORUZ - guvenilmez ve gereksiz risk tasir.
+  static const Duration _backgroundRangingWindow = Duration(seconds: 10);
 
   final List<ObservationSnapshot> _queue = [];
   bool _isBatching = false;
+  bool _isForeground = true;
 
   StreamSubscription<RangingResult>? _rangingSubscription;
   StreamSubscription<MonitoringResult>? _monitoringSubscription;
   Timer? _batchTimer;
+  Timer? _dutyCycleTimer;
+  Timer? _rangingWindowTimer;
   List<Region>? _regions;
 
-  final _stateController = StreamController<ObservationServiceState>.broadcast();
+  final _stateController =
+      StreamController<ObservationServiceState>.broadcast();
 
   ObservationServiceState _currentState = const ObservationServiceState(
     status: ObservationServiceStatus.initializing,
@@ -70,21 +79,26 @@ class BeaconObservationService {
   }
 
   Future<void> start() async {
-    _emitState(ObservationServiceState(
-      status: ObservationServiceStatus.initializing,
-      pendingSnapshotCount: _queue.length,
-      lastBatchResult: _currentState.lastBatchResult,
-    ));
+    _emitState(
+      ObservationServiceState(
+        status: ObservationServiceStatus.initializing,
+        pendingSnapshotCount: _queue.length,
+        lastBatchResult: _currentState.lastBatchResult,
+      ),
+    );
 
     try {
       final isReady = await flutterBeacon.initializeScanning;
       if (!isReady) {
-        _emitState(ObservationServiceState(
-          status: ObservationServiceStatus.error,
-          pendingSnapshotCount: _queue.length,
-          lastBatchResult: _currentState.lastBatchResult,
-          errorMessage: 'Tarama hazır değil. Bluetooth veya izinler kapalı olabilir.',
-        ));
+        _emitState(
+          ObservationServiceState(
+            status: ObservationServiceStatus.error,
+            pendingSnapshotCount: _queue.length,
+            lastBatchResult: _currentState.lastBatchResult,
+            errorMessage:
+                'Tarama hazır değil. Bluetooth veya izinler kapalı olabilir.',
+          ),
+        );
         return;
       }
 
@@ -96,66 +110,129 @@ class BeaconObservationService {
       ];
       _regions = regions;
 
-      _startRanging(regions);
+      WidgetsBinding.instance.addObserver(this);
+      _isForeground = true;
+      _beginForegroundDutyCycle();
 
       // Region monitoring isletim sistemi seviyesinde calisir (Bluetooth acikken
       // uygulama arka planda/sonlandirilmis olsa bile iOS giris/cikis olaylarini
-      // yakalayabilir - kullanici uygulamayi elle kapatmadigi surece). Ranging tek
-      // basina arka planda guvenilir degildir; monitoring burada, taramanin
-      // herhangi bir nedenle durmus olmasi ihtimaline karsi tetikleyici gorevi gorur.
-      _monitoringSubscription = flutterBeacon.monitoring(regions).listen(
-        _onMonitoringResult,
-        onError: (error) {
-          _emitState(ObservationServiceState(
-            status: _currentState.status,
-            pendingSnapshotCount: _queue.length,
-            lastBatchResult: _currentState.lastBatchResult,
-            errorMessage: 'Bölge izleme hatası: $error',
-          ));
-        },
-      );
+      // yakalayabilir - kullanici uygulamayi elle kapatmadigi surece). Foreground'da
+      // duty-cycle zaten taramayi yonetiyor; monitoring yalnizca arka plandayken
+      // sinirli bir ranging penceresi acmak icin kullanilir (bkz. _onMonitoringResult).
+      _monitoringSubscription = flutterBeacon
+          .monitoring(regions)
+          .listen(
+            _onMonitoringResult,
+            onError: (error) {
+              _emitState(
+                ObservationServiceState(
+                  status: _currentState.status,
+                  pendingSnapshotCount: _queue.length,
+                  lastBatchResult: _currentState.lastBatchResult,
+                  errorMessage: 'Bölge izleme hatası: $error',
+                ),
+              );
+            },
+          );
 
       _batchTimer = Timer.periodic(const Duration(seconds: 10), (_) {
         _trySendBatch();
       });
 
-      _emitState(ObservationServiceState(
-        status: ObservationServiceStatus.active,
-        pendingSnapshotCount: _queue.length,
-        lastBatchResult: _currentState.lastBatchResult,
-      ));
+      _emitState(
+        ObservationServiceState(
+          status: ObservationServiceStatus.active,
+          pendingSnapshotCount: _queue.length,
+          lastBatchResult: _currentState.lastBatchResult,
+        ),
+      );
     } catch (e) {
-      _emitState(ObservationServiceState(
-        status: ObservationServiceStatus.error,
-        pendingSnapshotCount: _queue.length,
-        lastBatchResult: _currentState.lastBatchResult,
-        errorMessage: 'Başlatma hatası: $e',
-      ));
+      _emitState(
+        ObservationServiceState(
+          status: ObservationServiceStatus.error,
+          pendingSnapshotCount: _queue.length,
+          lastBatchResult: _currentState.lastBatchResult,
+          errorMessage: 'Başlatma hatası: $e',
+        ),
+      );
     }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.paused:
+        // Uygulama arka plana dustu: duty-cycle'i durdur, ranging acik
+        // kaldiysa acikca kapat. Monitoring subscription'a dokunmuyoruz -
+        // OS seviyesinde calismaya devam etmesi gerekiyor.
+        _isForeground = false;
+        _dutyCycleTimer?.cancel();
+        _dutyCycleTimer = null;
+        _stopRanging();
+        break;
+      case AppLifecycleState.resumed:
+        // Foreground'a donuldu: duty-cycle'i yeniden baslat.
+        _isForeground = true;
+        _beginForegroundDutyCycle();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _beginForegroundDutyCycle() {
+    _dutyCycleTimer?.cancel();
+    _beginRangingWindow(_foregroundRangingWindow);
+    _dutyCycleTimer = Timer.periodic(_foregroundDutyCycleInterval, (_) {
+      _beginRangingWindow(_foregroundRangingWindow);
+    });
+  }
+
+  void _beginRangingWindow(Duration window) {
+    if (_regions == null) return;
+    _startRanging(_regions!);
+    _rangingWindowTimer?.cancel();
+    _rangingWindowTimer = Timer(window, _stopRanging);
+  }
+
+  void _stopRanging() {
+    _rangingWindowTimer?.cancel();
+    _rangingWindowTimer = null;
+    _rangingSubscription?.cancel();
+    _rangingSubscription = null;
   }
 
   void _startRanging(List<Region> regions) {
     _rangingSubscription?.cancel();
-    _rangingSubscription = flutterBeacon.ranging(regions).listen(
-      _onRangingResult,
-      onError: (error) {
-        _emitState(ObservationServiceState(
-          status: ObservationServiceStatus.error,
-          pendingSnapshotCount: _queue.length,
-          lastBatchResult: _currentState.lastBatchResult,
-          errorMessage: 'Tarama hatası: $error',
-        ));
-      },
-    );
+    _rangingSubscription = flutterBeacon
+        .ranging(regions)
+        .listen(
+          _onRangingResult,
+          onError: (error) {
+            _emitState(
+              ObservationServiceState(
+                status: ObservationServiceStatus.error,
+                pendingSnapshotCount: _queue.length,
+                lastBatchResult: _currentState.lastBatchResult,
+                errorMessage: 'Tarama hatası: $error',
+              ),
+            );
+          },
+        );
   }
 
   void _onMonitoringResult(MonitoringResult result) {
+    // Foreground'dayken duty-cycle zaten taramayi yonetiyor; monitoring'in
+    // burada ayrica ranging baslatmasina gerek yok (eskiden bu, foreground'da
+    // ranging'in hic durmamasina yol aciyordu).
+    if (_isForeground) return;
+
     final entered =
         result.monitoringEventType == MonitoringEventType.didEnterRegion ||
-            result.monitoringState == MonitoringState.inside;
+        result.monitoringState == MonitoringState.inside;
 
     if (entered && _regions != null) {
-      _startRanging(_regions!);
+      _beginRangingWindow(_backgroundRangingWindow);
     }
   }
 
@@ -181,12 +258,14 @@ class BeaconObservationService {
 
     _queue.add(snapshot);
 
-    _emitState(ObservationServiceState(
-      status: _currentState.status,
-      pendingSnapshotCount: _queue.length,
-      lastBatchResult: _currentState.lastBatchResult,
-      errorMessage: _currentState.errorMessage,
-    ));
+    _emitState(
+      ObservationServiceState(
+        status: _currentState.status,
+        pendingSnapshotCount: _queue.length,
+        lastBatchResult: _currentState.lastBatchResult,
+        errorMessage: _currentState.errorMessage,
+      ),
+    );
 
     if (_queue.length >= 10) {
       _trySendBatch();
@@ -215,34 +294,42 @@ class BeaconObservationService {
         requiresAuth: true,
       );
 
-      final response = ObservationBatchResponse.fromJson(responseJson as Map<String, dynamic>);
-      
+      final response = ObservationBatchResponse.fromJson(
+        responseJson as Map<String, dynamic>,
+      );
+
       // Sadece gönderilenleri temizle.
       _queue.removeWhere((item) => batchToProcess.contains(item));
 
-      _emitState(ObservationServiceState(
-        status: _currentState.status,
-        pendingSnapshotCount: _queue.length,
-        lastBatchResult: 'Accepted: ${response.acceptedCount}, Dup: ${response.duplicateCount}, Rej: ${response.rejectedCount}',
-        errorMessage: _currentState.errorMessage,
-      ));
-
-    } catch (e) {
-      if (e is ApiException && e.statusCode == 401) {
-        _emitState(ObservationServiceState(
-          status: ObservationServiceStatus.unauthorized,
-          pendingSnapshotCount: _queue.length,
-          lastBatchResult: 'Hata: Yetkisiz (401)',
-          errorMessage: e.message,
-        ));
-      } else {
-        // Hata durumunda kayıtlar silinmez, olduğu gibi kalır.
-        _emitState(ObservationServiceState(
+      _emitState(
+        ObservationServiceState(
           status: _currentState.status,
           pendingSnapshotCount: _queue.length,
-          lastBatchResult: 'Hata: Gönderilemedi', // Veya e.toString() gibi
+          lastBatchResult:
+              'Accepted: ${response.acceptedCount}, Dup: ${response.duplicateCount}, Rej: ${response.rejectedCount}',
           errorMessage: _currentState.errorMessage,
-        ));
+        ),
+      );
+    } catch (e) {
+      if (e is ApiException && e.statusCode == 401) {
+        _emitState(
+          ObservationServiceState(
+            status: ObservationServiceStatus.unauthorized,
+            pendingSnapshotCount: _queue.length,
+            lastBatchResult: 'Hata: Yetkisiz (401)',
+            errorMessage: e.message,
+          ),
+        );
+      } else {
+        // Hata durumunda kayıtlar silinmez, olduğu gibi kalır.
+        _emitState(
+          ObservationServiceState(
+            status: _currentState.status,
+            pendingSnapshotCount: _queue.length,
+            lastBatchResult: 'Hata: Gönderilemedi', // Veya e.toString() gibi
+            errorMessage: _currentState.errorMessage,
+          ),
+        );
       }
     } finally {
       _isBatching = false;
@@ -250,6 +337,9 @@ class BeaconObservationService {
   }
 
   Future<void> stop() async {
+    WidgetsBinding.instance.removeObserver(this);
+    _dutyCycleTimer?.cancel();
+    _rangingWindowTimer?.cancel();
     _batchTimer?.cancel();
     await _rangingSubscription?.cancel();
     await _monitoringSubscription?.cancel();
