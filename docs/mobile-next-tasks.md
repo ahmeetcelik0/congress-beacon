@@ -73,6 +73,12 @@ yazıyor. Biz Firebase projesini kurup gerçek gönderimi bağladığımızda mo
 
 ## 3) Arka plan / force-quit konusu — şimdilik beklemede
 
+> **Güncellik notu:** Aşağıdaki "arka planda çalışıyor" doğrulaması, commit
+> `6990447` (duty-cycle patch'i) **öncesine** ait. O patch arka plan veri
+> akışını kırmıştı; düzeltme ve güncel test protokolü için
+> `docs/mobile-handoff.md`'deki **"2026-07-17 (devam) — Arka Plan Ranging
+> Regresyon Düzeltmesi"** bölümüne bakın.
+
 Bugünkü pilot testte doğruladık: uygulama arka planda veya ekran kilitliyken
 `monitoring()` + `UIBackgroundModes` sayesinde çalışıyor; kullanıcı uygulamayı elle
 kapattığında (force-quit) hiçbir mekanizma çalışmıyor ve bu, Apple'ın kasıtlı,

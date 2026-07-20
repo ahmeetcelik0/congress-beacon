@@ -42,13 +42,15 @@ class BeaconObservationService with WidgetsBindingObserver {
 
   // Foreground duty-cycle: surekli tarama yerine periyodik pencere.
   // Pil uyarisini ve gereksiz surekli Bluetooth taramasini onlemek icin.
-  static const Duration _foregroundDutyCycleInterval = Duration(seconds: 45);
-  static const Duration _foregroundRangingWindow = Duration(seconds: 9);
+  // Pencere, gonderim araligiyla ayni dongude (10sn) calisir.
+  static const Duration _foregroundCycleInterval = Duration(seconds: 10);
+  static const Duration _foregroundRangingWindow = Duration(seconds: 4);
+  static const Duration _foregroundBatchInterval = Duration(seconds: 10);
 
-  // iOS'un didEnterRegion sonrasi arka planda uygulamaya tanidigi calisma
-  // penceresi ~10 saniyedir. beginBackgroundTask ile bunu uzatmaya
-  // CALISMIYORUZ - guvenilmez ve gereksiz risk tasir.
-  static const Duration _backgroundRangingWindow = Duration(seconds: 10);
+  // Arka planda ranging'i DURDURMUYORUZ (bkz. _enterBackgroundMode) - bu,
+  // uygulamayi iOS'ta arka planda canli tutan mekanizmanin ta kendisi. Pil
+  // tasarrufu, gonderim sikligini seyreltmekten geliyor.
+  static const Duration _backgroundBatchInterval = Duration(seconds: 30);
 
   final List<ObservationSnapshot> _queue = [];
   bool _isBatching = false;
@@ -111,14 +113,22 @@ class BeaconObservationService with WidgetsBindingObserver {
       _regions = regions;
 
       WidgetsBinding.instance.addObserver(this);
-      _isForeground = true;
-      _beginForegroundDutyCycle();
+
+      // start() genelde foreground'dan cagrilir (participant_home_page'in
+      // initState'i), ama garantiye almak icin gercek durumu soruyoruz.
+      final currentLifecycleState = WidgetsBinding.instance.lifecycleState;
+      if (currentLifecycleState == AppLifecycleState.paused) {
+        _enterBackgroundMode();
+      } else {
+        _enterForegroundMode();
+      }
 
       // Region monitoring isletim sistemi seviyesinde calisir (Bluetooth acikken
       // uygulama arka planda/sonlandirilmis olsa bile iOS giris/cikis olaylarini
-      // yakalayabilir - kullanici uygulamayi elle kapatmadigi surece). Foreground'da
-      // duty-cycle zaten taramayi yonetiyor; monitoring yalnizca arka plandayken
-      // sinirli bir ranging penceresi acmak icin kullanilir (bkz. _onMonitoringResult).
+      // yakalayabilir - kullanici uygulamayi elle kapatmadigi surece). Ranging'in
+      // herhangi bir nedenle durmus olmasi ihtimaline karsi, her iki durumda da
+      // taramayi yeniden baslatan bir guvenlik agi gorevi gorur (bkz.
+      // _onMonitoringResult).
       _monitoringSubscription = flutterBeacon
           .monitoring(regions)
           .listen(
@@ -134,10 +144,6 @@ class BeaconObservationService with WidgetsBindingObserver {
               );
             },
           );
-
-      _batchTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-        _trySendBatch();
-      });
 
       _emitState(
         ObservationServiceState(
@@ -162,29 +168,67 @@ class BeaconObservationService with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     switch (state) {
       case AppLifecycleState.paused:
-        // Uygulama arka plana dustu: duty-cycle'i durdur, ranging acik
-        // kaldiysa acikca kapat. Monitoring subscription'a dokunmuyoruz -
-        // OS seviyesinde calismaya devam etmesi gerekiyor.
-        _isForeground = false;
-        _dutyCycleTimer?.cancel();
-        _dutyCycleTimer = null;
-        _stopRanging();
+        _enterBackgroundMode();
         break;
       case AppLifecycleState.resumed:
-        // Foreground'a donuldu: duty-cycle'i yeniden baslat.
-        _isForeground = true;
-        _beginForegroundDutyCycle();
+        _enterForegroundMode();
         break;
-      default:
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+        // Gecici ara durumlar (telefon cagrisi, kontrol merkezi, Face ID
+        // istemi, uygulama gecis onizlemesi). Gercek arka plana gecis/donus
+        // her zaman paused/resumed'da son bulur - Flutter ikisi arasina
+        // hidden'i otomatik ekler. Burada bir sey yapmamak, gecici bir
+        // titresim icin timer'lari gereksiz yere yikip yeniden kurmaktan
+        // kacinir.
+        break;
+      case AppLifecycleState.detached:
+        // Uygulama sonlandiriliyor/henuz baglanmadi - force-quit kenar
+        // durumu, kapsam disi (docs/decisions.md).
         break;
     }
   }
 
-  void _beginForegroundDutyCycle() {
+  void _enterForegroundMode() {
+    _isForeground = true;
     _dutyCycleTimer?.cancel();
     _beginRangingWindow(_foregroundRangingWindow);
-    _dutyCycleTimer = Timer.periodic(_foregroundDutyCycleInterval, (_) {
+    _dutyCycleTimer = Timer.periodic(_foregroundCycleInterval, (_) {
       _beginRangingWindow(_foregroundRangingWindow);
+    });
+    _restartBatchTimer(_foregroundBatchInterval);
+  }
+
+  void _enterBackgroundMode() {
+    _isForeground = false;
+
+    // Foreground'un pencere/dongu mekanizmasini kapat. _rangingWindowTimer'i
+    // iptal etmek kritik: bekleyen bir pencere kapanisi, arka plana
+    // gecildikten birkac saniye sonra ranging'i yine de durdurabilirdi.
+    _dutyCycleTimer?.cancel();
+    _dutyCycleTimer = null;
+    _rangingWindowTimer?.cancel();
+    _rangingWindowTimer = null;
+
+    // Ranging'i DURDURMUYORUZ. Zaten aciksa dokunmuyoruz; foreground'un "off"
+    // araliginda arka plana gecildiyse aciyoruz - ve bir daha kapatmiyoruz.
+    // Uygulamayi iOS'ta arka planda canli tutan mekanizma budur; bunu
+    // durdurmak (onceki davranis) arka plan veri akisinin tamamen kesilmesine
+    // yol acmisti (bkz. commit 6990447 regresyonu, docs/mobile-handoff.md).
+    _ensureRangingActive();
+
+    _restartBatchTimer(_backgroundBatchInterval);
+  }
+
+  void _ensureRangingActive() {
+    if (_rangingSubscription != null || _regions == null) return;
+    _startRanging(_regions!);
+  }
+
+  void _restartBatchTimer(Duration interval) {
+    _batchTimer?.cancel();
+    _batchTimer = Timer.periodic(interval, (_) {
+      _trySendBatch();
     });
   }
 
@@ -222,17 +266,14 @@ class BeaconObservationService with WidgetsBindingObserver {
   }
 
   void _onMonitoringResult(MonitoringResult result) {
-    // Foreground'dayken duty-cycle zaten taramayi yonetiyor; monitoring'in
-    // burada ayrica ranging baslatmasina gerek yok (eskiden bu, foreground'da
-    // ranging'in hic durmamasina yol aciyordu).
-    if (_isForeground) return;
-
+    // Ranging bir sekilde durmus olabilir ihtimaline karsi guvenlik agi -
+    // hem foreground hem background'da gecerli (orijinal tasarimin ruhu).
     final entered =
         result.monitoringEventType == MonitoringEventType.didEnterRegion ||
         result.monitoringState == MonitoringState.inside;
 
-    if (entered && _regions != null) {
-      _beginRangingWindow(_backgroundRangingWindow);
+    if (entered) {
+      _ensureRangingActive();
     }
   }
 
@@ -267,7 +308,11 @@ class BeaconObservationService with WidgetsBindingObserver {
       ),
     );
 
-    if (_queue.length >= 10) {
+    // Arka planda erken gonderim yapmiyoruz: ranging surekli acik oldugu icin
+    // kuyruk ~10 saniyede dolar ve bu yol tetiklenmeye devam ederdi - bu da
+    // hedeflenen 30sn'lik gonderim sikligini sessizce gecersiz kilardi. Arka
+    // planda yalniz _batchTimer'in 30sn'lik tetiklemesine guveniyoruz.
+    if (_isForeground && _queue.length >= 10) {
       _trySendBatch();
     }
   }
