@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
@@ -42,19 +43,45 @@ class BeaconObservationService with WidgetsBindingObserver {
 
   // Foreground duty-cycle: surekli tarama yerine periyodik pencere.
   // Pil uyarisini ve gereksiz surekli Bluetooth taramasini onlemek icin.
-  // Pencere, gonderim araligiyla ayni dongude (10sn) calisir.
   static const Duration _foregroundCycleInterval = Duration(seconds: 10);
   static const Duration _foregroundRangingWindow = Duration(seconds: 4);
-  static const Duration _foregroundBatchInterval = Duration(seconds: 10);
 
   // Arka planda ranging'i DURDURMUYORUZ (bkz. _enterBackgroundMode) - bu,
   // uygulamayi iOS'ta arka planda canli tutan mekanizmanin ta kendisi. Pil
   // tasarrufu, gonderim sikligini seyreltmekten geliyor.
-  static const Duration _backgroundBatchInterval = Duration(seconds: 30);
+  //
+  // Gonderim araligi artik sabit degil: panelden (kongre ayari) kontrol
+  // edilir ve her batch yanitinda backend'den gelen guncel degerle
+  // senkronize edilir (bkz. _trySendBatch). Baslangicta 10sn varsayiliyla
+  // baslar, ilk yanit geldiginde gercek degere gunceller.
+  static const Duration _defaultBatchInterval = Duration(seconds: 10);
+  static const int _minIntervalSeconds = 5;
+  static const int _maxIntervalSeconds = 300;
+  Duration _batchInterval = _defaultBatchInterval;
 
   final List<ObservationSnapshot> _queue = [];
   bool _isBatching = false;
   bool _isForeground = true;
+
+  // iOS'ta arka plan ranging'i, konum izni "Her Zaman" (Always) olmadan
+  // guvenilir calismaz - "Uygulamayi Kullanirken" (WhenInUse) izniyle sistem
+  // uygulamayi arka plana alir almaz konum/beacon guncellemelerini durdurur.
+  // iOS 13+'ta ilk izin dialogu "Always" secenegini dogrudan sunmaz (once
+  // WhenInUse verilir, "Always"e yukseltme ayri bir sistem promptudur ve
+  // genelde gecikmeli/garantisiz gelir) - bu yuzden durumu kendimiz kontrol
+  // edip kullaniciyi Ayarlar'a yonlendirmemiz gerekiyor.
+  bool _needsAlwaysLocationPermission = false;
+  bool get needsAlwaysLocationPermission => _needsAlwaysLocationPermission;
+
+  Future<void> _refreshAlwaysPermissionStatus() async {
+    if (!Platform.isIOS) return;
+    try {
+      final status = await flutterBeacon.authorizationStatus;
+      _needsAlwaysLocationPermission = status != AuthorizationStatus.always;
+    } catch (_) {
+      // Durum sorgulanamadiysa mevcut bayragi degistirme.
+    }
+  }
 
   StreamSubscription<RangingResult>? _rangingSubscription;
   StreamSubscription<MonitoringResult>? _monitoringSubscription;
@@ -196,7 +223,14 @@ class BeaconObservationService with WidgetsBindingObserver {
     _dutyCycleTimer = Timer.periodic(_foregroundCycleInterval, (_) {
       _beginRangingWindow(_foregroundRangingWindow);
     });
-    _restartBatchTimer(_foregroundBatchInterval);
+    _restartBatchTimer(_batchInterval);
+
+    // Uygulama her one geldiginde (ilk acilis dahil) izin durumunu tekrar
+    // kontrol et - kullanici Ayarlar'dan "Her Zaman" izni verip geri
+    // donmus olabilir, arayuzun bunu yansitmasi gerekir.
+    unawaited(
+      _refreshAlwaysPermissionStatus().then((_) => _emitState(_currentState)),
+    );
   }
 
   void _enterBackgroundMode() {
@@ -217,7 +251,7 @@ class BeaconObservationService with WidgetsBindingObserver {
     // yol acmisti (bkz. commit 6990447 regresyonu, docs/mobile-handoff.md).
     _ensureRangingActive();
 
-    _restartBatchTimer(_backgroundBatchInterval);
+    _restartBatchTimer(_batchInterval);
   }
 
   void _ensureRangingActive() {
@@ -230,6 +264,20 @@ class BeaconObservationService with WidgetsBindingObserver {
     _batchTimer = Timer.periodic(interval, (_) {
       _trySendBatch();
     });
+  }
+
+  // Backend her batch yanitinda panelden ayarlanan guncel gonderim
+  // sikligini gonderiyor. Degistiyse zamanlayiciyi hemen bu yeni degerle
+  // yeniden baslatiyoruz - kullanici panelden degistirdiginde bir sonraki
+  // gonderimden itibaren gecerli olmasi icin.
+  void _applyServerIntervalIfChanged(int? intervalSeconds) {
+    if (intervalSeconds == null) return;
+    final clamped = intervalSeconds.clamp(_minIntervalSeconds, _maxIntervalSeconds);
+    final newInterval = Duration(seconds: clamped);
+    if (newInterval == _batchInterval) return;
+
+    _batchInterval = newInterval;
+    _restartBatchTimer(_batchInterval);
   }
 
   void _beginRangingWindow(Duration window) {
@@ -309,9 +357,9 @@ class BeaconObservationService with WidgetsBindingObserver {
     );
 
     // Arka planda erken gonderim yapmiyoruz: ranging surekli acik oldugu icin
-    // kuyruk ~10 saniyede dolar ve bu yol tetiklenmeye devam ederdi - bu da
-    // hedeflenen 30sn'lik gonderim sikligini sessizce gecersiz kilardi. Arka
-    // planda yalniz _batchTimer'in 30sn'lik tetiklemesine guveniyoruz.
+    // kuyruk hizla dolar ve bu yol tetiklenmeye devam ederdi - bu da
+    // panelden ayarlanan gonderim sikligini sessizce gecersiz kilardi. Arka
+    // planda yalniz _batchTimer'in (_batchInterval) tetiklemesine guveniyoruz.
     if (_isForeground && _queue.length >= 10) {
       _trySendBatch();
     }
@@ -342,6 +390,8 @@ class BeaconObservationService with WidgetsBindingObserver {
       final response = ObservationBatchResponse.fromJson(
         responseJson as Map<String, dynamic>,
       );
+
+      _applyServerIntervalIfChanged(response.observationIntervalSeconds);
 
       // Sadece gönderilenleri temizle.
       _queue.removeWhere((item) => batchToProcess.contains(item));
