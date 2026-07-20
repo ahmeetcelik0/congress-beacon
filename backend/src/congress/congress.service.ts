@@ -16,6 +16,7 @@ export class CongressService {
         beaconUuid: dto.beaconUuid,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+        observationIntervalSeconds: dto.observationIntervalSeconds,
       },
     });
   }

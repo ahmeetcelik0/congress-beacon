@@ -1,8 +1,11 @@
 import {
   IsDateString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -29,4 +32,10 @@ export class CreateCongressDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(300)
+  observationIntervalSeconds?: number;
 }

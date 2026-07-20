@@ -4,6 +4,7 @@ import { LiveBadge } from './components/live-badge';
 import { LiveDashboard } from './components/live-dashboard';
 import { HallVisitsTable } from './components/hall-visits-table';
 import { RawObservationFeed } from './components/raw-observation-feed';
+import { ObservationIntervalControl } from './components/observation-interval-control';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -13,6 +14,9 @@ export default async function AttendancePage({
 }) {
   const { congressId } = await searchParams;
   const congresses = await api.listCongresses();
+  const selectedCongress = congressId
+    ? congresses.find((congress) => congress.id === congressId)
+    : undefined;
   const summary = congressId ? await api.getAttendanceSummary(congressId) : null;
   const occupancySeries = congressId
     ? await api.getOccupancySeries({ congressId, bucketMinutes: 15 })
@@ -34,6 +38,13 @@ export default async function AttendancePage({
             selectedId={congressId}
             basePath="/attendance"
           />
+          {selectedCongress && (
+            <ObservationIntervalControl
+              key={selectedCongress.id}
+              congressId={selectedCongress.id}
+              initialValue={selectedCongress.observationIntervalSeconds}
+            />
+          )}
           <LiveBadge />
         </div>
       </div>

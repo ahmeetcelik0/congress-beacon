@@ -21,6 +21,11 @@ model Congress {
   beaconUuid String
   startDate  DateTime?
   endDate    DateTime?
+  // Mobil cihazlarin observation batch'lerini kac saniyede bir gonderecegini
+  // belirler. Panelden degistirilebilir; mobil uygulama bunu koda gomulu
+  // sabit yerine her batch gonderiminde backend'den ogrenir (bkz.
+  // POST /observations/batch response'u).
+  observationIntervalSeconds Int       @default(10)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 

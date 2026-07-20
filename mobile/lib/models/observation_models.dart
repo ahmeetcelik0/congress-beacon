@@ -72,17 +72,23 @@ class ObservationBatchResponse {
     required this.acceptedCount,
     required this.duplicateCount,
     required this.rejectedCount,
+    this.observationIntervalSeconds,
   });
 
   final int acceptedCount;
   final int duplicateCount;
   final int rejectedCount;
 
+  // Panelden ayarlanan, bir sonraki batch'lerin kac saniyede bir
+  // gonderilecegini belirten deger. Backend her batch yanitinda gonderir.
+  final int? observationIntervalSeconds;
+
   factory ObservationBatchResponse.fromJson(Map<String, dynamic> json) {
     return ObservationBatchResponse(
       acceptedCount: json['acceptedCount'] as int? ?? 0,
       duplicateCount: json['duplicateCount'] as int? ?? 0,
       rejectedCount: json['rejectedCount'] as int? ?? 0,
+      observationIntervalSeconds: json['observationIntervalSeconds'] as int?,
     );
   }
 }

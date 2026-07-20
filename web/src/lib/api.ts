@@ -44,6 +44,7 @@ export type Congress = {
   beaconUuid: string;
   startDate: string | null;
   endDate: string | null;
+  observationIntervalSeconds: number;
   createdAt: string;
   updatedAt: string;
 };
@@ -223,6 +224,8 @@ export const api = {
   listCongresses: () => request<Congress[]>('/congresses'),
   createCongress: (data: { name: string; code: string; accessCode: string; beaconUuid: string }) =>
     request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
+  updateCongress: (id: string, data: Partial<{ observationIntervalSeconds: number }>) =>
+    request<Congress>(`/congresses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
   listHalls: (congressId: string) =>

@@ -39,6 +39,7 @@ export class ObservationsController {
       acceptedCount: result.acceptedCount,
       duplicateCount: result.duplicateCount,
       rejectedCount: result.rejectedCount,
+      observationIntervalSeconds: result.observationIntervalSeconds,
     };
   }
 }

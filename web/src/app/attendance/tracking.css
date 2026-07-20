@@ -75,6 +75,63 @@
   animation: none;
 }
 
+.tp-interval-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  background: var(--tp-bg-card);
+  border: 1px solid var(--tp-border);
+  font-size: 0.8rem;
+  color: var(--tp-text-dim);
+  position: relative;
+}
+
+.tp-interval-label {
+  white-space: nowrap;
+}
+
+.tp-interval-input {
+  width: 3.5rem;
+  background: var(--tp-bg-elevated);
+  border: 1px solid var(--tp-border);
+  border-radius: 6px;
+  color: var(--tp-text);
+  font-family: var(--font-mono), monospace;
+  padding: 0.15rem 0.4rem;
+  text-align: right;
+}
+
+.tp-interval-suffix {
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-interval-save {
+  border: 1px solid var(--tp-accent-dim);
+  background: transparent;
+  color: var(--tp-accent);
+  border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.tp-interval-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tp-interval-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.35rem;
+  color: var(--tp-danger);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
 .tp-empty {
   padding: 3rem 1.5rem;
   text-align: center;

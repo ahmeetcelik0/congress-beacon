@@ -1424,6 +1424,7 @@ components:
         - acceptedCount
         - duplicateCount
         - rejectedCount
+        - observationIntervalSeconds
       properties:
         acceptedCount:
           type: integer
@@ -1431,6 +1432,12 @@ components:
           type: integer
         rejectedCount:
           type: integer
+        observationIntervalSeconds:
+          type: integer
+          description: >-
+            Mobil cihazin bir sonraki batch'leri kac saniyede bir gondermesi
+            gerektigi (kongre bazli, panelden ayarlanir). Mobil her batch
+            gonderiminde bu degeri okuyup gonderim zamanlayicisini gunceller.
 
     ObservationSummary:
       type: object
@@ -1685,6 +1692,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        observationIntervalSeconds:
+          type: integer
+          description: >-
+            Mobil cihazlarin observation batch gonderim sikligi (saniye).
+            Panelden (canli takip sayfasi) ayarlanir.
         createdAt:
           type: string
           format: date-time
@@ -1718,6 +1730,11 @@ components:
         endDate:
           type: string
           format: date-time
+        observationIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 300
+          default: 10
 
     CongressUpdate:
       type: object
@@ -1741,6 +1758,10 @@ components:
         endDate:
           type: string
           format: date-time
+        observationIntervalSeconds:
+          type: integer
+          minimum: 5
+          maximum: 300
 
     Hall:
       type: object
