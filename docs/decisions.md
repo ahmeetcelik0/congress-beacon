@@ -29,6 +29,13 @@
 - Veri gelmemesi, katılımcının salonda olmadığı anlamına gelmez.
 - iOS’ta uygulama kullanıcı tarafından zorla kapatılırsa beacon gözlemi garanti edilemez.
 - Bilimsel program bildirimleri, kullanıcının uygulamayı yeniden açmasını teşvik eder.
+- **iOS'ta arka plan beacon takibi, ranging oturumunun sürekli açık tutulmasına
+  dayanır** — uygulamayı arka planda "canlı" tutan mekanizma budur. Pil tasarrufu
+  için ranging'i arka planda aç/kapa döngüsüne sokmak **denenmemeli**: bu, 2026-07
+  pilotunda gerçek bir regresyona yol açtı (arka plan veri akışı tamamen kesildi —
+  bkz. `docs/mobile-handoff.md`, "Arka Plan Ranging Regresyon Düzeltmesi"). Pil
+  optimizasyonu, ranging'i durdurmadan, yalnızca gönderim (network) sıklığını
+  ayarlayarak yapılmalı.
 
 ## Git Çalışma Düzeni
 
