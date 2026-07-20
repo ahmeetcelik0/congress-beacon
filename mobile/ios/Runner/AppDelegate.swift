@@ -42,7 +42,10 @@ import CoreLocation
 
     backgroundKeepAliveLocationManager.allowsBackgroundLocationUpdates = true
     backgroundKeepAliveLocationManager.pausesLocationUpdatesAutomatically = false
-    backgroundKeepAliveLocationManager.showsBackgroundLocationIndicator = true
+    // Mavi arka plan konum gostergesini kapatiyoruz - bu yalnizca gorsel bir
+    // bayrak, allowsBackgroundLocationUpdates'ten bagimsiz; kapatmak surecin
+    // arka planda canli kalmasini etkilemiyor. iOS varsayilani zaten false.
+    backgroundKeepAliveLocationManager.showsBackgroundLocationIndicator = false
     backgroundKeepAliveLocationManager.startUpdatingLocation()
   }
 }
