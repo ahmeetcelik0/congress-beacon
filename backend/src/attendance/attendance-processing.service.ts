@@ -3,9 +3,22 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceEventType } from '../../generated/prisma/client';
 import { AcceptedSnapshot } from '../observations/observation-ingestion.service';
 
-const ALGORITHM_VERSION = 'v1';
+const ALGORITHM_VERSION = 'v2';
 const ENTRY_STREAK_THRESHOLD = 2;
 const EXIT_STREAK_THRESHOLD = 2;
+
+// CoreLocation/flutter_beacon bazen gercek bir olcum yerine 0 dBm doner - bu,
+// "bu taramada guvenilir bir deger alinamadi" anlamina gelen bir sentinel
+// degeridir, gercek bir sinyal gucu DEGILDIR (gercek RSSI her zaman negatiftir).
+// Bu deger filtrelenmeden ortalamaya dahil edilirse, zayif/sinir bolgesindeki
+// bir beacon'in ara sira donen 0'i, gercekte cok daha guclu olan baska bir
+// salonun negatif RSSI'sinden sayisal olarak "daha buyuk" gorunup yanlislikla
+// en guclu sinyal sanilir - bu da salonlar arasi sahte, ani gecislere
+// ("isinlanma") yol acar. Bu yuzden gecersiz okumalar karar hesabina hic
+// girmeden burada eleniyor.
+function isValidRssi(rssi: number): boolean {
+  return rssi < 0;
+}
 
 type Candidate = { hallId: string; margin: number };
 
@@ -66,6 +79,7 @@ export class AttendanceProcessingService {
         (r) => r.beaconId === assignment.beaconId,
       );
       if (!reading) continue;
+      if (!isValidRssi(reading.rssi)) continue;
 
       const threshold =
         assignment.rssiThreshold ?? assignment.hall.rssiThreshold;
