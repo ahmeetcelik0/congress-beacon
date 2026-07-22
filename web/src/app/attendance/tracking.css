@@ -572,3 +572,101 @@
 .tp-stagger-4 {
   animation-delay: 0.16s;
 }
+
+/* Karar gerekcesi (decision trace) paneli */
+.tp-trace-select {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.75rem;
+  background: var(--tp-surface, transparent);
+  color: inherit;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+.tp-trace-block {
+  border-top: 1px solid rgba(148, 163, 184, 0.12);
+  padding: 0.6rem 0;
+}
+
+.tp-trace-heading {
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 0.2rem;
+}
+
+.tp-trace-meta {
+  font-size: 0.76rem;
+  color: var(--tp-text-dim);
+  margin-bottom: 0.5rem;
+}
+
+.tp-trace-candidate {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.76rem;
+  color: var(--tp-text-dim);
+  padding: 0.35rem 0 0.35rem 0.6rem;
+  border-left: 2px solid rgba(148, 163, 184, 0.18);
+  margin-bottom: 0.35rem;
+}
+
+.tp-trace-beacons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.15rem;
+  opacity: 0.75;
+}
+
+/* Algoritma ayarlari formu */
+.tp-tuning-form {
+  margin-top: 0.75rem;
+}
+
+.tp-tuning-note {
+  font-size: 0.78rem;
+  color: var(--tp-text-dim);
+  margin: 0 0 0.75rem;
+}
+
+.tp-tuning-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.9rem;
+}
+
+.tp-tuning-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.tp-tuning-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.tp-tuning-field input {
+  padding: 0.4rem 0.6rem;
+  background: transparent;
+  color: inherit;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.tp-tuning-hint {
+  font-size: 0.72rem;
+  color: var(--tp-text-dim);
+  line-height: 1.35;
+}
+
+.tp-tuning-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--tp-text-dim);
+}

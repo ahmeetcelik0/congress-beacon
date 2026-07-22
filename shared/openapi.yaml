@@ -518,6 +518,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/HallVisitPage'
 
+  /attendance/hall-visits/{id}/trace:
+    get:
+      summary: Bir ziyaretin karar gerekcesi (decision trace)
+      description: >-
+        Ziyaretin giris ve (varsa) cikis kararini ureten ayrintilari doner:
+        aday salonlar, yumusatilmis (EMA) degerler, guven yuzdeleri, en yakin
+        rakiple fark ve elenen anormal okuma sayisi. Panel debug gorunumu icin.
+      operationId: getHallVisitTrace
+      tags:
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ziyaretin karar izi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HallVisitTrace'
+        '404':
+          description: Ziyaret bulunamadi.
+
+  /attendance/users/{userId}/summary:
+    get:
+      summary: Katilimci bazinda katilim ozeti
+      description: >-
+        Toplam kalis suresi, ziyaret edilen salon sayisi, giris/cikis sayisi,
+        ortalama guven skoru ve ilk/son gorulme zamani.
+      operationId: getUserAttendanceSummary
+      tags:
+        - Attendance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Katilimci ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAttendanceSummary'
+        '404':
+          description: Kullanici bulunamadi.
+
   /attendance/occupancy-series:
     get:
       summary: Zaman-dilimli salon doluluk serisi (yogunluk grafigi icin)
@@ -1040,8 +1097,28 @@ components:
           format: date-time
           nullable: true
         status:
+          description: Cihazin veri gonderme sagligi (son gozlem zamanina gore).
           type: string
           enum: [aktif, yakin_zamanda, veri_yok]
+        currentStatus:
+          description: >
+            Katilimcinin salon tespit algoritmasina gore anlik durumu.
+            NO_SIGNAL iki durumu birlestirir: sinyal var ama hicbir salon
+            esigini gecmiyor, ya da cihaz tamamen sessiz. Ayrim `status`
+            alaniyla yapilir (status=veri_yok ise cihaz sessizdir).
+          type: string
+          enum: [IN_HALL, AMBIGUOUS, NO_SIGNAL]
+        currentHallName:
+          description: currentStatus=IN_HALL ise bulundugu salon.
+          type: string
+          nullable: true
+        outlierRejectionRate:
+          description: >
+            Reddedilen (sentinel veya Hampel outlier) okumalarin toplam
+            okumalara orani. Sayaclar gecici olarak Redis'te tutulur; veri
+            yoksa null doner.
+          type: number
+          nullable: true
 
     TrackingHealth:
       type: object
@@ -1065,6 +1142,12 @@ components:
             yakinZamanda:
               type: integer
             veriYok:
+              type: integer
+            icerde:
+              type: integer
+            belirsiz:
+              type: integer
+            sinyalYok:
               type: integer
 
     DataQualityReport:
@@ -1118,6 +1201,15 @@ components:
           type: string
           format: date-time
           nullable: true
+        averageRssi:
+          description: >
+            Ortalama sinyal gucu (dBm). Sentinel (rssi >= 0) okumalar haric
+            tutulur; hic gecerli okuma yoksa null.
+          type: number
+          nullable: true
+        usersSeenCount:
+          description: Bu beacon'i goren farkli katilimci sayisi (kapsama gostergesi).
+          type: integer
 
     Session:
       type: object
@@ -1243,6 +1335,158 @@ components:
               medianMinutes:
                 type: number
                 nullable: true
+              averageConfidenceScore:
+                description: >
+                  Salon bazli ortalama guven yuzdesi (0-100). Yalnizca v3
+                  kararlarindan hesaplanir - v2 kayitlari ayni alanda ham dB
+                  marji tasidigi icin karistirilmaz.
+                type: number
+                nullable: true
+
+    UserAttendanceSummary:
+      type: object
+      required:
+        - userId
+        - firstName
+        - lastName
+        - totalMinutes
+        - visitCount
+        - distinctHallCount
+        - entryCount
+        - exitCount
+        - currentlyInside
+      properties:
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        totalMinutes:
+          description: Acik ziyaretlerde su ana kadarki sure de dahildir.
+          type: number
+        visitCount:
+          type: integer
+        distinctHallCount:
+          type: integer
+        entryCount:
+          type: integer
+        exitCount:
+          type: integer
+        averageConfidenceScore:
+          type: number
+          nullable: true
+        firstSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastSeenAt:
+          type: string
+          format: date-time
+          nullable: true
+        currentlyInside:
+          type: boolean
+
+    DecisionTrace:
+      description: >
+        Bir kararin gerekcesi. Kesin bir sema zorunlu degildir; amaci saha
+        testinde "neden bu salon secildi" sorusuna cevap verebilmektir.
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            type: object
+            properties:
+              hallId:
+                type: string
+                format: uuid
+              percentage:
+                type: number
+              emaAverage:
+                type: number
+              passesThreshold:
+                type: boolean
+              beaconReadings:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    beaconId:
+                      type: string
+                      format: uuid
+                    emaValue:
+                      type: number
+                    rawAccepted:
+                      type: boolean
+        runnerUpGapPct:
+          type: number
+        rejectedOutliers:
+          type: integer
+        algorithmVersion:
+          type: string
+
+    HallVisitTrace:
+      type: object
+      required:
+        - visitId
+        - userId
+        - hallId
+        - hallName
+        - startedAt
+        - isOpen
+        - algorithmVersion
+      properties:
+        visitId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        hallName:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        isOpen:
+          type: boolean
+        confidenceLevel:
+          type: string
+          nullable: true
+        algorithmVersion:
+          type: string
+        entry:
+          nullable: true
+          type: object
+          properties:
+            occurredAt:
+              type: string
+              format: date-time
+            confidenceScore:
+              type: number
+              nullable: true
+            decisionTrace:
+              $ref: '#/components/schemas/DecisionTrace'
+        exit:
+          nullable: true
+          type: object
+          properties:
+            occurredAt:
+              type: string
+              format: date-time
+            confidenceScore:
+              type: number
+              nullable: true
+            decisionTrace:
+              $ref: '#/components/schemas/DecisionTrace'
 
     HallVisitSummary:
       type: object
@@ -1697,6 +1941,39 @@ components:
           description: >-
             Mobil cihazlarin observation batch gonderim sikligi (saniye).
             Panelden (canli takip sayfasi) ayarlanir.
+        emaAlpha:
+          type: number
+          description: >-
+            EMA yumusatma katsayisi. 1'e yaklastikca sistem yeni olcume daha
+            hizli tepki verir, gurultuye de daha acik olur.
+        hampelK:
+          type: number
+          description: Hampel outlier filtresinin siddeti (kucukse daha cok okuma elenir).
+        hampelWindowSize:
+          type: integer
+          description: Outlier tespitinde bakilan son okuma sayisi.
+        confidenceTemperature:
+          type: number
+          description: Softmax sicakligi; buyudukce salon yuzdeleri birbirine yaklasir.
+        entryProbabilityThreshold:
+          type: number
+          description: Giris icin gereken guven yuzdesi. Cikis esiginden buyuk olmalidir.
+        exitProbabilityThreshold:
+          type: number
+          description: Altina dusuldugunde cikis sayilan guven yuzdesi.
+        ambiguityMarginPct:
+          type: number
+          description: >-
+            Ilk iki salonun yuzde farki bunun altindaysa sistem taraf secmez
+            (AMBIGUOUS) ve ne giris ne cikis tetikler.
+        staleGraceSeconds:
+          type: number
+          description: >-
+            Bir beacon'in son gecerli okumasindan sonra kac saniye daha
+            "hala guvenilir" sayilip son bilinen (donmus) EMA'siyla salon
+            ortalamasina dahil edilmeye devam edecegi. Tek beacon'li bir
+            salonun kisa sureli sinyal kesintisinde rakip salona sahte
+            gecisi (aninda EXIT+ENTRY) onlemek icin eklendi.
         createdAt:
           type: string
           format: date-time
@@ -1735,6 +2012,46 @@ components:
           minimum: 5
           maximum: 300
           default: 10
+        emaAlpha:
+          type: number
+          minimum: 0.01
+          maximum: 1
+          default: 0.35
+        hampelK:
+          type: number
+          minimum: 0.5
+          maximum: 10
+          default: 3
+        hampelWindowSize:
+          type: integer
+          minimum: 3
+          maximum: 20
+          default: 5
+        confidenceTemperature:
+          type: number
+          minimum: 0.5
+          maximum: 50
+          default: 8
+        entryProbabilityThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 60
+        exitProbabilityThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+          default: 40
+        ambiguityMarginPct:
+          type: number
+          minimum: 0
+          maximum: 50
+          default: 5
+        staleGraceSeconds:
+          type: number
+          minimum: 0
+          maximum: 60
+          default: 5
 
     CongressUpdate:
       type: object
@@ -1762,6 +2079,38 @@ components:
           type: integer
           minimum: 5
           maximum: 300
+        emaAlpha:
+          type: number
+          minimum: 0.01
+          maximum: 1
+        hampelK:
+          type: number
+          minimum: 0.5
+          maximum: 10
+        hampelWindowSize:
+          type: integer
+          minimum: 3
+          maximum: 20
+        confidenceTemperature:
+          type: number
+          minimum: 0.5
+          maximum: 50
+        entryProbabilityThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+        exitProbabilityThreshold:
+          type: number
+          minimum: 0
+          maximum: 100
+        ambiguityMarginPct:
+          type: number
+          minimum: 0
+          maximum: 50
+        staleGraceSeconds:
+          type: number
+          minimum: 0
+          maximum: 60
 
     Hall:
       type: object

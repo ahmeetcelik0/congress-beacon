@@ -32,6 +32,14 @@ export function DurationStatsGrid({ stats }: { stats: HallDurationStats[] }) {
             <div style={{ fontSize: '0.78rem', color: 'var(--tp-text-dim)', marginTop: '0.35rem' }}>
               medyan {formatMinutes(hall.medianMinutes)} · {hall.visitCount} tamamlanan ziyaret
             </div>
+            {hall.averageConfidenceScore !== null && (
+              <div
+                style={{ fontSize: '0.78rem', color: 'var(--tp-text-dim)', marginTop: '0.2rem' }}
+                title="Bu salona yapılan girişlerin ortalama güven yüzdesi — beacon yerleşiminin ne kadar net çalıştığının göstergesi."
+              >
+                ortalama güven %{Math.round(hall.averageConfidenceScore)}
+              </div>
+            )}
           </div>
         );
       })}

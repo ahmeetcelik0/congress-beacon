@@ -4,6 +4,7 @@ import { AttendanceQueryService } from './attendance-query.service';
 import { AttendanceController } from './attendance.controller';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { StaleVisitSweepService } from './stale-visit-sweep.service';
+import { BeaconSignalStore } from './signal/beacon-signal-store';
 
 @Module({
   imports: [AdminAuthModule],
@@ -12,7 +13,12 @@ import { StaleVisitSweepService } from './stale-visit-sweep.service';
     AttendanceProcessingService,
     AttendanceQueryService,
     StaleVisitSweepService,
+    BeaconSignalStore,
   ],
-  exports: [AttendanceProcessingService, AttendanceQueryService],
+  exports: [
+    AttendanceProcessingService,
+    AttendanceQueryService,
+    BeaconSignalStore,
+  ],
 })
 export class AttendanceModule {}

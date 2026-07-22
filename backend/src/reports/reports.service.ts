@@ -38,15 +38,38 @@ export class ReportsService {
       },
     });
 
-    const observationStats = await this.prisma.beaconObservation.groupBy({
-      by: ['beaconId'],
-      where: { congressId, beaconId: { not: null } },
-      _max: { serverReceivedAt: true },
-      _count: { _all: true },
-    });
+    const [observationStats, rssiStats, userStats] = await Promise.all([
+      this.prisma.beaconObservation.groupBy({
+        by: ['beaconId'],
+        where: { congressId, beaconId: { not: null } },
+        _max: { serverReceivedAt: true },
+        _count: { _all: true },
+      }),
+      // Ortalama RSSI'da sentinel (rssi >= 0) okumalar haric tutulur; dahil
+      // edilseler ortalamayi gercekte olmadigi kadar "guclu" gosterirlerdi.
+      this.prisma.beaconObservation.groupBy({
+        by: ['beaconId'],
+        where: { congressId, beaconId: { not: null }, rssi: { lt: 0 } },
+        _avg: { rssi: true },
+      }),
+      // Bir beacon'i kac FARKLI katilimci gordu - kapsama alaninin gostergesi.
+      this.prisma.beaconObservation.groupBy({
+        by: ['beaconId', 'userId'],
+        where: { congressId, beaconId: { not: null } },
+      }),
+    ]);
+
     const statsMap = new Map(
       observationStats.map((row) => [row.beaconId, row]),
     );
+    const rssiMap = new Map(
+      rssiStats.map((row) => [row.beaconId, row._avg.rssi]),
+    );
+    const usersSeenMap = new Map<string, number>();
+    for (const row of userStats) {
+      if (!row.beaconId) continue;
+      usersSeenMap.set(row.beaconId, (usersSeenMap.get(row.beaconId) ?? 0) + 1);
+    }
 
     return beacons.map((beacon) => {
       const stats = statsMap.get(beacon.id);
@@ -61,6 +84,8 @@ export class ReportsService {
         isAssigned: activeAssignment !== null,
         observationCount: stats?._count._all ?? 0,
         lastSeenAt: stats?._max.serverReceivedAt ?? null,
+        averageRssi: rssiMap.get(beacon.id) ?? null,
+        usersSeenCount: usersSeenMap.get(beacon.id) ?? 0,
       };
     });
   }

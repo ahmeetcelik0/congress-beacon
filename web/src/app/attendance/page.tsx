@@ -5,6 +5,8 @@ import { LiveDashboard } from './components/live-dashboard';
 import { HallVisitsTable } from './components/hall-visits-table';
 import { RawObservationFeed } from './components/raw-observation-feed';
 import { ObservationIntervalControl } from './components/observation-interval-control';
+import { DecisionTracePanel } from './components/decision-trace-panel';
+import { AlgorithmTuningControl } from './components/algorithm-tuning-control';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -69,6 +71,27 @@ export default async function AttendancePage({
           </section>
 
           <RawObservationFeed congressId={congressId} />
+
+          <DecisionTracePanel congressId={congressId} />
+
+          {selectedCongress && (
+            <AlgorithmTuningControl
+              key={`tuning-${selectedCongress.id}`}
+              congressId={selectedCongress.id}
+              initialValues={{
+                emaAlpha: selectedCongress.emaAlpha,
+                hampelK: selectedCongress.hampelK,
+                hampelWindowSize: selectedCongress.hampelWindowSize,
+                confidenceTemperature: selectedCongress.confidenceTemperature,
+                entryProbabilityThreshold:
+                  selectedCongress.entryProbabilityThreshold,
+                exitProbabilityThreshold:
+                  selectedCongress.exitProbabilityThreshold,
+                ambiguityMarginPct: selectedCongress.ambiguityMarginPct,
+                staleGraceSeconds: selectedCongress.staleGraceSeconds,
+              }}
+            />
+          )}
         </>
       )}
     </main>
