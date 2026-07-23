@@ -30,6 +30,18 @@ function formatDateTime(iso: string): string {
   });
 }
 
+// v3 kararlarinda guven, 0-100 arasi gercek bir yuzdedir; v2'de yalnizca
+// "yuksek/orta/dusuk" etiketi vardi. Eski kayitlarda yuzde yok, etiket kalir.
+function formatConfidence(
+  confidenceLevel: string | null,
+  confidenceScore: number | null,
+): string {
+  if (confidenceScore === null) {
+    return confidenceLevel ?? '—';
+  }
+  return `%${Math.round(confidenceScore)}${confidenceLevel ? ` · ${confidenceLevel}` : ''}`;
+}
+
 export function HallVisitsTable({
   congressId,
   halls,
@@ -167,7 +179,9 @@ export function HallVisitsTable({
               </td>
               <td>{formatDateTime(visit.startedAt)}</td>
               <td>{formatDuration(visit.startedAt, visit.endedAt)}</td>
-              <td>{visit.confidenceLevel ?? '—'}</td>
+              <td>
+                {formatConfidence(visit.confidenceLevel, visit.confidenceScore)}
+              </td>
               <td>
                 <span className={`tp-badge ${visit.isOpen ? 'tp-open' : 'tp-closed'}`}>
                   {visit.isOpen ? 'içeride' : 'çıktı'}

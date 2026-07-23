@@ -36,6 +36,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+// Salon tespit algoritmasi v3 ayarlari (kongre bazli, panelden ayarlanir).
+export type AlgorithmTuning = {
+  emaAlpha: number;
+  hampelK: number;
+  hampelWindowSize: number;
+  confidenceTemperature: number;
+  entryProbabilityThreshold: number;
+  exitProbabilityThreshold: number;
+  ambiguityMarginPct: number;
+  staleGraceSeconds: number;
+};
+
 export type Congress = {
   id: string;
   name: string;
@@ -44,9 +56,10 @@ export type Congress = {
   beaconUuid: string;
   startDate: string | null;
   endDate: string | null;
+  observationIntervalSeconds: number;
   createdAt: string;
   updatedAt: string;
-};
+} & AlgorithmTuning;
 
 export type Hall = {
   id: string;
@@ -107,6 +120,9 @@ export type HallDurationStats = {
   visitCount: number;
   averageMinutes: number | null;
   medianMinutes: number | null;
+  // Yalnizca v3 kararlarindan; o salonun beacon yerlesiminin ne kadar "net"
+  // calistiginin gostergesi.
+  averageConfidenceScore: number | null;
 };
 
 export type AttendanceSummary = {
@@ -134,10 +150,13 @@ export type BeaconHealthItem = {
   isAssigned: boolean;
   observationCount: number;
   lastSeenAt: string | null;
+  averageRssi: number | null;
+  usersSeenCount: number;
 };
 
 export type HallVisitSummary = {
   id: string;
+  userId: string;
   userFirstName: string;
   userLastName: string;
   hallId: string;
@@ -146,6 +165,8 @@ export type HallVisitSummary = {
   endedAt: string | null;
   isOpen: boolean;
   confidenceLevel: string | null;
+  // 0-100 arasi gercek yuzde; yalnizca v3 kararlarinda dolu, v2'de null.
+  confidenceScore: number | null;
   algorithmVersion: string;
 };
 
@@ -171,6 +192,12 @@ export type OccupancySeries = {
 
 export type TrackingHealthStatus = 'aktif' | 'yakin_zamanda' | 'veri_yok';
 
+// Katilimcinin salon tespit algoritmasina gore anlik durumu.
+// NO_SIGNAL iki durumu birlestirir: sinyal var ama hicbir salon esigini
+// gecmiyor, ya da cihaz tamamen sessiz. Ayrim `status` alanindan yapilir
+// (status === 'veri_yok' ise cihaz sessizdir).
+export type PresenceStatus = 'IN_HALL' | 'AMBIGUOUS' | 'NO_SIGNAL';
+
 export type TrackingHealthItem = {
   userId: string;
   firstName: string;
@@ -179,11 +206,73 @@ export type TrackingHealthItem = {
   deviceAppVersion: string | null;
   lastObservationAt: string | null;
   status: TrackingHealthStatus;
+  currentStatus: PresenceStatus;
+  currentHallName: string | null;
+  outlierRejectionRate: number | null;
 };
 
 export type TrackingHealth = {
   items: TrackingHealthItem[];
-  summary: { aktif: number; yakinZamanda: number; veriYok: number };
+  summary: {
+    aktif: number;
+    yakinZamanda: number;
+    veriYok: number;
+    icerde: number;
+    belirsiz: number;
+    sinyalYok: number;
+  };
+};
+
+export type DecisionTrace = {
+  candidates: {
+    hallId: string;
+    percentage: number;
+    emaAverage: number;
+    passesThreshold: boolean;
+    beaconReadings: {
+      beaconId: string;
+      emaValue: number;
+      rawAccepted: boolean;
+    }[];
+  }[];
+  runnerUpGapPct: number;
+  rejectedOutliers: number;
+  algorithmVersion: string;
+};
+
+type TracedEvent = {
+  occurredAt: string;
+  confidenceScore: number | null;
+  decisionTrace: DecisionTrace | null;
+};
+
+export type HallVisitTrace = {
+  visitId: string;
+  userId: string;
+  hallId: string;
+  hallName: string;
+  startedAt: string;
+  endedAt: string | null;
+  isOpen: boolean;
+  confidenceLevel: string | null;
+  algorithmVersion: string;
+  entry: TracedEvent | null;
+  exit: TracedEvent | null;
+};
+
+export type UserAttendanceSummary = {
+  userId: string;
+  firstName: string;
+  lastName: string;
+  totalMinutes: number;
+  visitCount: number;
+  distinctHallCount: number;
+  entryCount: number;
+  exitCount: number;
+  averageConfidenceScore: number | null;
+  firstSeenAt: string | null;
+  lastSeenAt: string | null;
+  currentlyInside: boolean;
 };
 
 export type ObservationSummary = {
@@ -223,6 +312,10 @@ export const api = {
   listCongresses: () => request<Congress[]>('/congresses'),
   createCongress: (data: { name: string; code: string; accessCode: string; beaconUuid: string }) =>
     request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
+  updateCongress: (
+    id: string,
+    data: Partial<{ observationIntervalSeconds: number } & AlgorithmTuning>,
+  ) => request<Congress>(`/congresses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
   listHalls: (congressId: string) =>
@@ -263,6 +356,12 @@ export const api = {
     page?: number;
     pageSize?: number;
   }) => request<HallVisitPage>(`/attendance/hall-visits${buildQuery(params)}`),
+
+  getHallVisitTrace: (visitId: string) =>
+    request<HallVisitTrace>(`/attendance/hall-visits/${visitId}/trace`),
+
+  getUserAttendanceSummary: (userId: string) =>
+    request<UserAttendanceSummary>(`/attendance/users/${userId}/summary`),
 
   getOccupancySeries: (params: {
     congressId: string;

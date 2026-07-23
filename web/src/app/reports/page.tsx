@@ -69,6 +69,10 @@ export default async function ReportsPage({
                 <th>Minor</th>
                 <th>Salon</th>
                 <th>Gözlem Sayısı</th>
+                <th title="Sentinel (rssi ≥ 0) okumalar hariç">Ortalama RSSI</th>
+                <th title="Bu beacon'ı gören farklı katılımcı sayısı — kapsama göstergesi">
+                  Gören Katılımcı
+                </th>
                 <th>Son Görülme</th>
               </tr>
             </thead>
@@ -80,12 +84,18 @@ export default async function ReportsPage({
                   <td>{beacon.minor}</td>
                   <td>{beacon.assignedHallName ?? 'atanmamış'}</td>
                   <td>{beacon.observationCount}</td>
+                  <td>
+                    {beacon.averageRssi === null
+                      ? '—'
+                      : `${beacon.averageRssi.toFixed(1)} dBm`}
+                  </td>
+                  <td>{beacon.usersSeenCount}</td>
                   <td>{formatTime(beacon.lastSeenAt)}</td>
                 </tr>
               ))}
               {beaconHealth?.length === 0 && (
                 <tr>
-                  <td colSpan={6}>Bu kongrede henüz beacon yok.</td>
+                  <td colSpan={8}>Bu kongrede henüz beacon yok.</td>
                 </tr>
               )}
             </tbody>

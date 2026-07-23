@@ -21,6 +21,35 @@ model Congress {
   beaconUuid String
   startDate  DateTime?
   endDate    DateTime?
+  // Mobil cihazlarin observation batch'lerini kac saniyede bir gonderecegini
+  // belirler. Panelden degistirilebilir; mobil uygulama bunu koda gomulu
+  // sabit yerine her batch gonderiminde backend'den ogrenir (bkz.
+  // POST /observations/batch response'u).
+  observationIntervalSeconds Int       @default(10)
+
+  // Salon tespit algoritmasi v3 ayarlari. Ayri bir AlgorithmConfig tablosu
+  // KURULMUYOR - proje zaten kongre-bazli ayar desenini (yukaridaki
+  // observationIntervalSeconds) kullaniyor; bu olcekte ayri bir tablo erken
+  // karmasiklik olurdu. Saha kalibrasyonunda panelden ince ayar yapilir.
+  emaAlpha                  Float @default(0.35)
+  hampelK                   Float @default(3)
+  hampelWindowSize          Int   @default(5)
+  confidenceTemperature     Float @default(8)
+  entryProbabilityThreshold Float @default(60)
+  exitProbabilityThreshold  Float @default(40)
+  ambiguityMarginPct        Float @default(5)
+  // Bir beacon'in son GERCEKTEN gecerli okumasindan sonra kac saniye daha
+  // "hala guvenilir" sayilacagi (son bilinen EMA'si donmus halde salon
+  // ortalamasina dahil edilmeye devam eder). Saha testinde bulunan gercek bir
+  // hataya cozum: tek beacon'li bir salonun beacon'i 1-2 tur (rssi=0/outlier)
+  // gecersiz okuma donduginde salon aninda adaylik disi kalip rakip salona
+  // "isinlanma" (aninda EXIT+ENTRY) olusuyordu, cunku o an baska aday
+  // olmadigindan rakip salon "tek aday" sayilip %100 kazaniyordu. Grace suresi
+  // icindeki beacon, softmax karsilastirmasinda haklı rekabetini surdurur -
+  // rakip gercekten daha guclu ise yine kaybeder, degilse sahte kazanc
+  // olusmaz. Bkz. docs/decisions.md.
+  staleGraceSeconds         Float @default(5)
+
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -189,14 +218,22 @@ enum AttendanceEventType {
 }
 
 model AttendanceEvent {
-  id               String              @id @default(uuid())
-  userId           String
-  hallId           String
-  type             AttendanceEventType
-  occurredAt       DateTime
-  confidenceScore  Float?
+  id     String              @id @default(uuid())
+  userId String
+  hallId String
+  type   AttendanceEventType
+
+  occurredAt DateTime
+  // v2'de ham dB marjini tasiyordu, v3'ten itibaren 0-100 arasi guven YUZDESI
+  // tasir. Gecmis veri icin backfill YAPILMADI - algorithmVersion ayrimi
+  // ('v2' vs 'v3') sayesinde eski/yeni anlam karismaz.
+  confidenceScore Float?
+  // Karar gerekcesi: hangi salonlar, hangi yumusatilmis degerler, yuzdeler,
+  // en yakin rakiple fark, kac okuma outlier diye elendi. Saha testinde
+  // "neden burada yanlis salon secildi" sorusuna cevap verebilmek icin.
+  decisionTrace    Json?
   algorithmVersion String
-  createdAt        DateTime            @default(now())
+  createdAt        DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
   hall Hall @relation(fields: [hallId], references: [id])
@@ -252,13 +289,27 @@ model AuditLog {
   @@index([entityType, entityId])
 }
 
+enum PresenceStatus {
+  IN_HALL // net bir salonda, dogrulanmis
+  AMBIGUOUS // iki (veya daha fazla) salon arasinda, yuzdeler birbirine cok yakin
+  // NO_SIGNAL iki farkli gercekligi tek etikette birlestirir (bilincli
+  // basitlestirme): (a) cihaz veri gonderiyor ama hicbir salon esigini/giris
+  // yuzdesini gecmiyor - zayif sinyal, koridor, kalibrasyonsuz bolge;
+  // (b) cihaz tamamen sessiz - Bluetooth kapali, uygulama durmus.
+  // Ayrim kaybolmuyor: Takip Sagligi sayfasi lastObservationAt uzerinden
+  // ikisini zaten ayiriyor (cihaz 'aktif'/'yakin_zamanda' iken NO_SIGNAL =
+  // zayif sinyal; 'veri_yok' iken = sessiz cihaz).
+  NO_SIGNAL
+}
+
 model UserPresenceState {
-  userId              String   @id
+  userId              String         @id
   candidateHallId     String?
-  candidateStreak     Int      @default(0)
-  nonQualifyingStreak Int      @default(0)
-  openHallVisitId     String?  @unique
-  updatedAt           DateTime @updatedAt
+  candidateStreak     Int            @default(0)
+  nonQualifyingStreak Int            @default(0)
+  openHallVisitId     String?        @unique
+  currentStatus       PresenceStatus @default(NO_SIGNAL)
+  updatedAt           DateTime       @updatedAt
 
   user          User       @relation(fields: [userId], references: [id])
   openHallVisit HallVisit? @relation(fields: [openHallVisitId], references: [id])

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Since the previous agent might have used an absolute import, let's stick to relative imports to avoid package name mismatch
 import '../../../../main.dart';
@@ -36,6 +37,7 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
   );
 
   bool _isServiceInitializing = true;
+  bool _needsAlwaysPermission = false;
 
   @override
   void initState() {
@@ -70,6 +72,8 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
         if (mounted) {
           setState(() {
             _serviceState = state;
+            _needsAlwaysPermission =
+                _observationService?.needsAlwaysLocationPermission ?? false;
           });
         }
       });
@@ -169,6 +173,48 @@ class _ParticipantHomePageState extends State<ParticipantHomePage> {
                   ),
                 ),
               ),
+              if (_needsAlwaysPermission) ...[
+                const SizedBox(height: 16),
+                Card(
+                  color: Colors.amber.shade100,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, color: Colors.amber.shade900),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Arka planda takip için konum izni gerekiyor',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Uygulama arka plandayken veya kilit ekranındayken salon takibinin '
+                          'çalışması için konum izninin "Her Zaman" olarak ayarlanması gerekir. '
+                          'Şu an yalnızca uygulama açıkken izin verilmiş görünüyor.',
+                          style: TextStyle(color: Colors.amber.shade900),
+                        ),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: () => launchUrl(Uri.parse('app-settings:')),
+                          icon: const Icon(Icons.settings),
+                          label: const Text('Ayarları Aç'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               if (kDebugMode) ...[
                 const SizedBox(height: 20),
                 Card(

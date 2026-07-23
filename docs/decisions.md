@@ -37,6 +37,49 @@
   optimizasyonu, ranging'i durdurmadan, yalnızca gönderim (network) sıklığını
   ayarlayarak yapılmalı.
 
+## Salon Tespit Algoritması v3 — Uygulama Sırasında Alınan Kararlar
+
+`docs/algoritma-v3-uygulama-talimati.md` uygulanırken, canlı test sonucunda
+spesifikasyondan **bilinçli olarak sapılan** noktalar. Kodu okuyan biri
+spesifikasyonla çelişki sanmasın diye burada kayıtlı:
+
+- **Hampel penceresi her zaman, koşulsuz kayar** (talimat §5 Katman 1.4
+  "reddedilen okumada Redis state değişmez" diyordu). Yalnızca kabul edilen
+  okumalar pencereye alındığında pencere homojenleşiyor, MAD küçülüyor, kabul
+  bandı daralıyor ve katılımcı gerçekten hareket ettiğinde tüm yeni okumalar
+  reddedilip pencere hiç güncellenmiyordu — referans eski konumda **kalıcı
+  olarak kilitleniyordu**. Canlı testte doğrulandı: pencere `[-70,-68,-70,-71,-68]`
+  değerinde dondu, 12 ardışık okuma elendi ve o beacon TTL boyunca (8 saat)
+  karar hesabından tamamen düştü. Artık `isHampelOutlier` yalnızca "bu okuma
+  EMA'ya beslensin mi" sorusunu cevaplıyor; pencereye ekleme koşulsuz. Tek
+  seferlik sıçrama hâlâ eleniyor (medyan 5'te 1 uç değere zaten dayanıklı),
+  ama sürekli bir değişim pencere dolunca kendiliğinden öğreniliyor.
+  Sentinel (`rssi >= 0`) okumalar bunun istisnası: gerçek bir ölçüm olmadıkları
+  için pencereye de girmezler, medyanı bozarlardı.
+- **`MAD = 0` durumunda Hampel devre dışı.** Telefon sabit dururken RSSI aynı
+  değere kuantalanır; `|x − medyan| > k · 0` kuralı medyandan 1 dB farklı her
+  okumayı reddedip filtreyi kilitlerdi. Yukarıdaki kuralla birlikte durur:
+  ikisi farklı sorunları çözer (bu kural EMA'nın donmasını, pencerenin
+  kayması referansın donmasını önler).
+- **Belirsizlik (AMBIGUOUS) yalnızca salon eşiğini geçen salonlar arasında
+  aranır.** Aksi halde koridorda duran, iki salonu da zayıf gören bir katılımcı
+  "belirsiz" sayılır, çıkış sayacı donar ve açık ziyareti hiç kapanmazdı.
+- **Belirsizlikte açık ziyaret canlı tutulur** (`lastConfirmedAt` tazelenir),
+  giriş/çıkış yine tetiklenmez. İki salon arasındaki duvarda oturan bir
+  katılımcının tek bir 60 dakikalık ziyareti, aksi halde `stale-visit-sweep`
+  tarafından 5 dakikada bir kapatılıp onlarca parçaya bölünür ve kalış
+  süresi/medyan istatistikleri bozulurdu.
+- **Salonda kalmak için hem yüzde hem salon eşiği aranır.** Yalnızca yüzdeye
+  bakılsaydı, koridora çıkmış ama hâlâ tek başına o salonu gören bir katılımcı
+  %100 yüzdeyle sonsuza kadar "içerde" görünürdü.
+- **`PresenceStatus.NO_SIGNAL` iki gerçekliği birleştirir** (sinyal var ama
+  hiçbir salon eşiğini geçmiyor / cihaz tamamen sessiz). Bilinçli bir
+  basitleştirme: ayrım kaybolmuyor, Takip Sağlığı sayfası `lastObservationAt`
+  üzerinden ikisini ayırıyor.
+- **Güven yüzdesi sinyal kalitesi DEĞİL, salonlar arası göreceliktir.** Tek
+  salon görülüyorsa sinyal −95 dBm bile olsa yüzde %100 çıkar; gerçek koruma
+  her zaman `Hall.rssiThreshold` kapısıdır.
+
 ## Git Çalışma Düzeni
 
 - `main`: Test edilmiş, kararlı sürümler.

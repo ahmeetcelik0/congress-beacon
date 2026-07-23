@@ -20,6 +20,7 @@ export type IngestionResult = {
   duplicateCount: number;
   rejectedCount: number;
   acceptedSnapshots: AcceptedSnapshot[];
+  observationIntervalSeconds: number;
 };
 
 @Injectable()
@@ -125,6 +126,17 @@ export class ObservationIngestionService {
       data: { acceptedCount, duplicateCount, rejectedCount },
     });
 
-    return { acceptedCount, duplicateCount, rejectedCount, acceptedSnapshots };
+    const congress = await this.prisma.congress.findUnique({
+      where: { id: user.congressId },
+      select: { observationIntervalSeconds: true },
+    });
+
+    return {
+      acceptedCount,
+      duplicateCount,
+      rejectedCount,
+      acceptedSnapshots,
+      observationIntervalSeconds: congress?.observationIntervalSeconds ?? 10,
+    };
   }
 }

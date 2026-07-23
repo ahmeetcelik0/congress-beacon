@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendanceEventType } from '../../generated/prisma/client';
+import {
+  AttendanceEventType,
+  PresenceStatus,
+} from '../../generated/prisma/client';
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
@@ -91,6 +94,9 @@ export class StaleVisitSweepService implements OnModuleInit, OnModuleDestroy {
             nonQualifyingStreak: 0,
             candidateHallId: null,
             candidateStreak: 0,
+            // Ziyaret cihaz sustugu icin kapatiliyor; presence state'i
+            // IN_HALL'da birakmak panelde yanlis bilgi olurdu.
+            currentStatus: PresenceStatus.NO_SIGNAL,
           },
         }),
       ]);

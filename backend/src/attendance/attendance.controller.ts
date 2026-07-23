@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import { AttendanceQueryService } from './attendance-query.service';
 import { CongressScopeDto } from './dto/congress-scope.dto';
 import { HallVisitsQueryDto } from './dto/hall-visits-query.dto';
@@ -18,6 +18,16 @@ export class AttendanceController {
   @Get('hall-visits')
   getHallVisits(@Query() query: HallVisitsQueryDto) {
     return this.queryService.getHallVisits(query);
+  }
+
+  @Get('hall-visits/:id/trace')
+  getHallVisitTrace(@Param('id') id: string) {
+    return this.queryService.getVisitTrace(id);
+  }
+
+  @Get('users/:userId/summary')
+  getUserSummary(@Param('userId') userId: string) {
+    return this.queryService.getUserSummary(userId);
   }
 
   @Get('occupancy-series')

@@ -17,6 +17,23 @@ const STATUS_CLASS: Record<string, string> = {
   veri_yok: 'th-badge th-none',
 };
 
+const PRESENCE_LABEL: Record<string, string> = {
+  IN_HALL: 'İçeride',
+  AMBIGUOUS: 'Belirsiz',
+  NO_SIGNAL: 'Sinyal yok',
+};
+
+const PRESENCE_CLASS: Record<string, string> = {
+  IN_HALL: 'th-badge th-active',
+  AMBIGUOUS: 'th-badge th-recent',
+  NO_SIGNAL: 'th-badge th-none',
+};
+
+function formatRate(rate: number | null): string {
+  if (rate === null) return '—';
+  return `%${Math.round(rate * 100)}`;
+}
+
 function formatTime(iso: string | null): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleString('tr-TR', {
@@ -57,13 +74,23 @@ export function TrackingHealthView({
         <span className="th-badge th-none">{data.summary.veriYok} veri yok</span>
       </div>
 
+      <div className="th-summary">
+        <span className="th-badge th-active">{data.summary.icerde} içeride</span>
+        <span className="th-badge th-recent">{data.summary.belirsiz} belirsiz</span>
+        <span className="th-badge th-none">{data.summary.sinyalYok} sinyal yok</span>
+      </div>
+
       <table className="panel-table">
         <thead>
           <tr>
             <th>Katılımcı</th>
             <th>Cihaz</th>
             <th>Son Gözlem</th>
-            <th>Durum</th>
+            <th title="Cihazın veri gönderme sağlığı">Veri Akışı</th>
+            <th title="Salon tespit algoritmasına göre anlık konum durumu">Konum Durumu</th>
+            <th title="Elenen anormal okumaların toplam okumalara oranı — sinyal ortamının gürültü göstergesi">
+              Anormal Okuma
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -77,11 +104,18 @@ export function TrackingHealthView({
               <td>
                 <span className={STATUS_CLASS[item.status]}>{STATUS_LABEL[item.status]}</span>
               </td>
+              <td>
+                <span className={PRESENCE_CLASS[item.currentStatus]}>
+                  {PRESENCE_LABEL[item.currentStatus]}
+                </span>
+                {item.currentHallName && <> {item.currentHallName}</>}
+              </td>
+              <td>{formatRate(item.outlierRejectionRate)}</td>
             </tr>
           ))}
           {data.items.length === 0 && (
             <tr>
-              <td colSpan={4}>Bu kongrede henüz katılımcı yok.</td>
+              <td colSpan={6}>Bu kongrede henüz katılımcı yok.</td>
             </tr>
           )}
         </tbody>

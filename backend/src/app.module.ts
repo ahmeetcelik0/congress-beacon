@@ -18,11 +18,13 @@ import { TrackingHealthModule } from './tracking-health/tracking-health.module';
 import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SessionModule } from './session/session.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    RedisModule,
     HealthModule,
     CongressModule,
     HallModule,
