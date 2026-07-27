@@ -31,3 +31,9 @@ coverage/
 
 # TypeScript
 *.tsbuildinfo
+
+# Ajan hafıza dosyaları (agent-memory) - hicbir yerde commit edilmemeli
+**/.claude/agent-memory/
+
+# Yerel ekran görüntüleri - GitHub'a asla pushlanmayacak
+/ekranGörüntüleri/

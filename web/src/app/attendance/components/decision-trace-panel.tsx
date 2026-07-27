@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, type HallVisitSummary, type HallVisitTrace } from '@/lib/api';
+import { ErrorState } from '@/components/ui/error-state';
 
 const VISIT_LIMIT = 15;
 
@@ -13,6 +14,17 @@ function formatDateTime(iso: string): string {
     minute: '2-digit',
     second: '2-digit',
   });
+}
+
+// Uc durumu ayirt eder: taze okuma (etiket yok), grace suresiyle donmus
+// (hala ortalamaya dahil, ELENMEDI), gercekten elenmis (Hampel/sentinel,
+// ortalamaya hic girmedi). Onceden ikinci ve ucuncu durum ayni "(elendi)"
+// etiketini paylasiyordu - bu, grace ile kazanilmis bir karari "elenmis"
+// gibi gosterip yanlis izlenim veriyordu.
+function readingSuffix(reading: { rawAccepted: boolean; stale?: boolean }): string {
+  if (reading.rawAccepted) return '';
+  if (reading.stale) return ' (donmuş · grace)';
+  return ' (elendi)';
 }
 
 function TraceDetail({
@@ -53,7 +65,7 @@ function TraceDetail({
             {candidate.beaconReadings.map((reading) => (
               <span key={reading.beaconId}>
                 {reading.beaconId.slice(0, 8)}… {reading.emaValue.toFixed(1)}dBm
-                {reading.rawAccepted ? '' : ' (elendi)'}
+                {readingSuffix(reading)}
               </span>
             ))}
           </div>
@@ -68,6 +80,13 @@ function TraceDetail({
 export function DecisionTracePanel({ congressId }: { congressId: string }) {
   const [open, setOpen] = useState(false);
   const [visits, setVisits] = useState<HallVisitSummary[] | null>(null);
+  // Ziyaret LİSTESİNİN yüklenememesi ("gerçek hata") ile "bu kongrede v3
+  // karar izi olan ziyaret yok" ("gerçek boş durum") birbirine karışmasın
+  // diye ayrı tutulur — önceden ikisi de aynı "visits: []" ile temsil
+  // ediliyordu, bu da hata durumunda yanlışlıkla "kayıt yok" mesajı
+  // gösteriyordu.
+  const [visitsError, setVisitsError] = useState<string | null>(null);
+  const [visitsRetryTick, setVisitsRetryTick] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [trace, setTrace] = useState<HallVisitTrace | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +103,7 @@ export function DecisionTracePanel({ congressId }: { congressId: string }) {
       .then((result) => {
         if (cancelled) return;
         setVisits(result.items);
+        setVisitsError(null);
         // Karar izi yalnızca v3 kararlarında var; ilk uygun ziyaret seçilir.
         const firstTraceable = result.items.find(
           (visit) => visit.algorithmVersion === 'v3',
@@ -91,13 +111,15 @@ export function DecisionTracePanel({ congressId }: { congressId: string }) {
         setSelectedId((current) => current ?? firstTraceable?.id ?? null);
       })
       .catch(() => {
-        if (!cancelled) setVisits([]);
+        if (!cancelled) {
+          setVisitsError((previous) => previous ?? 'Ziyaret listesi alınamadı.');
+        }
       });
 
     return () => {
       cancelled = true;
     };
-  }, [open, congressId]);
+  }, [open, congressId, visitsRetryTick]);
 
   useEffect(() => {
     if (!open || !selectedId) {
@@ -143,16 +165,28 @@ export function DecisionTracePanel({ congressId }: { congressId: string }) {
 
       {open && (
         <div className="tp-raw-feed">
-          {!visits && <div className="tp-empty">Yükleniyor…</div>}
+          {!visits && !visitsError && <div className="tp-empty">Yükleniyor…</div>}
 
-          {visits && traceableVisits.length === 0 && (
+          {visitsError && (
+            <ErrorState
+              title="Ziyaret listesi yüklenemedi."
+              description={visitsError}
+              action={
+                <button type="button" onClick={() => setVisitsRetryTick((tick) => tick + 1)}>
+                  Yeniden dene
+                </button>
+              }
+            />
+          )}
+
+          {visits && !visitsError && traceableVisits.length === 0 && (
             <div className="tp-empty">
               Karar izi olan (v3) ziyaret yok. Eski kayıtlarda bu bilgi
               tutulmuyordu.
             </div>
           )}
 
-          {traceableVisits.length > 0 && (
+          {!visitsError && traceableVisits.length > 0 && (
             <>
               <select
                 className="tp-trace-select"

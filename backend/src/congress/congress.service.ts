@@ -1,9 +1,11 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client';
 import { CreateCongressDto } from './dto/create-congress.dto';
 import { UpdateCongressDto } from './dto/update-congress.dto';
 
@@ -61,6 +63,25 @@ export class CongressService {
       );
     }
 
+    // Ayni birlesik-kontrol deseni tarihler icin: DTO seviyesindeki
+    // `IsDateOnOrAfterField` yalnizca iki alan da AYNI istekte gelirse
+    // calisabiliyor. Yalnizca `endDate` (veya yalnizca `startDate`)
+    // gonderilen kismi bir PATCH, kayittaki diger tarihle celisebilir - bu
+    // yuzden nihai (kayitli + gelen) cift burada bir kez daha dogrulanir.
+    const finalStartDate = dto.startDate
+      ? new Date(dto.startDate)
+      : current.startDate;
+    const finalEndDate = dto.endDate ? new Date(dto.endDate) : current.endDate;
+    if (
+      finalStartDate &&
+      finalEndDate &&
+      finalEndDate.getTime() < finalStartDate.getTime()
+    ) {
+      throw new BadRequestException(
+        'Bitis tarihi baslangic tarihinden once olamaz.',
+      );
+    }
+
     return this.prisma.congress.update({
       where: { id },
       data: {
@@ -73,6 +94,25 @@ export class CongressService {
 
   async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.congress.delete({ where: { id } });
+    try {
+      await this.prisma.congress.delete({ where: { id } });
+    } catch (error) {
+      // Congress'e dogrudan bagli Hall/Beacon/User/Session kayitlari varsa
+      // MySQL FK kisitlamasi (ON DELETE RESTRICT) siliniyi reddeder - Prisma
+      // bunu P2003 olarak raporlar (canli dogrulandi, bkz. teslim raporu).
+      // Beklenmeyen/diger Prisma hatalari (veya Prisma disi hatalar) mevcut
+      // genel 500 akisina gitmeye devam eder - yalnizca bu spesifik, bilinen
+      // ve kullaniciya guvenle aciklanabilecek durum 409'a cevrilir; ham
+      // Prisma/SQL mesaji hicbir zaman disari sizmaz.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'Bu kongreye bagli salon, beacon, katilimci veya oturum kayitlari bulundugu icin kongre silinemiyor. Once bagli kayitlari kaldirin.',
+        );
+      }
+      throw error;
+    }
   }
 }

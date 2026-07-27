@@ -2,6 +2,10 @@ import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
 import { SessionForm } from './session-form';
 import { deleteSessionAction } from './actions';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { loadCongresses } from '@/lib/load-congresses';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('tr-TR', {
@@ -18,16 +22,31 @@ export default async function SessionsPage({
   searchParams: Promise<{ congressId?: string }>;
 }) {
   const { congressId } = await searchParams;
-  const congresses = await api.listCongresses();
+  const congressesResult = await loadCongresses();
+
+  if (!congressesResult.ok) {
+    return (
+      <main className="panel-page">
+        <PageHeader title="Bilimsel Program" />
+        <CongressLoadError showBackLink />
+      </main>
+    );
+  }
+
+  const congresses = congressesResult.congresses;
   const halls = congressId ? await api.listHalls(congressId) : [];
   const sessions = congressId ? await api.listSessions(congressId) : [];
 
   return (
     <main className="panel-page">
-      <h1>Bilimsel Program</h1>
-      <CongressSelector congresses={congresses} selectedId={congressId} basePath="/sessions" />
+      <PageHeader
+        title="Bilimsel Program"
+        actions={
+          <CongressSelector congresses={congresses} selectedId={congressId} basePath="/sessions" />
+        }
+      />
 
-      {!congressId && <p>Oturumları görmek için bir kongre seçin.</p>}
+      {!congressId && <EmptyState title="Oturumları görmek için bir kongre seçin." />}
 
       {congressId && (
         <>

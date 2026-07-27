@@ -117,6 +117,13 @@ model Hall {
   congressId    String
   name          String
   rssiThreshold Int      @default(-70)
+  // Salonun ayni anda kabul edebilecegi fiziksel kisi kapasitesi. Nullable -
+  // mevcut salonlarda tahmini/sahte bir deger YAZILMAZ, migration sonrasi
+  // hepsi null kalir. null = "kapasite tanimlanmamis" (0 ile KARISTIRILMAZ,
+  // 0 zaten @Min(1) ile DTO seviyesinde reddedilir). Doluluk yuzdesi
+  // hesaplamasi (icerideki/capacity*100) bu fazin kapsaminda DEGIL, yalnizca
+  // veri modeli kuruluyor - bkz. docs/decisions.md.
+  capacity      Int?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

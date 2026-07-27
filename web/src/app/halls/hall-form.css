@@ -1,0 +1,61 @@
+/* HallForm'a özgü küçük eklemeler - genel yerleşim/hata stili zaten
+   `.panel-form` / `.panel-error`den (globals.css) geliyor.
+   İSTİSNA: "Salon kapasitesi" alanı (etiket + input + ipucu satırı) diğer
+   alanlardan (yalnızca etiket + input) belirgin şekilde daha uzun. Paylaşılan
+   `.panel-form`nin `align-items: flex-end` kuralı (globals.css) tüm alanları
+   ALT kenarlarından hizaladığı için kısa alanlar (Salon adı, RSSI eşiği) uzun
+   kapasite alanına göre asagı kaymış gibi görünüyordu (geniş ekranda tek
+   satıra sığdıklarında görsel olarak bozuk bir hizalama oluşuyordu). Bu form
+   ÖZELİNDE hizalamayı üst kenardan yapıyoruz - `.panel-form` global kuralını
+   BOZMADAN, yalnızca bu iki sınıfın birlikte eşleştiği (0,2,0 özgüllük)
+   durumda geçerli olacak şekilde. */
+.panel-form.hall-create-form {
+  align-items: flex-start;
+}
+
+/* Üst kenardan hizalamada "Salon oluştur" butonu artık etiketlerle aynı
+   seviyede (en üstte) başlar; input satırlarıyla görsel olarak hizalı
+   durması için etiket satırının yüksekliği kadar aşağı itiyoruz. */
+.hall-create-form button[type='submit'] {
+  margin-top: 1.5rem;
+}
+
+.hall-form-required {
+  color: var(--status-critical);
+}
+
+.hall-form-hint {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-faint);
+  max-width: 22rem;
+}
+
+.hall-form-success {
+  width: 100%;
+  color: var(--status-positive);
+  font-size: 0.85rem;
+}
+
+.hall-form-capacity-field {
+  min-width: 14rem;
+}
+
+.hall-form-capacity-input-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hall-form-capacity-input-group input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hall-form-capacity-unit {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}

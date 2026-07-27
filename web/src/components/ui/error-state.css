@@ -1,0 +1,66 @@
+.ui-error-state {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  border: 1px solid var(--status-critical-dim);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.ui-error-state-title {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--status-critical);
+  max-width: 52ch;
+  margin: 0 auto;
+}
+
+.ui-error-state-description {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  max-width: 48ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ui-error-state-action {
+  margin-top: 1rem;
+}
+
+.ui-error-state-action button {
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-critical);
+  background: var(--status-critical-dim);
+  color: var(--status-critical);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.ui-error-state-action button:hover {
+  background: rgba(255, 61, 104, 0.22);
+}
+
+.ui-error-state-action-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.ui-error-state-action-row a {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ui-error-state-action-row a:hover {
+  color: var(--text);
+}

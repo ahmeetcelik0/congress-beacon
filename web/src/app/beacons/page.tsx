@@ -4,6 +4,10 @@ import { BeaconForm } from './beacon-form';
 import { HallSelector } from './hall-selector';
 import { AssignToggle } from './assign-toggle';
 import { deleteBeaconAction } from './actions';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { loadCongresses } from '@/lib/load-congresses';
 
 export default async function BeaconsPage({
   searchParams,
@@ -11,7 +15,18 @@ export default async function BeaconsPage({
   searchParams: Promise<{ congressId?: string; hallId?: string }>;
 }) {
   const { congressId, hallId } = await searchParams;
-  const congresses = await api.listCongresses();
+  const congressesResult = await loadCongresses();
+
+  if (!congressesResult.ok) {
+    return (
+      <main className="panel-page">
+        <PageHeader title="Beacon'lar" />
+        <CongressLoadError showBackLink />
+      </main>
+    );
+  }
+
+  const congresses = congressesResult.congresses;
   const halls = congressId ? await api.listHalls(congressId) : [];
   const beacons = congressId ? await api.listBeacons(congressId) : [];
   const activeAssignments = hallId ? await api.listActiveHallBeacons(hallId) : [];
@@ -19,10 +34,14 @@ export default async function BeaconsPage({
 
   return (
     <main className="panel-page">
-      <h1>Beacon&apos;lar</h1>
-      <CongressSelector congresses={congresses} selectedId={congressId} basePath="/beacons" />
+      <PageHeader
+        title="Beacon'lar"
+        actions={
+          <CongressSelector congresses={congresses} selectedId={congressId} basePath="/beacons" />
+        }
+      />
 
-      {!congressId && <p>Beacon&apos;ları görmek için bir kongre seçin.</p>}
+      {!congressId && <EmptyState title="Beacon'ları görmek için bir kongre seçin." />}
 
       {congressId && (
         <>

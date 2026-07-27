@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, type TrackingHealth } from '@/lib/api';
+import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 
 const REFRESH_INTERVAL_MS = 10_000;
 
@@ -11,10 +12,10 @@ const STATUS_LABEL: Record<string, string> = {
   veri_yok: 'Veri yok',
 };
 
-const STATUS_CLASS: Record<string, string> = {
-  aktif: 'th-badge th-active',
-  yakin_zamanda: 'th-badge th-recent',
-  veri_yok: 'th-badge th-none',
+const STATUS_TONE: Record<string, StatusTone> = {
+  aktif: 'positive',
+  yakin_zamanda: 'warning',
+  veri_yok: 'critical',
 };
 
 const PRESENCE_LABEL: Record<string, string> = {
@@ -23,10 +24,10 @@ const PRESENCE_LABEL: Record<string, string> = {
   NO_SIGNAL: 'Sinyal yok',
 };
 
-const PRESENCE_CLASS: Record<string, string> = {
-  IN_HALL: 'th-badge th-active',
-  AMBIGUOUS: 'th-badge th-recent',
-  NO_SIGNAL: 'th-badge th-none',
+const PRESENCE_TONE: Record<string, StatusTone> = {
+  IN_HALL: 'positive',
+  AMBIGUOUS: 'warning',
+  NO_SIGNAL: 'critical',
 };
 
 function formatRate(rate: number | null): string {
@@ -69,15 +70,15 @@ export function TrackingHealthView({
   return (
     <>
       <div className="th-summary">
-        <span className="th-badge th-active">{data.summary.aktif} aktif</span>
-        <span className="th-badge th-recent">{data.summary.yakinZamanda} yakın zamanda</span>
-        <span className="th-badge th-none">{data.summary.veriYok} veri yok</span>
+        <StatusBadge tone="positive">{data.summary.aktif} aktif</StatusBadge>
+        <StatusBadge tone="warning">{data.summary.yakinZamanda} yakın zamanda</StatusBadge>
+        <StatusBadge tone="critical">{data.summary.veriYok} veri yok</StatusBadge>
       </div>
 
       <div className="th-summary">
-        <span className="th-badge th-active">{data.summary.icerde} içeride</span>
-        <span className="th-badge th-recent">{data.summary.belirsiz} belirsiz</span>
-        <span className="th-badge th-none">{data.summary.sinyalYok} sinyal yok</span>
+        <StatusBadge tone="positive">{data.summary.icerde} içeride</StatusBadge>
+        <StatusBadge tone="warning">{data.summary.belirsiz} belirsiz</StatusBadge>
+        <StatusBadge tone="critical">{data.summary.sinyalYok} sinyal yok</StatusBadge>
       </div>
 
       <table className="panel-table">
@@ -102,12 +103,14 @@ export function TrackingHealthView({
               <td>{item.devicePlatform ?? '—'}</td>
               <td>{formatTime(item.lastObservationAt)}</td>
               <td>
-                <span className={STATUS_CLASS[item.status]}>{STATUS_LABEL[item.status]}</span>
+                <StatusBadge tone={STATUS_TONE[item.status]}>
+                  {STATUS_LABEL[item.status]}
+                </StatusBadge>
               </td>
               <td>
-                <span className={PRESENCE_CLASS[item.currentStatus]}>
+                <StatusBadge tone={PRESENCE_TONE[item.currentStatus]}>
                   {PRESENCE_LABEL[item.currentStatus]}
-                </span>
+                </StatusBadge>
                 {item.currentHallName && <> {item.currentHallName}</>}
               </td>
               <td>{formatRate(item.outlierRejectionRate)}</td>

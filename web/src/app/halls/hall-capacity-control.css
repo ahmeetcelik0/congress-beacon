@@ -1,0 +1,97 @@
+.hall-capacity-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hall-capacity-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.hall-capacity-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 12rem;
+}
+
+.hall-capacity-control-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.hall-capacity-control-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hall-capacity-control-input {
+  width: 5.5rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.85rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.hall-capacity-control-input:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.hall-capacity-control-input[aria-invalid='true'] {
+  border-color: var(--status-critical);
+}
+
+.hall-capacity-control-unit {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.hall-capacity-control-save {
+  padding: 0.3rem 0.7rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.hall-capacity-control-save:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.hall-capacity-control-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.hall-capacity-control-error {
+  color: var(--status-critical);
+  font-size: 0.72rem;
+}
+
+.hall-capacity-control-success {
+  color: var(--status-positive);
+  font-size: 0.72rem;
+}

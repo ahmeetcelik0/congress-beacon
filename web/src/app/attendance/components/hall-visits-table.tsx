@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type HallVisitSummary } from '@/lib/api';
 import { getHallColor } from '@/lib/hall-colors';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { ErrorState } from '@/components/ui/error-state';
 
 const PAGE_SIZE = 10;
 const ALL_HALLS_VALUE = 'all';
@@ -57,6 +59,12 @@ export function HallVisitsTable({
   // data'yi yenileme sirasinda da eski haliyle gosteririz (skeleton/flash yok),
   // bu yuzden ayri bir "loading" state'i tutmuyoruz.
   const [data, setData] = useState<{ items: HallVisitSummary[]; total: number } | null>(null);
+  // İlk yükleme hiç veri getirmediyse (data === null) bu hata ENGELLEYİCİ
+  // (ErrorState tüm tabloyu değiştirir). Daha önce başarılı veri geldiyse
+  // (data !== null) aynı hata yalnızca engelleyici olmayan bir uyarı şeridi
+  // olarak gösterilir; veri SİLİNMEZ (bkz. proje teslim notu).
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
 
   useEffect(() => {
@@ -97,11 +105,16 @@ export function HallVisitsTable({
       .then((result) => {
         if (!cancelled) {
           setData(result);
+          setError(null);
+          setLastUpdatedAt(new Date());
         }
       })
       .catch(() => {
         if (!cancelled) {
-          setData({ items: [], total: 0 });
+          // Aynı hata mesajını tekrar tekrar set etmiyoruz (fonksiyonel
+          // güncelleme + aynı string referansı) — böylece her 5 sn'lik
+          // interval hatası UI'ı gereksiz yere yeniden render etmez.
+          setError((previous) => previous ?? 'Ziyaret kayıtları alınamadı.');
         }
       });
 
@@ -115,8 +128,31 @@ export function HallVisitsTable({
     [data],
   );
 
+  // İlk yükleme hiç başarılı olmadıysa (data === null) tabloyu değil,
+  // engelleyici bir hata durumu göster.
+  if (data === null && error) {
+    return (
+      <ErrorState
+        title="Ziyaret kayıtları yüklenemedi."
+        description={error}
+        action={
+          <button type="button" onClick={() => setRefreshTick((tick) => tick + 1)}>
+            Yeniden dene
+          </button>
+        }
+      />
+    );
+  }
+
   return (
     <div className="tp-table-card">
+      {error && data !== null && (
+        <div className="tp-stale-banner" role="status">
+          Veriler güncellenemedi
+          {lastUpdatedAt && ` · son başarılı güncelleme: ${formatDateTime(lastUpdatedAt.toISOString())}`}
+        </div>
+      )}
+
       <div className="tp-filters">
         <Select value={hallId} onValueChange={handleHallChange}>
           <SelectTrigger>
@@ -183,9 +219,9 @@ export function HallVisitsTable({
                 {formatConfidence(visit.confidenceLevel, visit.confidenceScore)}
               </td>
               <td>
-                <span className={`tp-badge ${visit.isOpen ? 'tp-open' : 'tp-closed'}`}>
+                <StatusBadge tone={visit.isOpen ? 'positive' : 'neutral'}>
                   {visit.isOpen ? 'içeride' : 'çıktı'}
-                </span>
+                </StatusBadge>
               </td>
             </tr>
           ))}

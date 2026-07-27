@@ -10,6 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { IsGreaterThanField } from './is-greater-than-field.validator';
+import { IsDateOnOrAfterField } from './is-date-on-or-after-field.validator';
 
 export class CreateCongressDto {
   @IsString()
@@ -33,6 +34,13 @@ export class CreateCongressDto {
 
   @IsOptional()
   @IsDateString()
+  // Ikisi de gonderildiginde bitis, baslangictan ONCE olamaz (esitlik
+  // serbest - tek gunluk kongreler icin). Yalnizca biri gonderilirse burada
+  // karar verilemez, kismi PATCH'te CongressService.update() kayitli
+  // degerle birlestirip nihai kontrolu bir kez daha yapar (bkz. dosya).
+  @IsDateOnOrAfterField('startDate', {
+    message: 'Bitis tarihi baslangic tarihinden once olamaz',
+  })
   endDate?: string;
 
   @IsOptional()

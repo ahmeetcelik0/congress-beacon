@@ -1,6 +1,11 @@
 import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
 import { ReportsDownloadLink } from './reports-download-link';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { MetricCard } from '@/components/ui/metric-card';
+import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { loadCongresses } from '@/lib/load-congresses';
 
 function formatPercent(ratio: number | null): string {
   if (ratio === null) return '—';
@@ -23,7 +28,18 @@ export default async function ReportsPage({
   searchParams: Promise<{ congressId?: string }>;
 }) {
   const { congressId } = await searchParams;
-  const congresses = await api.listCongresses();
+  const congressesResult = await loadCongresses();
+
+  if (!congressesResult.ok) {
+    return (
+      <main className="panel-page">
+        <PageHeader title="Raporlar" />
+        <CongressLoadError showBackLink />
+      </main>
+    );
+  }
+
+  const congresses = congressesResult.congresses;
   const [dataQuality, beaconHealth] = congressId
     ? await Promise.all([
         api.getDataQualityReport(congressId),
@@ -33,31 +49,28 @@ export default async function ReportsPage({
 
   return (
     <main className="panel-page">
-      <h1>Raporlar</h1>
-      <CongressSelector congresses={congresses} selectedId={congressId} basePath="/reports" />
+      <PageHeader
+        title="Raporlar"
+        actions={
+          <CongressSelector congresses={congresses} selectedId={congressId} basePath="/reports" />
+        }
+      />
 
-      {!congressId && <p>Rapor görmek için bir kongre seçin.</p>}
+      {!congressId && (
+        <EmptyState
+          title="Rapor görmek için bir kongre seçin."
+          description="Üstteki kongre seçiciden bir kongre seçtiğinizde veri kalitesi ve beacon sağlığı raporları burada görünecek."
+        />
+      )}
 
       {congressId && dataQuality && (
         <>
           <h2>Veri Kalitesi</h2>
-          <div className="panel-cards">
-            <div className="panel-card">
-              <span className="panel-card-label">Toplam gözlem</span>
-              <span className="panel-card-value">{dataQuality.totalObservations}</span>
-            </div>
-            <div className="panel-card">
-              <span className="panel-card-label">Eşleşen</span>
-              <span className="panel-card-value">{dataQuality.matchedObservations}</span>
-            </div>
-            <div className="panel-card">
-              <span className="panel-card-label">Eşleşmeyen</span>
-              <span className="panel-card-value">{dataQuality.unmatchedObservations}</span>
-            </div>
-            <div className="panel-card">
-              <span className="panel-card-label">Eşleşme oranı</span>
-              <span className="panel-card-value">{formatPercent(dataQuality.matchedRatio)}</span>
-            </div>
+          <div className="ui-metric-grid">
+            <MetricCard label="Toplam gözlem" value={dataQuality.totalObservations} />
+            <MetricCard label="Eşleşen" value={dataQuality.matchedObservations} />
+            <MetricCard label="Eşleşmeyen" value={dataQuality.unmatchedObservations} />
+            <MetricCard label="Eşleşme oranı" value={formatPercent(dataQuality.matchedRatio)} />
           </div>
 
           <h2>Beacon Sağlığı</h2>

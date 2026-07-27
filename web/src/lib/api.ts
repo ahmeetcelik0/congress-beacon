@@ -66,6 +66,11 @@ export type Hall = {
   congressId: string;
   name: string;
   rssiThreshold: number;
+  // Salonun ayni anda kabul edebilecegi fiziksel kisi kapasitesi. null =
+  // kapasite tanimlanmamis (0 ile karistirilmaz). Eski API yanitlarinda alan
+  // hic gelmeyebilir (undefined) - goruntuleme mantigi `capacity == null`
+  // kontroluyle ikisini de kapsayacak sekilde yazilmali.
+  capacity: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -233,6 +238,11 @@ export type DecisionTrace = {
       beaconId: string;
       emaValue: number;
       rawAccepted: boolean;
+      // true ise: bu beacon bu turda taze veri vermedi, gosterilen deger
+      // grace suresi icindeki SON BILINEN (donmus) EMA'dir - salon
+      // ortalamasina hala dahil edildi, ELENMEDI. rawAccepted:false ile
+      // stale:false/undefined olan okumalar ise gercekten elendi.
+      stale?: boolean;
     }[];
   }[];
   runnerUpGapPct: number;
@@ -310,8 +320,18 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
 
 export const api = {
   listCongresses: () => request<Congress[]>('/congresses'),
-  createCongress: (data: { name: string; code: string; accessCode: string; beaconUuid: string }) =>
-    request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
+  // startDate/endDate zaten backend DTO'sunda ve OpenAPI şemasında opsiyonel
+  // alan olarak var (bkz. shared/openapi.yaml, CreateCongressDto) — burada
+  // yeni bir backend alanı EKLENMİYOR, panelin daha önce kullanmadığı mevcut
+  // sözleşme alanı açığa çıkarılıyor (Kongre durumu hesaplaması için gerekli).
+  createCongress: (data: {
+    name: string;
+    code: string;
+    accessCode: string;
+    beaconUuid: string;
+    startDate?: string;
+    endDate?: string;
+  }) => request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
   updateCongress: (
     id: string,
     data: Partial<{ observationIntervalSeconds: number } & AlgorithmTuning>,
@@ -320,9 +340,13 @@ export const api = {
 
   listHalls: (congressId: string) =>
     request<Hall[]>(`/halls?congressId=${encodeURIComponent(congressId)}`),
-  createHall: (data: { congressId: string; name: string; rssiThreshold?: number }) =>
-    request<Hall>('/halls', { method: 'POST', body: JSON.stringify(data) }),
-  updateHall: (id: string, data: { name?: string; rssiThreshold?: number }) =>
+  createHall: (data: {
+    congressId: string;
+    name: string;
+    rssiThreshold?: number;
+    capacity?: number;
+  }) => request<Hall>('/halls', { method: 'POST', body: JSON.stringify(data) }),
+  updateHall: (id: string, data: { name?: string; rssiThreshold?: number; capacity?: number }) =>
     request<Hall>(`/halls/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteHall: (id: string) => request<void>(`/halls/${id}`, { method: 'DELETE' }),
 

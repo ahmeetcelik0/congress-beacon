@@ -2,7 +2,13 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
 import { HallForm } from './hall-form';
+import { HallCapacityControl } from './hall-capacity-control';
 import { deleteHallAction, updateHallRssiAction } from './actions';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { StatusBadge } from '@/components/ui/status-badge';
+import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { loadCongresses } from '@/lib/load-congresses';
 
 export default async function HallsPage({
   searchParams,
@@ -10,15 +16,30 @@ export default async function HallsPage({
   searchParams: Promise<{ congressId?: string }>;
 }) {
   const { congressId } = await searchParams;
-  const congresses = await api.listCongresses();
+  const congressesResult = await loadCongresses();
+
+  if (!congressesResult.ok) {
+    return (
+      <main className="panel-page">
+        <PageHeader title="Salonlar" />
+        <CongressLoadError showBackLink />
+      </main>
+    );
+  }
+
+  const congresses = congressesResult.congresses;
   const halls = congressId ? await api.listHalls(congressId) : [];
 
   return (
     <main className="panel-page">
-      <h1>Salonlar</h1>
-      <CongressSelector congresses={congresses} selectedId={congressId} basePath="/halls" />
+      <PageHeader
+        title="Salonlar"
+        actions={
+          <CongressSelector congresses={congresses} selectedId={congressId} basePath="/halls" />
+        }
+      />
 
-      {!congressId && <p>Salonları görmek için bir kongre seçin.</p>}
+      {!congressId && <EmptyState title="Salonları görmek için bir kongre seçin." />}
 
       {congressId && (
         <>
@@ -28,6 +49,7 @@ export default async function HallsPage({
               <tr>
                 <th>Ad</th>
                 <th>RSSI Eşiği</th>
+                <th>Kapasite</th>
                 <th />
                 <th />
               </tr>
@@ -52,6 +74,18 @@ export default async function HallsPage({
                     </form>
                   </td>
                   <td>
+                    <div className="hall-capacity-cell">
+                      {hall.capacity == null ? (
+                        <StatusBadge tone="neutral">Kapasite tanımlanmadı</StatusBadge>
+                      ) : (
+                        <span className="hall-capacity-value">
+                          {hall.capacity.toLocaleString('tr-TR')} kişi
+                        </span>
+                      )}
+                      <HallCapacityControl hallId={hall.id} initialCapacity={hall.capacity} />
+                    </div>
+                  </td>
+                  <td>
                     <Link href={`/beacons?congressId=${congressId}&hallId=${hall.id}`}>
                       Beacon&apos;lar
                     </Link>
@@ -65,7 +99,7 @@ export default async function HallsPage({
               ))}
               {halls.length === 0 && (
                 <tr>
-                  <td colSpan={4}>Bu kongrede henüz salon yok.</td>
+                  <td colSpan={5}>Bu kongrede henüz salon yok.</td>
                 </tr>
               )}
             </tbody>
