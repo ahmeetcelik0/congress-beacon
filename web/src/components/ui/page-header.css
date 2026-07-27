@@ -1,0 +1,42 @@
+.ui-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.ui-page-header-text {
+  min-width: 0;
+}
+
+.ui-page-header-text h1 {
+  font-size: clamp(1.4rem, 2vw, 1.8rem);
+  font-weight: 600;
+  margin: 0;
+}
+
+.ui-page-header-text p {
+  margin-top: 0.35rem;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  max-width: 60ch;
+}
+
+.ui-page-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .ui-page-header {
+    align-items: stretch;
+  }
+
+  .ui-page-header-actions {
+    width: 100%;
+  }
+}

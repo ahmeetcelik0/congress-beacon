@@ -1,0 +1,132 @@
+.congress-create-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 1.25rem 1.4rem 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.congress-create-section h2 {
+  margin: 0 0 1.1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.01em;
+}
+
+.congress-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+}
+
+.congress-form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.congress-form-required {
+  color: var(--status-critical);
+}
+
+.congress-form-optional {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.congress-form-grid input {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.88rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.congress-form-grid input:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+/* Tarih girişlerinde tarayıcı ikonunu tema ile daha uyumlu göstermek için
+   yalnızca renk tonu ayarlanır; işlevsellik değişmez. */
+.congress-form-grid input[type='date'] {
+  color-scheme: dark;
+}
+
+.congress-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.congress-form-hint {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.congress-form-footer button {
+  padding: 0.6rem 1.3rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  min-height: 40px;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.congress-form-footer button:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.congress-form-footer button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.congress-form-footer button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.congress-form-error {
+  margin-top: 1rem;
+  color: var(--status-critical);
+  font-size: 0.85rem;
+}
+
+.congress-form-success {
+  margin-top: 1rem;
+  color: var(--status-positive);
+  font-size: 0.85rem;
+}
+
+@media (max-width: 640px) {
+  .congress-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .congress-form-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .congress-form-footer button {
+    width: 100%;
+  }
+}

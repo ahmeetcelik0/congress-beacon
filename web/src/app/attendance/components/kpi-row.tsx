@@ -1,38 +1,61 @@
+import { MetricCard } from '@/components/ui/metric-card';
+import {
+  calculateOccupancy,
+  countActiveHalls,
+  getOccupancyStatus,
+  type MergedHallOccupancy,
+} from '@/lib/hall-occupancy';
 import { Freshness } from './freshness';
 
+const NEAR_OR_OVER_CAPACITY_KEYS = new Set(['near-full', 'full', 'over-capacity']);
+
 export function KpiRow({
-  activeHalls,
   currentlyInsideTotal,
   participantsSeenToday,
   lastObservationAt,
+  halls,
 }: {
-  activeHalls: number;
   currentlyInsideTotal: number;
   participantsSeenToday: number;
   lastObservationAt: string | null;
+  halls: MergedHallOccupancy[];
 }) {
+  const activeHalls = countActiveHalls(halls);
+  const hallsWithCapacity = halls.filter((hall) => hall.capacity != null).length;
+  const hallsNearOrOverCapacity = halls.filter((hall) => {
+    const status = getOccupancyStatus(calculateOccupancy(hall.count, hall.capacity));
+    return NEAR_OR_OVER_CAPACITY_KEYS.has(status.key);
+  }).length;
+
   return (
-    <div className="tp-kpi-row">
-      <div className="tp-kpi-card tp-stagger-1" style={{ ['--card-accent' as string]: 'var(--tp-accent)' }}>
-        <span className="tp-kpi-label">Şu An İçeride</span>
-        <span className="tp-kpi-value">{currentlyInsideTotal}</span>
-        <span className="tp-kpi-hint">tüm salonlar toplamı</span>
-      </div>
-      <div className="tp-kpi-card tp-stagger-2">
-        <span className="tp-kpi-label">Bugün Görülen Katılımcı</span>
-        <span className="tp-kpi-value">{participantsSeenToday}</span>
-        <span className="tp-kpi-hint">en az bir salon ziyareti</span>
-      </div>
-      <div className="tp-kpi-card tp-stagger-3">
-        <span className="tp-kpi-label">Aktif Salon</span>
-        <span className="tp-kpi-value">{activeHalls}</span>
-      </div>
-      <div className="tp-kpi-card tp-stagger-4">
-        <span className="tp-kpi-label">Son Gözlem</span>
-        <span className="tp-kpi-value" style={{ fontSize: '1.15rem' }}>
-          <Freshness timestamp={lastObservationAt} />
-        </span>
-      </div>
+    <div className="ui-metric-grid">
+      <MetricCard
+        label="Şu An İçeride"
+        value={currentlyInsideTotal}
+        hint="tüm salonlar toplamı"
+      />
+      <MetricCard label="Aktif Salon" value={activeHalls} hint="en az 1 kişi olan salon" />
+      <MetricCard
+        label="Kapasitesi Tanımlı Salon"
+        value={`${hallsWithCapacity}/${halls.length}`}
+        hint="toplam salon içinde"
+      />
+      <MetricCard
+        label="Kapasiteye Yaklaşan/Aşan"
+        value={hallsNearOrOverCapacity}
+        hint="%90 ve üzeri doluluk"
+        className={hallsNearOrOverCapacity > 0 ? 'ui-metric-card-warning' : undefined}
+      />
+      <MetricCard
+        label="Bugün Görülen Katılımcı"
+        value={participantsSeenToday}
+        hint="en az bir salon ziyareti"
+      />
+      <MetricCard
+        label="Son Gözlem"
+        value={<Freshness timestamp={lastObservationAt} />}
+        hint="tüm salonlar için en son beacon okuması"
+      />
     </div>
   );
 }

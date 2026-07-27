@@ -7,6 +7,11 @@ import { RawObservationFeed } from './components/raw-observation-feed';
 import { ObservationIntervalControl } from './components/observation-interval-control';
 import { DecisionTracePanel } from './components/decision-trace-panel';
 import { AlgorithmTuningControl } from './components/algorithm-tuning-control';
+import { PageHeader } from '@/components/ui/page-header';
+import { EmptyState } from '@/components/ui/empty-state';
+import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { loadCongresses } from '@/lib/load-congresses';
+import { DEFAULT_ROSTER_PAGE_SIZE } from '@/lib/hall-occupancy';
 import './tracking.css';
 
 export default async function AttendancePage({
@@ -15,53 +20,86 @@ export default async function AttendancePage({
   searchParams: Promise<{ congressId?: string }>;
 }) {
   const { congressId } = await searchParams;
-  const congresses = await api.listCongresses();
+  const congressesResult = await loadCongresses();
+
+  if (!congressesResult.ok) {
+    return (
+      <main className="tracking-page">
+        <PageHeader
+          title="Canlı Takip"
+          description="Kongredeki salon yoğunluğunu ve katılımcı hareketini gerçek zamanlı izleyin."
+        />
+        <CongressLoadError showBackLink />
+      </main>
+    );
+  }
+
+  const congresses = congressesResult.congresses;
   const selectedCongress = congressId
     ? congresses.find((congress) => congress.id === congressId)
     : undefined;
-  const summary = congressId ? await api.getAttendanceSummary(congressId) : null;
-  const occupancySeries = congressId
-    ? await api.getOccupancySeries({ congressId, bucketMinutes: 15 })
-    : null;
-  const roster = congressId
-    ? await api.listHallVisits({ congressId, isOpen: true, pageSize: 100 })
-    : null;
+
+  // Dört çağrı da kongre başına TEK istektir (salon sayısından bağımsız,
+  // N+1 yok) ve birbirinden bağımsız oldukları için `Promise.all` ile
+  // paralel çekilir — art arda `await` zaten mevcut olan gecikmeyi 4.
+  // isteği (kapasiteler) eklerken daha da büyütmesin diye.
+  const [summary, occupancySeries, roster, halls] = congressId
+    ? await Promise.all([
+        api.getAttendanceSummary(congressId),
+        api.getOccupancySeries({ congressId, bucketMinutes: 15 }),
+        api.listHallVisits({ congressId, isOpen: true, pageSize: DEFAULT_ROSTER_PAGE_SIZE }),
+        api.listHalls(congressId),
+      ])
+    : [null, null, null, null];
 
   return (
     <main className="tracking-page">
-      <div className="tp-header">
-        <div className="tp-title-block">
-          <h1>Canlı Takip</h1>
-          <p>Kongredeki salon yoğunluğunu ve katılımcı hareketini gerçek zamanlı izleyin.</p>
-        </div>
-        <div className="tp-header-controls">
-          <CongressSelector
-            congresses={congresses}
-            selectedId={congressId}
-            basePath="/attendance"
-          />
-          {selectedCongress && (
-            <ObservationIntervalControl
-              key={selectedCongress.id}
-              congressId={selectedCongress.id}
-              initialValue={selectedCongress.observationIntervalSeconds}
+      <PageHeader
+        title="Canlı Takip"
+        description="Kongredeki salon yoğunluğunu ve katılımcı hareketini gerçek zamanlı izleyin."
+        actions={
+          <>
+            <CongressSelector
+              congresses={congresses}
+              selectedId={congressId}
+              basePath="/attendance"
+            />
+            {selectedCongress && (
+              <ObservationIntervalControl
+                key={selectedCongress.id}
+                congressId={selectedCongress.id}
+                initialValue={selectedCongress.observationIntervalSeconds}
+              />
+            )}
+            <LiveBadge />
+          </>
+        }
+      />
+
+      {!congressId && (
+        <EmptyState
+          title="Başlamak için yukarıdan bir kongre seçin."
+          description="Canlı salon doluluğunu görmek için önce bir kongre seçmelisiniz."
+        />
+      )}
+
+      {congressId && summary && occupancySeries && roster && halls && (
+        <>
+          {halls.length === 0 ? (
+            <EmptyState
+              title="Bu kongrede henüz salon tanımlı değil."
+              description="Canlı takip için önce Salonlar sayfasından en az bir salon oluşturun."
+            />
+          ) : (
+            <LiveDashboard
+              key={congressId}
+              congressId={congressId}
+              initialSummary={summary}
+              initialSeries={occupancySeries}
+              initialRoster={roster.items}
+              initialHalls={halls}
             />
           )}
-          <LiveBadge />
-        </div>
-      </div>
-
-      {!congressId && <div className="tp-empty">Başlamak için yukarıdan bir kongre seçin.</div>}
-
-      {congressId && summary && occupancySeries && roster && (
-        <>
-          <LiveDashboard
-            key={congressId}
-            congressId={congressId}
-            initialSummary={summary}
-            initialSeries={occupancySeries}
-            initialRoster={roster.items}
-          />
 
           <section className="tp-section">
             <div className="tp-section-title">

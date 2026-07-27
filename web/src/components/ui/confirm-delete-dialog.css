@@ -1,0 +1,113 @@
+.ui-confirm-dialog {
+  /* Tarayıcının `dialog:modal { margin: auto }` ile ortalama davranışı,
+     projenin global `* { margin: 0 }` sıfırlaması (bkz. `globals.css`)
+     tarafından ezildiği için burada AÇIKÇA yeniden kuruluyor - aksi halde
+     dialog viewport'un sol üst köşesine yapışıp ortalanmıyor. */
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  width: min(92vw, 420px);
+  height: fit-content;
+  box-shadow: var(--shadow-lg);
+}
+
+.ui-confirm-dialog::backdrop {
+  background: rgba(3, 5, 9, 0.65);
+  backdrop-filter: blur(2px);
+}
+
+/* Native <dialog>, `open` olmadığında bile bazı tarayıcılarda layout'a
+   katılabiliyor; animasyon `open` niteliği üzerinden tetiklenir. */
+.ui-confirm-dialog[open] {
+  animation: ui-confirm-dialog-rise var(--transition-base) ease both;
+}
+
+@keyframes ui-confirm-dialog-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ui-confirm-dialog-body {
+  padding: 1.5rem;
+}
+
+.ui-confirm-dialog-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+}
+
+.ui-confirm-dialog-description {
+  font-size: 0.88rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+
+.ui-confirm-dialog-error {
+  margin-top: 0.9rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--status-critical-dim);
+  border-radius: var(--radius-sm);
+  background: var(--status-critical-dim);
+  color: var(--status-critical);
+  font-size: 0.82rem;
+}
+
+.ui-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  margin-top: 1.4rem;
+}
+
+.ui-confirm-dialog-cancel,
+.ui-confirm-dialog-confirm {
+  min-height: 40px;
+  padding: 0.5rem 1.1rem;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.ui-confirm-dialog-cancel {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.ui-confirm-dialog-cancel:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--text-dim);
+}
+
+.ui-confirm-dialog-confirm {
+  border: 1px solid var(--status-critical);
+  background: var(--status-critical-dim);
+  color: var(--status-critical);
+}
+
+.ui-confirm-dialog-confirm:hover:not(:disabled) {
+  background: rgba(255, 61, 104, 0.24);
+  box-shadow: 0 0 16px -4px var(--alert-glow, rgba(255, 61, 104, 0.45));
+}
+
+.ui-confirm-dialog-cancel:disabled,
+.ui-confirm-dialog-confirm:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

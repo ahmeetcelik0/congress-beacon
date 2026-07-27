@@ -17,36 +17,6 @@
   font-family: var(--font-body), sans-serif;
 }
 
-.tp-header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.5rem;
-  margin-bottom: 2rem;
-  animation: tp-rise 0.5s ease both;
-}
-
-.tp-title-block h1 {
-  font-size: clamp(1.5rem, 2.4vw, 2.1rem);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  margin-bottom: 0.35rem;
-}
-
-.tp-title-block p {
-  color: var(--tp-text-dim);
-  font-size: 0.9rem;
-  max-width: 46ch;
-}
-
-.tp-header-controls {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
 .tp-live-badge {
   display: inline-flex;
   align-items: center;
@@ -132,6 +102,10 @@
   white-space: nowrap;
 }
 
+/* Sayfa üstü boş durum artık paylaşılan bileşendedir (bkz.
+   `src/components/ui/empty-state.tsx`), ancak bu sınıf hâlâ alt bileşenlerde
+   (ham gözlem akışı, karar gerekçesi, salon kartları, doluluk grafiği vb.)
+   kullanılıyor — kaldırılmadı. */
 .tp-empty {
   padding: 3rem 1.5rem;
   text-align: center;
@@ -278,55 +252,309 @@
   animation: tp-pulse 2s ease-out infinite;
 }
 
-/* Currently-inside roster */
-.tp-roster-grid {
+/* Canlı güncelleme durumu (LiveStatusIndicator) */
+.tp-live-status-row {
+  margin-bottom: 1rem;
+}
+
+.tp-live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--tp-text-dim);
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-live-status-badge {
+  font-family: var(--font-body), sans-serif;
+}
+
+/* Salon canlı takip kartları */
+.tp-occupancy-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 1rem;
 }
 
-.tp-roster-card {
+@media (max-width: 1200px) {
+  .tp-occupancy-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .tp-occupancy-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tp-occupancy-card {
+  display: flex;
+  flex-direction: column;
   background: var(--tp-bg-card);
   border: 1px solid var(--tp-border);
   border-radius: 14px;
-  padding: 1rem 1.1rem;
+  padding: 1.1rem 1.2rem 1.2rem;
   border-left: 3px solid var(--hall-color, var(--tp-accent));
   animation: tp-rise 0.5s ease both;
 }
 
-.tp-roster-title {
-  font-size: 0.85rem;
-  color: var(--tp-text-dim);
-  margin-bottom: 0.6rem;
+.tp-occupancy-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
 }
 
-.tp-roster-empty {
-  font-size: 0.8rem;
-  color: var(--tp-text-dim);
-  font-style: italic;
+.tp-occupancy-card-header .tp-hall-pulse {
+  position: static;
 }
 
-.tp-roster-list {
+.tp-occupancy-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tp-occupancy-body {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.tp-radial-wrap {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+}
+
+.tp-radial-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tp-radial-value {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--tp-text);
+}
+
+/* Kapasitesiz salonlarda radial grafik ÇİZİLMEZ; kart yüksekliği tutarlı
+   kalsın diye aynı boyutta nötr bir yer tutucu gösterilir. */
+.tp-occupancy-no-chart {
+  width: 88px;
+  height: 88px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  border: 1px dashed var(--tp-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tp-text-dim);
+  font-family: var(--font-mono), monospace;
+  font-size: 1.1rem;
+}
+
+.tp-occupancy-figures {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  max-height: 220px;
-  overflow-y: auto;
+  gap: 0.15rem;
+  min-width: 0;
 }
 
-.tp-roster-list li {
+.tp-occupancy-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-occupancy-count-value {
+  font-size: 1.9rem;
+  font-weight: 650;
+  color: var(--tp-text);
+  line-height: 1;
+}
+
+.tp-occupancy-count-unit {
+  font-size: 0.75rem;
+  color: var(--tp-text-dim);
+  font-family: var(--font-body), sans-serif;
+}
+
+.tp-occupancy-capacity-hint {
+  font-size: 0.78rem;
+  color: var(--tp-text-dim);
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-occupancy-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  min-height: 1.5rem;
+}
+
+.tp-occupancy-overflow {
+  font-size: 0.76rem;
+  color: var(--tp-danger);
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-occupancy-capacity-link {
+  font-size: 0.76rem;
+  color: var(--tp-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+/* Katılımcı listesi expand/collapse — gerçek buton, tam metin + ikon,
+   mobilde yeterli dokunma alanı (~44px, yalnızca küçük bir ikon değil). */
+.tp-occupancy-expand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2.6rem;
+  padding: 0.55rem 0.75rem;
+  background: transparent;
+  border: 1px solid var(--tp-border);
+  border-radius: 8px;
+  color: var(--tp-text-dim);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--transition-fast), border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.tp-occupancy-expand:hover {
+  color: var(--tp-text);
+  border-color: var(--border-strong);
+  background: rgba(130, 170, 210, 0.06);
+}
+
+.tp-occupancy-collapsible-inner {
+  padding-top: 0.75rem;
+}
+
+.tp-participant-empty {
+  font-size: 0.82rem;
+  color: var(--tp-text-dim);
+  font-style: italic;
+  padding: 0.25rem 0;
+}
+
+.tp-participant-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.tp-participant-row {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 0.75rem;
-  font-size: 0.85rem;
+  font-size: 0.82rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.08);
 }
 
-.tp-roster-time {
+.tp-participant-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.tp-participant-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.tp-participant-name {
+  color: var(--tp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tp-participant-confidence {
+  font-size: 0.72rem;
+  color: var(--tp-text-dim);
   font-family: var(--font-mono), monospace;
-  font-size: 0.75rem;
+}
+
+.tp-participant-duration {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.78rem;
   color: var(--hall-color, var(--tp-text-dim));
   white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Kongre-geneli roster bütçesi (bkz. `hall-occupancy.ts` DEFAULT_ROSTER_PAGE_SIZE)
+   bir salonun tüm katılımcılarını karşılamadığında gösterilen dürüst
+   kapsam bandı + "Daha fazla göster" kontrolü. */
+.tp-roster-more {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed var(--tp-border);
+}
+
+.tp-roster-coverage {
+  font-size: 0.76rem;
+  color: var(--tp-text-dim);
+  font-family: var(--font-mono), monospace;
+}
+
+.tp-roster-error {
+  font-size: 0.78rem;
+  color: var(--tp-danger);
+}
+
+.tp-roster-more-button {
+  align-self: flex-start;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.9rem;
+  background: transparent;
+  border: 1px solid var(--tp-accent-dim);
+  border-radius: 8px;
+  color: var(--tp-accent);
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+
+.tp-roster-more-button:hover:not(:disabled) {
+  background: rgba(130, 170, 210, 0.08);
+  border-color: var(--tp-accent);
+}
+
+.tp-roster-more-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* Chart card */
@@ -400,6 +628,19 @@
   color: var(--tp-text-dim);
 }
 
+/* Son başarılı veri korunurken (poll hatası) gösterilen, engelleyici
+   olmayan uyarı şeridi — veri SİLİNMEZ, yalnızca bu şerit eklenir. */
+.tp-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.78rem;
+  color: var(--tp-warn);
+  background: var(--warn-dim);
+  border-bottom: 1px solid var(--tp-border);
+}
+
 /* Table */
 .tp-table-card {
   background: var(--tp-bg-card);
@@ -467,23 +708,7 @@
   background: var(--tag-color, var(--tp-accent));
 }
 
-.tp-badge {
-  display: inline-block;
-  padding: 0.15rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-family: var(--font-mono), monospace;
-}
-
-.tp-badge.tp-open {
-  background: var(--success-dim);
-  color: var(--success);
-}
-
-.tp-badge.tp-closed {
-  background: rgba(148, 163, 184, 0.12);
-  color: var(--tp-text-dim);
-}
+/* Durum rozeti artık paylaşılan bileşendedir: bkz. `src/components/ui/status-badge.tsx`. */
 
 .tp-pagination {
   display: flex;

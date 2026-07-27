@@ -1,0 +1,28 @@
+.ui-empty-state {
+  padding: 2rem 1.5rem;
+  text-align: center;
+  color: var(--text-dim);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.ui-empty-state-title {
+  font-size: 0.92rem;
+  color: var(--text-dim);
+  max-width: 52ch;
+  margin: 0 auto;
+}
+
+.ui-empty-state-description {
+  margin-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  max-width: 48ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ui-empty-state-action {
+  margin-top: 1rem;
+}

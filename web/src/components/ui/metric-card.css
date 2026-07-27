@@ -1,0 +1,68 @@
+.ui-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.75rem;
+}
+
+.ui-metric-card {
+  position: relative;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.1rem 1.2rem;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.ui-metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--signal), transparent 75%);
+  opacity: 0.8;
+}
+
+.ui-metric-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+/* Bir metrik dikkat gerektiren bir eşiği aştığında (ör. kapasiteye
+   yaklaşan/aşan salon sayısı > 0) üst şeridi ve değeri uyarı rengine
+   çevirir — yalnızca renk değil, kartın kendisi zaten metinle ne
+   olduğunu açıklar (bkz. `KpiRow`). */
+.ui-metric-card-warning::before {
+  background: linear-gradient(90deg, var(--status-warning), transparent 75%);
+}
+
+.ui-metric-card-warning .ui-metric-card-value {
+  color: var(--status-warning);
+}
+
+.ui-metric-card-label {
+  display: block;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-faint);
+  margin-bottom: 0.5rem;
+}
+
+.ui-metric-card-value {
+  display: block;
+  font-family: var(--font-mono), monospace;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.15;
+}
+
+.ui-metric-card-hint {
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
