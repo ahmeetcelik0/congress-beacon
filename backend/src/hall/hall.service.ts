@@ -18,6 +18,9 @@ export class HallService {
         congressId: dto.congressId,
         name: dto.name,
         rssiThreshold: dto.rssiThreshold ?? -70,
+        // rssiThreshold'un aksine capacity'nin proje genelinde kabul edilmis
+        // bir varsayilani YOK - gonderilmezse null (tanimsiz) kalir.
+        capacity: dto.capacity ?? null,
       },
     });
   }

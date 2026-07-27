@@ -805,7 +805,7 @@ paths:
         '404':
           description: Salon bulunamadi.
     patch:
-      summary: Salonu guncelle (isim, rssiThreshold)
+      summary: Salonu guncelle (isim, rssiThreshold, capacity)
       operationId: updateHall
       tags:
         - Hall
@@ -2119,6 +2119,7 @@ components:
         - congressId
         - name
         - rssiThreshold
+        - capacity
         - createdAt
         - updatedAt
       properties:
@@ -2134,6 +2135,16 @@ components:
           type: integer
           description: Salon icinde kabul edilen minimum RSSI (dBm). Varsayilan -70.
           example: -70
+        capacity:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: >-
+            Salon kapasitesi (kisi). null = kapasite tanimlanmamis (0 ile
+            karistirilmaz). Dolulukyuzdesi hesaplamasi bu alani kullanir ama
+            hesaplama ayri bir asamada uygulanir, bu alan yalnizca veriyi
+            tasir.
+          example: 250
         createdAt:
           type: string
           format: date-time
@@ -2158,6 +2169,13 @@ components:
           minimum: -100
           maximum: 0
           description: Verilmezse -70 kullanilir.
+        capacity:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: >-
+            Salon kapasitesi (kisi). Opsiyonel (eski istemci uyumlulugu icin)
+            - verilmezse null kalir, varsayilan bir deger ATANMAZ.
 
     HallUpdate:
       type: object
@@ -2170,6 +2188,11 @@ components:
           type: integer
           minimum: -100
           maximum: 0
+        capacity:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: Gonderilmezse mevcut deger korunur (kismi PATCH).
 
     Beacon:
       type: object
