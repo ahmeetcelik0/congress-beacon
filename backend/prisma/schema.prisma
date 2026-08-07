@@ -14,13 +14,13 @@ datasource db {
 }
 
 model Congress {
-  id         String    @id @default(uuid())
-  name       String
-  code       String    @unique
-  accessCode String
-  beaconUuid String
-  startDate  DateTime?
-  endDate    DateTime?
+  id                         String    @id @default(uuid())
+  name                       String
+  code                       String    @unique
+  accessCode                 String
+  beaconUuid                 String
+  startDate                  DateTime?
+  endDate                    DateTime?
   // Mobil cihazlarin observation batch'lerini kac saniyede bir gonderecegini
   // belirler. Panelden degistirilebilir; mobil uygulama bunu koda gomulu
   // sabit yerine her batch gonderiminde backend'den ogrenir (bkz.
@@ -50,13 +50,14 @@ model Congress {
   // olusmaz. Bkz. docs/decisions.md.
   staleGraceSeconds         Float @default(5)
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  halls         Hall[]
-  beacons       Beacon[]
-  sessions      Session[]
-  registrations CongressRegistration[]
+  halls               Hall[]
+  beacons             Beacon[]
+  sessions            Session[]
+  registrations       CongressRegistration[]
+  registrationImports RegistrationImport[]
 }
 
 enum UserRole {
@@ -65,18 +66,25 @@ enum UserRole {
 }
 
 model User {
-  id        String  @id @default(uuid())
-  firstName String
-  lastName  String
+  id                 String    @id @default(uuid())
+  firstName          String
+  lastName           String
   // Faz 1 oncesi tum kullanicilar icin doluydu (pilot-login eslestirmesi);
   // artik nullable - Faz 2'de dernek kayit listesinden e-postasi olup
   // telefonu olmayan katilimcilar gelecek. pilot-login bu alani hala her
   // zaman doldurur.
-  phoneLast4 String?
-  // E.164 normalize edilmis (ornek: +905321234567).
-  email        String?  @unique
-  phone        String?  @unique
-  passwordHash String?
+  phoneLast4         String?
+  // E.164 normalize edilmis (ornek: +905321234567). unique oldugu ve E.164
+  // bekledigi icin normalize EDILEMEYEN (unparseable) numaralar buraya
+  // YAZILMAZ - yalnizca phoneRaw'da yasarlar (bkz. asagisi, veri kaybini
+  // onleyen alan budur).
+  email              String?   @unique
+  phone              String?   @unique
+  // Katilimcinin/dernegin verdigi HAM telefon hali - normalize edilebilmis
+  // olsun ya da olmasin her zaman doldurulur. Panelde gosterilir, arama
+  // buna da bakar. Bkz. docs/decisions.md (Faz 2 - phone + phoneRaw ikilisi).
+  phoneRaw           String?
+  passwordHash       String?
   // true ise kullanici gecici bir kodla/sifreyle giris yapmis demektir -
   // ActiveCongressGuard bu durumda kongre gerektiren uc noktalari kapatir.
   mustChangePassword Boolean   @default(false)
@@ -121,6 +129,63 @@ model CongressRegistration {
   @@unique([congressId, userId])
   @@index([congressId])
   @@index([userId])
+}
+
+enum ImportStatus {
+  DRAFT // yuklendi, onay bekliyor
+  APPROVED // onaylandi, kayitlara islendi
+  CANCELLED // yetkili iptal etti
+}
+
+enum ImportRowStatus {
+  NEW // yeni kullanici olusturulacak
+  MATCHED // mevcut kullaniciyla eslesti, kaydi eklenecek/guncellenecek
+  DUPLICATE // ayni dosya icinde tekrar eden satir
+  INVALID // islenemez (bkz. RegistrationImportParser)
+  EXCLUDED // yetkili elle cikardi
+}
+
+model RegistrationImport {
+  id          String       @id @default(uuid())
+  congressId  String
+  adminUserId String
+  fileName    String
+  status      ImportStatus @default(DRAFT)
+  totalRows   Int
+  approvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  congress  Congress                @relation(fields: [congressId], references: [id])
+  adminUser AdminUser               @relation(fields: [adminUserId], references: [id])
+  rows      RegistrationImportRow[]
+
+  @@index([congressId, status])
+}
+
+model RegistrationImportRow {
+  id              String          @id @default(uuid())
+  importId        String
+  rowNumber       Int // dosyadaki gercek satir numarasi (hata mesajlarinda kullanilir)
+  rawFirstName    String?
+  rawLastName     String?
+  rawEmail        String?
+  rawPhone        String?
+  normalizedEmail String?
+  // E.164; normalize edilemediyse null (rawPhone yine dolu - bkz. bolum 1).
+  normalizedPhone String?
+  externalId      String?
+  status          ImportRowStatus
+  // Satiri BLOKE eden hata - INVALID durumundaysa dolu, Turkce.
+  message         String?
+  // Satir islenebilir ama dikkat gerektiriyor - Turkce. message'dan AYRI:
+  // biri satiri onaydan cikarir, digeri sadece bilgi verir.
+  warning         String?
+  matchedUserId   String?
+
+  import RegistrationImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, status])
 }
 
 enum DevicePlatform {
@@ -265,11 +330,11 @@ model AttendanceEvent {
   hallId String
   type   AttendanceEventType
 
-  occurredAt DateTime
+  occurredAt       DateTime
   // v2'de ham dB marjini tasiyordu, v3'ten itibaren 0-100 arasi guven YUZDESI
   // tasir. Gecmis veri icin backfill YAPILMADI - algorithmVersion ayrimi
   // ('v2' vs 'v3') sayesinde eski/yeni anlam karismaz.
-  confidenceScore Float?
+  confidenceScore  Float?
   // Karar gerekcesi: hangi salonlar, hangi yumusatilmis degerler, yuzdeler,
   // en yakin rakiple fark, kac okuma outlier diye elendi. Saha testinde
   // "neden burada yanlis salon secildi" sorusuna cevap verebilmek icin.
@@ -313,7 +378,8 @@ model AdminUser {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  auditLogs AuditLog[]
+  auditLogs           AuditLog[]
+  registrationImports RegistrationImport[]
 }
 
 model AuditLog {
@@ -384,14 +450,14 @@ enum NotificationStatus {
 }
 
 model NotificationLog {
-  id        String              @id @default(uuid())
+  id        String             @id @default(uuid())
   sessionId String?
   userId    String
   deviceId  String
   title     String
   body      String
   status    NotificationStatus
-  sentAt    DateTime            @default(now())
+  sentAt    DateTime           @default(now())
   openedAt  DateTime?
 
   session Session? @relation(fields: [sessionId], references: [id])

@@ -116,23 +116,38 @@ spesifikasyonla çelişki sanmasın diye burada kayıtlı:
   tarafı yeniden `pilot-login` akışına yönlendirir. Sunucu tarafı token iptal
   listesi (blacklist) bu fazda yoktur.
 
+### Ham veri / backend-karar mimarisi
+
+- Mobil uygulama salon kararı **vermez**. Yalnızca o anki ham iBeacon anlık
+  görüntüsünü (`observationId`, `observedAt`, görülen beacon'ların
+  `uuid/major/minor/rssi/txPower` listesi) gönderir.
+- Salon giriş/çıkış kararı, ziyaret süresi ve güven hesaplaması tamamen
+  **backend**'de (`AttendanceProcessingService`) yapılır. Bu, karar mantığının
+  tek bir yerde toplanmasını, versiyonlanmasını (`algorithmVersion`) ve
+  geçmiş verilerin yeniden işlenebilmesini sağlar.
+- `POST /observations/batch` bu fazda yalnızca bir "sözleşme" değil, gerçek bir
+  ingestion uç noktasıdır: JWT + cihaz sahiplik doğrulaması, `observationId`
+  bazlı idempotency, ham kayıt ve ardından senkron `AttendanceProcessingService`
+  tetiklemesi içerir. İleride bu tetikleme Redis tabanlı bir kuyruğa taşınabilir;
+  bu yüzden ingestion ve attendance işleme kasıtlı olarak ayrı servislerdir.
+
 ## Faz 1 — Global Kullanici Modeli
 
 Katilimcinin artik tek bir kongreye degil, e-posta/telefon + sifre ile
 dogrulanan bir kimlige sahip olmasi ve kayitli oldugu kongreler arasindan
 birini secip degistirebilmesi gerekiyordu. Bu, `User`in `congressId`ye
-kilitli olmasindan (Faz 2 kararindaki pilot modelin devami) coktan-coka bir
+kilitli olmasindan (yukaridaki eski pilot modelin devami) coktan-coka bir
 iliskiye (`CongressRegistration`) gecisi zorunlu kildi.
 
 ### Neden guard enjeksiyonu (User.congressId kaldirilirken davranis korunuyor)
 
 `user.congressId` okuyan kod (attendance/observation-ingestion, vb.) beacon
 zincirinin bir parcasi - bu faz **beacon zincirine dokunmama** kisitiyla
-sinirliydi (bkz. Faz 1 talimati, MUTLAK KISITLAR). Iki secenek vardi:
-(a) DB'deki `User.congressId`yi kaldirip her kullanim yerini
-`CongressRegistration`e gore yeniden yazmak, ya da (b) DB'den kaldirip
-runtime'da `JwtAuthGuard` icinde `request.user`e o istekteki aktif kongreyi
-(`JwtPayload.activeCongressId`) `congressId` adiyla enjekte etmek. (b) secildi:
+sinirliydi. Iki secenek vardi: (a) DB'deki `User.congressId`yi kaldirip her
+kullanim yerini `CongressRegistration`e gore yeniden yazmak, ya da (b)
+DB'den kaldirip runtime'da `JwtAuthGuard` icinde `request.user`e o
+istekteki aktif kongreyi (`JwtPayload.activeCongressId`) `congressId`
+adiyla enjekte etmek. (b) secildi:
 - Beacon zincirindeki tum okuma noktalari (observation-ingestion.service.ts)
   TEK SATIR bile degismeden calismaya devam ediyor - regresyon riski en
   dusuk secenek.
@@ -157,26 +172,88 @@ uc noktalara eklendi; ayri bir "haric tutma" listesi tutmaya gerek kalmadi.
 
 ### pilot-login geriye donuk uyumlulugu
 
-`POST /auth/pilot-login` (Faz 2 karari) TestFlight'taki mevcut mobil surum
-tarafindan hala kullaniliyor ve bu fazda **silinmedi/degistirilmedi** -
-yalnizca ic eslestirme mantigi `CongressRegistration`e tasindi (ayni
-ad+soyad+telefon-son-4-hane eslesmesi, artik "bu kongride kaydi var mi"
-kontrolu `CongressRegistration` uzerinden). Response sozlesmesi birebir
-ayni kaldi. Faz 6'da yeni mobil giris akisi (bu fazda eklenen
-`/auth/login` + `/auth/select-congress`) devreye girdiginde bu endpoint
-kaldirilacak - o zamana kadar gecis koprusu olarak duruyor.
+`POST /auth/pilot-login` TestFlight'taki mevcut mobil surum tarafindan hala
+kullaniliyor ve bu fazda **silinmedi/degistirilmedi** - yalnizca ic
+eslestirme mantigi `CongressRegistration`e tasindi (ayni ad+soyad+telefon-
+son-4-hane eslesmesi, artik "bu kongride kaydi var mi" kontrolu
+`CongressRegistration` uzerinden). Response sozlesmesi birebir ayni kaldi.
+Faz 6'da yeni mobil giris akisi (`/auth/login` + `/auth/select-congress`)
+devreye girdiginde bu endpoint kaldirilacak - o zamana kadar gecis koprusu
+olarak duruyor.
 
-### Ham veri / backend-karar mimarisi
+## Faz 2 — Katılımcı Kayıt Yönetimi
 
-- Mobil uygulama salon kararı **vermez**. Yalnızca o anki ham iBeacon anlık
-  görüntüsünü (`observationId`, `observedAt`, görülen beacon'ların
-  `uuid/major/minor/rssi/txPower` listesi) gönderir.
-- Salon giriş/çıkış kararı, ziyaret süresi ve güven hesaplaması tamamen
-  **backend**'de (`AttendanceProcessingService`) yapılır. Bu, karar mantığının
-  tek bir yerde toplanmasını, versiyonlanmasını (`algorithmVersion`) ve
-  geçmiş verilerin yeniden işlenebilmesini sağlar.
-- `POST /observations/batch` bu fazda yalnızca bir "sözleşme" değil, gerçek bir
-  ingestion uç noktasıdır: JWT + cihaz sahiplik doğrulaması, `observationId`
-  bazlı idempotency, ham kayıt ve ardından senkron `AttendanceProcessingService`
-  tetiklemesi içerir. İleride bu tetikleme Redis tabanlı bir kuyruğa taşınabilir;
-  bu yüzden ingestion ve attendance işleme kasıtlı olarak ayrı servislerdir.
+Faz 1'in migration'ından gelen mevcut kullanicilarin e-postasi yoktu, bu
+yuzden `/auth/register-request` hic kimse icin calismiyordu. Bu faz Excel/
+CSV toplu yukleme + panelden manuel ekleme ile katilimcilara e-posta/
+telefon kazandiriyor - `docs/mobile-next-tasks.md`'deki gibi degil, dogrudan
+canli curl testiyle dogrulandi (import edilen bir katilimci gercekten
+`register-request` -> `login` akisini tamamlayabildi).
+
+### Neden iki asamali import (yukle -> onizle/duzelt -> onayla)
+
+Dernekten gelen dosyalar kirli olabilir (bozuk e-posta, eksik ad, garip
+telefon formati). Tek adimda dogrudan `User`/`CongressRegistration`
+yazmak yerine once `RegistrationImport`/`RegistrationImportRow` staging
+tablolarina yazilip yetkiliye onizleme + satir duzeltme + haric tutma
+firsati taniniyor - hatali bir dosyanin yuzlerce yanlis kayit uretmesi
+boylece tek bir ONAY adiminda engellenebiliyor. Onay tek bir transaction
+icinde calisiyor: ya butun gecerli satirlar islenir ya da (beklenmeyen bir
+hata durumunda) hicbiri islenmez - kismi/tutarsiz bir onay durumu olmaz.
+
+### Neden libphonenumber-js (elle "+90 ekle" mantigi degil)
+
+Kongreye yurt disindan da katilimci geliyor. Eski `parse-email-or-phone.ts`
+ulke kodu olmayan HER numaraya `+90` ekliyordu - bu, yurt disi numaralari
+(ornegin `441234567890` gibi ulke kodunu zaten iceren ama `0` ile
+baslamayan bir girdiyi) sessizce bozuyordu. `libphonenumber-js` gercek bir
+telefon numarasi kutuphanesi: `+`/`00` ile baslayan girdilerde kendi ulke
+kodunu tanir ve varsayilan (`TR`) yok sayilir; elle yazilmis bir prefix
+mantigindan cok daha guvenilir.
+
+### Neden `phone` + `phoneRaw` ikilisi, neden normalize edilemeyen telefon satiri gecersiz kilmiyor
+
+`User.phone` unique VE E.164 formatinda olmasi gerekiyor (giris icin
+kullanilir, `/auth/login` bunun uzerinden arama yapar) - normalize
+edilemeyen ("unparseable") bir deger buraya YAZILAMAZ. Ama katilimcinin/
+dernegin verdigi ham deger tamamen atilirsa bu, talimattaki "hicbir girdi
+kaybolmayacak" kisitini ihlal eder. Cozum: `phoneRaw` alani HER ZAMAN ham
+metni tasir (unique degil, normalize edilebilir/edilemez fark etmez),
+`phone` yalnizca gecerli bir E.164 uretilebildiginde dolar. Bu yuzden
+normalize edilemeyen bir telefon TEK BASINA satiri INVALID yapmaz -
+yalnizca bir uyari birakir (`phoneRaw` yine kaydedilir); satir yalnizca
+kullanilabilir HICBIR iletisim bilgisi (ne gecerli e-posta ne kullanilabilir
+telefon) yoksa gecersiz olur.
+
+### Neden ad-soyad eslestirmesi yapilmadi
+
+Import satirlarini mevcut kullanicilarla eslestirirken (MATCHED tespiti)
+yalnizca normalize e-posta, sonra normalize telefon kullanildi. Ad+soyad
+eslestirmesi bilerek KULLANILMADI - yaygin isimlerde (ayni ad+soyad
+kombinasyonu farkli kisilerde) yanlis eslesme riski yuksek ve bu, bir
+katilimcinin yanlislikla baska birinin hesabina/gecmisine baglanmasi
+anlamina gelir. E-posta/telefon benzersiz oldugu icin guvenilir tek
+eslestirme anahtaridir. (Faz 4'teki konusmaci eslestirmesi farkli bir
+problem - orada e-posta yok, baska bir cozum gerekecek.)
+
+### Neden silme yerine pasiflestirme
+
+`POST /admin/registrations/:id/deactivate` gercek bir `DELETE` YAPMAZ,
+yalnizca `CongressRegistration.isActive = false` yazar. Bir katilimcinin
+beacon gecmisi (HallVisit/AttendanceEvent) `User.id`ye baglidir - kullanici
+silinirse bu gecmis ya yetim kalir ya da cascade ile silinip raporlari
+(katilim istatistikleri, salon doluluk gecmisi) geriye donuk bozar.
+Pasiflestirme, kaydin panelde/register-request akisinda "aktif" gorunmesini
+engellerken gecmis veriyi korur.
+
+### phone/email unique cakismasi onayda neden "atla" davranisiyla cozuluyor
+
+Import onaylanirken (`POST .../approve`) bir NEW satirin `email`/`phone`si,
+parse ile onay arasinda gecen surede (ornegin ayni kisiyi iceren iki farkli
+import arka arkaya onaylandiginda) baska bir kullaniciyla cakisabilir.
+Prisma'nin unique constraint hatasi (P2002) bu durumda YAKALANIR, o satir
+`DUPLICATE`e cevrilip atlanir, transaction devam eder - tek bir satirin
+cakismasi butun onayi geri almaz. Bu, MySQL/Prisma'da gercek bir DB'ye
+karsi canli test edilerek dogrulandi (iki import, ayni e-posta, art arda
+onay - ikinci importun cakisan satiri DUPLICATE oldu, digeri basariyla
+islendi, import yine APPROVED oldu).

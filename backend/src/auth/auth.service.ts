@@ -101,14 +101,19 @@ export class AuthService {
   private async issueVerificationCode(emailOrPhone: string): Promise<void> {
     const parsed = parseEmailOrPhone(emailOrPhone);
 
-    const user = await this.prisma.user.findFirst({
-      where: {
-        ...(parsed.type === 'email'
-          ? { email: parsed.value }
-          : { phone: parsed.value }),
-        registrations: { some: { isActive: true } },
-      },
-    });
+    // 'unrecognized' icin DB'de hicbir 'phone'/'email' degeriyle arama
+    // yapilmaz - dogrudan "bulunamadi" davranisina dusulur.
+    const user =
+      parsed.type === 'unrecognized'
+        ? null
+        : await this.prisma.user.findFirst({
+            where: {
+              ...(parsed.type === 'email'
+                ? { email: parsed.value }
+                : { phone: parsed.value }),
+              registrations: { some: { isActive: true } },
+            },
+          });
     if (!user) {
       throw new NotFoundException(
         'Bu bilgiyle kayitli aktif kongre bulunamadi',
@@ -135,12 +140,15 @@ export class AuthService {
   async login(dto: LoginDto): Promise<LoginResult> {
     const parsed = parseEmailOrPhone(dto.emailOrPhone);
 
-    const user = await this.prisma.user.findFirst({
-      where:
-        parsed.type === 'email'
-          ? { email: parsed.value }
-          : { phone: parsed.value },
-    });
+    const user =
+      parsed.type === 'unrecognized'
+        ? null
+        : await this.prisma.user.findFirst({
+            where:
+              parsed.type === 'email'
+                ? { email: parsed.value }
+                : { phone: parsed.value },
+          });
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('E-posta/telefon veya sifre hatali');
     }

@@ -14,11 +14,18 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAdminToken();
 
+  // Dosya yukleme (katilimci Excel/CSV importu) icin `body` bir FormData
+  // olabilir - bu durumda 'Content-Type' ELLE eklenmez: tarayici/fetch
+  // multipart boundary'sini kendisi uretip header'i otomatik ekler. Elle
+  // 'application/json' eklersek backend govdeyi hic parse edemez. JSON
+  // govdeli tum diger cagrilar (buyuk cogunluk) davranis olarak AYNEN korunur.
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     cache: 'no-store',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -307,6 +314,152 @@ export type ObservationPage = {
   pageSize: number;
 };
 
+// ===== Katılımcı yönetimi (Faz 2) =====
+// Backend sozlesmesi `backend/src/registrations/**` altinda tam olarak
+// dogrulanmis (curl ile uctan uca test edilmis) - burada birebir eslenir.
+
+export type RegistrationSource = 'API' | 'IMPORT' | 'MANUAL' | 'PILOT';
+
+export type CongressRegistrationListItem = {
+  registrationId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  // E.164 normalize edilmis telefon. Normalize edilemeyen numaralarda null
+  // olur ama `phoneRaw` her zaman doludur - panelde biri dolu her zaman
+  // gosterilmeli (bkz. registrations-table.tsx).
+  phone: string | null;
+  phoneRaw: string | null;
+  source: RegistrationSource;
+  isActive: boolean;
+  registeredAt: string;
+  hasPassword: boolean;
+  lastLoginAt: string | null;
+};
+
+export type CongressRegistrationPage = {
+  items: CongressRegistrationListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+// POST/deactivate/reactivate ham CongressRegistration kaydini doner (liste
+// satiri SEKLINDE DEGIL) - panel bu donen degeri dogrudan goruntulemez,
+// basari/hata sinyali olarak kullanip listeyi yeniden ceker.
+export type CongressRegistrationRecord = {
+  id: string;
+  userId: string;
+  congressId: string;
+  source: RegistrationSource;
+  externalId: string | null;
+  isActive: boolean;
+  registeredAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// PATCH /admin/registrations/:id ham User kaydini doner.
+export type UpdatedRegistrationUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+  phoneLast4: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RegistrationImportCounts = {
+  new: number;
+  matched: number;
+  duplicate: number;
+  invalid: number;
+  warnings: number;
+};
+
+export type RegistrationImportUploadResult = {
+  importId: string;
+  totalRows: number;
+  counts: RegistrationImportCounts;
+  recognizedColumns: string[];
+  unrecognizedColumns: string[];
+};
+
+export type RegistrationImportStatus = 'DRAFT' | 'APPROVED' | 'CANCELLED';
+
+export type RegistrationImportListItem = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  status: RegistrationImportStatus;
+  totalRows: number;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  adminUser: { name: string; email: string };
+};
+
+// GET /admin/registrations/imports/:id icindeki `import` alani - liste
+// uc noktasindan farkli olarak `adminUser` ILISKISI GELMEZ.
+export type RegistrationImportRef = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  status: RegistrationImportStatus;
+  totalRows: number;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RegistrationImportRowStatus = 'NEW' | 'MATCHED' | 'DUPLICATE' | 'INVALID' | 'EXCLUDED';
+
+export type RegistrationImportRow = {
+  id: string;
+  importId: string;
+  rowNumber: number;
+  rawFirstName: string | null;
+  rawLastName: string | null;
+  rawEmail: string | null;
+  rawPhone: string | null;
+  normalizedEmail: string | null;
+  normalizedPhone: string | null;
+  externalId: string | null;
+  status: RegistrationImportRowStatus;
+  // Dolu ise satir INVALID'i aciklar (kirmizi gosterim).
+  message: string | null;
+  // Dolu ise satir islenebilir ama dikkat gerektirir (sari gosterim).
+  warning: string | null;
+  matchedUserId: string | null;
+};
+
+export type RegistrationImportDetail = {
+  import: RegistrationImportRef;
+  rows: RegistrationImportRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  // Anahtarlar ImportRowStatus degerleridir; yalnizca o importta GORULEN
+  // durumlar icin anahtar olusur (ornegin hic DUPLICATE yoksa anahtar hic
+  // gelmeyebilir) - okurken `counts.NEW ?? 0` gibi guvenli erisim gerekir.
+  // Bu sayim SAYFALAMADAN BAGIMSIZ, importun TUMU uzerinden hesaplanir.
+  counts: Partial<Record<RegistrationImportRowStatus, number>>;
+};
+
+export type RegistrationImportApproveResult = {
+  createdUsers: number;
+  updatedUsers: number;
+  createdRegistrations: number;
+  skipped: number;
+};
+
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -435,4 +588,90 @@ export const api = {
     }>,
   ) => request<Session>(`/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSession: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
+
+  // ===== Katılımcı yönetimi (Faz 2) =====
+  listRegistrations: (params: {
+    congressId: string;
+    search?: string;
+    source?: RegistrationSource;
+    isActive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => request<CongressRegistrationPage>(`/admin/registrations${buildQuery(params)}`),
+
+  createRegistration: (data: {
+    congressId: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
+  }) =>
+    request<CongressRegistrationRecord>('/admin/registrations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Alanlar PATCH semantigiyle - gonderilmeyen (undefined) alan degismez,
+  // gonderilen bos string ('') o alani BOSALTIR (bkz. update-registration.dto.ts
+  // yorumu). Cagiran taraf bir alani "dokunulmadi" birakmak istiyorsa o
+  // anahtari objeden TAMAMEN cikarmali, '' GONDERMEMELI.
+  updateRegistration: (
+    id: string,
+    data: Partial<{ firstName: string; lastName: string; email: string; phone: string }>,
+  ) =>
+    request<UpdatedRegistrationUser>(`/admin/registrations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deactivateRegistration: (id: string) =>
+    request<CongressRegistrationRecord>(`/admin/registrations/${id}/deactivate`, { method: 'POST' }),
+  reactivateRegistration: (id: string) =>
+    request<CongressRegistrationRecord>(`/admin/registrations/${id}/reactivate`, { method: 'POST' }),
+
+  // multipart/form-data - `request()` FormData govdesini oldugu gibi gecirir,
+  // Content-Type header'ini ELLE eklemez (bkz. yukarisi).
+  uploadRegistrationImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<RegistrationImportUploadResult>('/admin/registrations/imports', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  listRegistrationImports: (congressId: string) =>
+    request<RegistrationImportListItem[]>(`/admin/registrations/imports${buildQuery({ congressId })}`),
+
+  getRegistrationImport: (
+    id: string,
+    params: { status?: RegistrationImportRowStatus; page?: number; pageSize?: number } = {},
+  ) => request<RegistrationImportDetail>(`/admin/registrations/imports/${id}${buildQuery(params)}`),
+
+  updateRegistrationImportRow: (
+    importId: string,
+    rowId: string,
+    data: Partial<{ firstName: string; lastName: string; email: string; phone: string }>,
+  ) =>
+    request<RegistrationImportRow>(`/admin/registrations/imports/${importId}/rows/${rowId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  excludeRegistrationImportRow: (importId: string, rowId: string) =>
+    request<RegistrationImportRow>(
+      `/admin/registrations/imports/${importId}/rows/${rowId}/exclude`,
+      { method: 'POST' },
+    ),
+
+  approveRegistrationImport: (importId: string) =>
+    request<RegistrationImportApproveResult>(`/admin/registrations/imports/${importId}/approve`, {
+      method: 'POST',
+    }),
+
+  cancelRegistrationImport: (importId: string) =>
+    request<RegistrationImportRef>(`/admin/registrations/imports/${importId}/cancel`, {
+      method: 'POST',
+    }),
 };
