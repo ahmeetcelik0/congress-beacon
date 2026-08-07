@@ -257,3 +257,107 @@ cakismasi butun onayi geri almaz. Bu, MySQL/Prisma'da gercek bir DB'ye
 karsi canli test edilerek dogrulandi (iki import, ayni e-posta, art arda
 onay - ikinci importun cakisan satiri DUPLICATE oldu, digeri basariyla
 islendi, import yine APPROVED oldu).
+
+### `xlsx` neden npm registry disindan geliyor, ve neden SURUM PINLI
+
+`xlsx` (SheetJS) paketinin npm registry'deki son surumu (0.18.5, 2022'den
+beri guncellenmemis) 2 adet HIGH onem dereceli yamasiz acik tasiyor
+(Prototype Pollution + ReDoS - `npm audit` bunu dogrudan isaretliyor).
+SheetJS bu acik lari kendi CDN'inde (`cdn.sheetjs.com`) yayinladigi
+surumlerde duzeltti ama npm registry'sine artik yeni surum yuklemiyor -
+bu yuzden bagimlilik `package.json`da bir npm surum numarasi degil,
+dogrudan bir tarball URL'i olarak tanimli.
+
+**Ilk halinde (Faz 2) `xlsx-latest` (hareketli hedef) kullanilmisti - bu bir
+production riskiydi:** SheetJS CDN'deki `xlsx-latest` dosyasini
+guncelledigi an, `package-lock.json`daki integrity hash'i artik indirilen
+dosyayla eslesmez ve `npm ci` (production/CI kurulumu bunu kullanir)
+sessizce degil, GURULTULU sekilde patlar - deploy ortasinda kesilme riski.
+Faz 3'te surum-pinli URL'ye (`xlsx-0.20.3/xlsx-0.20.3.tgz`) gecirildi ve
+`npm ci` ile temiz kurulumun calistigi dogrulandi. **Sonuc:** bu bagimliligin
+guncellenmesi artik npm'in otomatik surum cozumlemesiyle degil, BILINCLI
+bir islemle olur - yeni bir SheetJS surumu gerektiginde `package.json`daki
+URL'deki surum numarasi elle degistirilip `npm install` + `npm ci` ile
+yeniden dogrulanmali. `npm audit` bu paketi (registry disinda oldugu icin)
+izleyemez - guvenlik duyurularini takip etmek elle yapilmali.
+
+## Faz 3 — Kongre İçerik Yönetimi
+
+Mobil ana sayfada gosterilecek kongre icerigi (genel bilgi, otel/mekan,
+ana konusmacilar, duyurular, sponsorlar) icin yonetim (admin) API'si ve
+gorsel yukleme altyapisi. Mobil tarafin bu veriyi OKUYACAGI `/mobile/...`
+uclari kapsam disi (Faz 5) - bu faz sadece yazma/yonetim tarafi.
+
+### Neden Venue tek tablo + `VenueType` enum, iki ayri tablo degil
+
+Otel ve ana kongre mekani ayni alan setini paylasiyor (isim, adres, harita
+linki, iletisim, gorsel, siralama) - tek fark "hangi tur mekan oldugu".
+Iki ayri tablo (`Hotel`, `MainVenue`) bu alanlarin tamamini birebir
+tekrar ederdi ve panel/mobil tarafinda "mekanlari listele" gibi ortak bir
+sorgu icin iki ayri sorguyu birlestirmek gerekirdi. `VenueType { MAIN,
+HOTEL }` ile tek tablo, tek liste uc noktasi (`GET /admin/venues`) yeterli;
+turler arasi filtre/gruplama sadece bir `WHERE type = ...` veya panelde
+istemci tarafi gruplama.
+
+### Neden sabit alanlar yerine serbest-form Genel Bilgi bolumleri
+
+Ilk tasarimda "Kongre Hakkinda", "Ulasim", "Duzenleme Kurulu" gibi sabit
+alanlar dusunuldu, ama her kongrenin "genel bilgi" ihtiyaci farkli:
+kimi vize/davetiye bilgisi ister, kimi kredi/CME puanlama aciklamasi,
+kimi sponsor kurallari. Sabit alan seti ya cogu kongrede bos kalir ya da
+surekli yeni alan eklemeyi gerektirir. Bunun yerine `CongressInfoSection`
+serbest basliga sahip, `displayOrder` ile siralanan, Markdown govdeli
+bagimsiz kayitlar - yetkili istedigi kadar/turde bolum ekleyebiliyor,
+semaya dokunmadan.
+
+### Neden `KeynoteSpeaker` bilimsel programdan (Faz 4) BAGIMSIZ
+
+`KeynoteSpeaker`, mobil ana sayfada gosterilecek KUCUK bir vitrin
+listesidir (tipik olarak 3-10 kisi) - Faz 4'te gelecek olan tam bilimsel
+program/sunum (`Presentation`/`Session` konusmaci alanlari, potansiyel
+olarak yuzlerce kayit) ile BILEREK iliskilendirilmedi. Ikisini
+iliskilendirmek, "bu konusmaci ayni zamanda bir oturumda konusuyor mu"
+gibi bir tutarlilik kisitlamasi getirirdi ve vitrin listesinin amacini
+(yetkilinin elle secip one cikardigi kucuk bir grup) bozardi. Bilimsel
+programdaki bir konusmaci ile ayni kisiyi vitrine eklemek istenirse ad/
+unvan bilgisi elle bir kez daha girilir - kasitli bir tekrar, yanlislikla
+baglanma riskine tercih edildi.
+
+### Neden dosya sistemi, bulut depolama (S3 vb.) degil
+
+Yuklenen gorseller (kapak, mekan, sponsor logosu, konusmaci fotografi)
+kucuk hacimli (2 MB siniri) ve dusuk trafikli - ayri bir bulut depolama
+servisi/SDK/kimlik bilgisi yonetimi eklemek bu olcekte gereksiz karmasiklik.
+Multer disk storage + `backend/uploads/<congressId>/<uuid>.<ext>` ve
+NestJS'in `useStaticAssets`'i ile dogrudan sunum yeterli. Bunun ODEDIGI
+bedel: production'da konteyner yeniden olusturulunca (`docker compose up
+-d --build backend`) dizin sifirlanir - bu yuzden `docker-compose.prod.yml`'a
+kalici bir `backend-uploads` volume'u eklendi (bkz. `DEPLOY-REHBERI.md`
+§9.5). Ileride hacim/trafik artarsa bulut depolamaya gecis, `UploadsService`
+tek I/O noktasi oldugu icin izole bir degisiklik olur.
+
+### Gorsel yukleme guvenligi: neden uzantiya degil magic-byte imzasina bakiliyor
+
+Istemcinin gonderdigi dosya adi/uzantisi ve `Content-Type` header'i
+GUVENILMEZ - bir saldirgan `.jpg` uzantili bir script yukleyip baska bir
+yerde calistirmaya calisabilir. Bunun yerine dosyanin ilk birkac byte'i
+(JPEG: `FF D8 FF`, PNG: `89 50 4E 47 0D 0A 1A 0A`, WEBP: `RIFF....WEBP`)
+okunup gercek turu dogrulanir (`validate-image-file.ts`). Dosya adi da
+HICBIR ZAMAN kullanicidan gelmez, sunucu tarafinda `randomUUID()` ile
+uretilir - path traversal (`../`) ve dosya adi cakismasi/enjeksiyonu
+boylece yapisal olarak imkansiz hale gelir (bkz. `resolve-upload-path.ts`,
+hem "farkli" hem "uploadsRoot + path.sep ile basliyor" kontrolu birlikte).
+
+### Bes icerik turu (Venue/Announcement/Sponsor/KeynoteSpeaker/InfoSection) neden ortak bir `ContentCrudService` uzerinden
+
+Bes turun CRUD davranisi (kongre-scope dogrulamasi, silme/degisimde eski
+gorseli diskten temizleme, `reorder` ile toplu `displayOrder` yeniden
+yazimi) birebir ayni - bunu bes kez kopyalamak yerine `ContentCrudService<T>`
+soyut sinifi bu ortak davranisi tasir, her tur yalnizca kendi Prisma
+delege'ini, siralama kuralini ve (varsa) gorsel alanini tanimlar. Prisma'nin
+uretilen delege tiplerinin (`VenueDelegate` vb.) her biri yapisal olarak
+farkli ve `$transaction` toplu islemi `Prisma.PrismaPromise<T>` gerektirdigi
+icin ortak arayuz (`ContentDelegate<T>`) parametre tiplerinde bilinçli olarak
+gevsek (`any`) tutuldu - gercek tip guvenligi her turun kendi DTO'sunda
+(controller sinirinda) zaten var, bu tek arayuz sinirindaki gevseklik
+kapsamli ve yorumla belgelenmis bir tercih.

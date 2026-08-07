@@ -54,6 +54,12 @@ const ICONS = {
       />
     </svg>
   ),
+  content: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <rect x="3" y="3" width="14" height="14" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M6.5 7.5h7M6.5 10.5h7M6.5 13.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
   live: (
     <svg viewBox="0 0 20 20" fill="none">
       <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" />
@@ -383,6 +389,13 @@ export function AppShellNav({
               >
                 <span className="shell-nav-icon">{ICONS.registrations}</span>
                 Katılımcılar
+              </Link>
+              <Link
+                href={withCongressId('/content', congressId)}
+                className={`shell-nav-item${pathname === '/content' ? ' shell-nav-item-active' : ''}`}
+              >
+                <span className="shell-nav-icon">{ICONS.content}</span>
+                İçerik Yönetimi
               </Link>
             </div>
 

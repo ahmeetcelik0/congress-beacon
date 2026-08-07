@@ -28,6 +28,32 @@ export class CreateCongressDto {
   @IsUUID()
   beaconUuid: string;
 
+  // --- Mobil ana sayfa kongre karti (Faz 3) - hepsi opsiyonel, kongre
+  // olusturulduktan sonra panelden doldurulur. ---
+  @IsOptional()
+  @IsString()
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  coverImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  websiteUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
   @IsOptional()
   @IsDateString()
   startDate?: string;

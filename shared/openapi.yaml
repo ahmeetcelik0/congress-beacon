@@ -1674,6 +1674,744 @@ paths:
         '201':
           description: Kayit aktiflestirildi.
 
+  /admin/uploads:
+    post:
+      summary: Gorsel yukle (kapak, mekan, sponsor logosu, konusmaci fotografi)
+      description: >-
+        JPEG/PNG/WEBP, en fazla 2 MB. Dosya turu magic-byte imzasindan
+        dogrulanir, uzantiya/istemcinin gonderdigi Content-Type'a GUVENILMEZ.
+        Donen url sunucuda auth GEREKTIRMEDEN statik olarak sunulur
+        (ornek: GET {serverUrl}/uploads/<congressId>/<uuid>.png).
+      operationId: uploadFile
+      tags:
+        - Uploads
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+                purpose:
+                  type: string
+                  enum: [cover, venue, sponsor, speaker]
+      responses:
+        '201':
+          description: Yuklendi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - url
+                properties:
+                  url:
+                    type: string
+                    example: /uploads/3537dc2a-6e96-4a03-bf6d-37447d11a1dd/9b1f...png
+        '400':
+          description: >-
+            Desteklenmeyen format (magic-byte kontrolu basarisiz) veya
+            congressId ile eslesen kongre yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Dosya 2 MB siniri asiyor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Yuklenen bir gorseli diskten sil
+      description: >-
+        Normalde ELLE cagirmaya gerek yoktur - bir icerik kaydi
+        silindiginde/gorsel alani degistirildiginde backend eski dosyayi
+        kendisi siler. Bu uc nokta cogunlukla yarim kalan (kaydedilmemis)
+        yuklemeleri temizlemek icindir.
+      operationId: deleteUpload
+      tags:
+        - Uploads
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+      responses:
+        '200':
+          description: Silme denendi (dosya zaten yoksa da basarili sayilir).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+
+  /admin/venues:
+    get:
+      summary: Bir kongrenin mekanlarini (otel/ana mekan) listele
+      description: displayOrder alanina gore artan sirada doner.
+      operationId: listVenues
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Mekan listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+    post:
+      summary: Yeni mekan olustur
+      operationId: createVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueCreate'
+      responses:
+        '201':
+          description: Mekan olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/venues/reorder:
+    post:
+      summary: Mekanlarin gosterim sirasini topluca degistir
+      description: >-
+        Govdedeki ids dizisinin sirasina gore displayOrder degerleri 0'dan
+        baslayarak yeniden yazilir. Tek istekte tum sira gonderilir (satir
+        satir PATCH yerine) - yaris durumunu onlemek icin.
+      operationId: reorderVenues
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/venues/{id}:
+    patch:
+      summary: Mekani guncelle
+      operationId: updateVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+        '404':
+          description: Mekan bulunamadi.
+    delete:
+      summary: Mekani sil
+      description: Gorseli varsa diskten de silinir.
+      operationId: deleteVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Mekan bulunamadi.
+
+  /admin/announcements:
+    get:
+      summary: Bir kongrenin duyurularini listele
+      description: >-
+        Once isPinned=true olanlar, sonra publishedAt azalan sirada doner.
+        publishedAt=null olan kayitlar TASLAKTIR (mobilde gorunmez).
+      operationId: listAnnouncements
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Duyuru listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Announcement'
+    post:
+      summary: Yeni duyuru olustur (taslak olarak baslar)
+      operationId: createAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreate'
+      responses:
+        '201':
+          description: Duyuru olusturuldu (publishedAt=null, taslak).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/announcements/reorder:
+    post:
+      summary: Duyurularin gosterim sirasini topluca degistir
+      operationId: reorderAnnouncements
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/announcements/{id}:
+    patch:
+      summary: Duyuruyu guncelle
+      description: publishedAt bu uc noktadan degistirilemez, publish/unpublish kullanilir.
+      operationId: updateAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+    delete:
+      summary: Duyuruyu sil
+      operationId: deleteAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/announcements/{id}/publish:
+    post:
+      summary: Duyuruyu yayinla (publishedAt = simdi)
+      operationId: publishAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Yayinlandi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/announcements/{id}/unpublish:
+    post:
+      summary: Duyuruyu taslaga dondur (publishedAt = null)
+      operationId: unpublishAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Taslaga donduruldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/sponsors:
+    get:
+      summary: Bir kongrenin sponsorlarini listele
+      description: Once tier (PLATINUM..SUPPORTER prestij sirasi), sonra displayOrder ile doner.
+      operationId: listSponsors
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Sponsor listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sponsor'
+    post:
+      summary: Yeni sponsor olustur
+      operationId: createSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorCreate'
+      responses:
+        '201':
+          description: Sponsor olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sponsor'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/sponsors/reorder:
+    post:
+      summary: Sponsorlarin gosterim sirasini topluca degistir
+      operationId: reorderSponsors
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/sponsors/{id}:
+    patch:
+      summary: Sponsoru guncelle
+      operationId: updateSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sponsor'
+        '404':
+          description: Sponsor bulunamadi.
+    delete:
+      summary: Sponsoru sil
+      description: Logosu varsa diskten de silinir.
+      operationId: deleteSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Sponsor bulunamadi.
+
+  /admin/keynote-speakers:
+    get:
+      summary: Bir kongrenin ana konusmacilarini (vitrin listesi) listele
+      description: >-
+        displayOrder alanina gore artan sirada doner. Bilimsel program
+        (/sessions) konusmaci alanlariyla ILISKILI DEGILDIR, ayri elle
+        yonetilen bir listedir.
+      operationId: listKeynoteSpeakers
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Konusmaci listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeynoteSpeaker'
+    post:
+      summary: Yeni ana konusmaci olustur
+      operationId: createKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeynoteSpeakerCreate'
+      responses:
+        '201':
+          description: Konusmaci olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeynoteSpeaker'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/keynote-speakers/reorder:
+    post:
+      summary: Konusmacilarin gosterim sirasini topluca degistir
+      operationId: reorderKeynoteSpeakers
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/keynote-speakers/{id}:
+    patch:
+      summary: Konusmaciyi guncelle
+      operationId: updateKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeynoteSpeakerUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeynoteSpeaker'
+        '404':
+          description: Konusmaci bulunamadi.
+    delete:
+      summary: Konusmaciyi sil
+      description: Fotografi varsa diskten de silinir.
+      operationId: deleteKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Konusmaci bulunamadi.
+
+  /admin/info-sections:
+    get:
+      summary: Bir kongrenin genel bilgi bolumlerini listele
+      description: >-
+        displayOrder alanina gore artan sirada doner. body alani Markdown
+        icerir, mobilde render edilir.
+      operationId: listInfoSections
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bolum listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CongressInfoSection'
+    post:
+      summary: Yeni genel bilgi bolumu olustur
+      operationId: createInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressInfoSectionCreate'
+      responses:
+        '201':
+          description: Bolum olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CongressInfoSection'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/info-sections/reorder:
+    post:
+      summary: Bolumlerin gosterim sirasini topluca degistir
+      operationId: reorderInfoSections
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/info-sections/{id}:
+    patch:
+      summary: Genel bilgi bolumunu guncelle
+      operationId: updateInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressInfoSectionUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CongressInfoSection'
+        '404':
+          description: Bolum bulunamadi.
+    delete:
+      summary: Genel bilgi bolumunu sil
+      operationId: deleteInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Bolum bulunamadi.
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2803,6 +3541,30 @@ components:
             ortalamasina dahil edilmeye devam edecegi. Tek beacon'li bir
             salonun kisa sureli sinyal kesintisinde rakip salona sahte
             gecisi (aninda EXIT+ENTRY) onlemek icin eklendi.
+        fullName:
+          type: string
+          nullable: true
+          description: Mobil ana sayfa kongre karti icin acik/tam kongre adi (Faz 3).
+        description:
+          type: string
+          nullable: true
+          description: Mobil ana sayfa kongre karti icin serbest metin aciklama.
+        coverImageUrl:
+          type: string
+          nullable: true
+          description: >-
+            /admin/uploads ile yuklenen kapak gorselinin goreli yolu (ornek:
+            /uploads/<congressId>/<uuid>.png). API_URL ile birlestirilerek
+            kullanilir.
+        websiteUrl:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2830,6 +3592,18 @@ components:
         beaconUuid:
           type: string
           format: uuid
+        fullName:
+          type: string
+        description:
+          type: string
+        coverImageUrl:
+          type: string
+        websiteUrl:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
         startDate:
           type: string
           format: date-time
@@ -2898,6 +3672,18 @@ components:
         beaconUuid:
           type: string
           format: uuid
+        fullName:
+          type: string
+        description:
+          type: string
+        coverImageUrl:
+          type: string
+        websiteUrl:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
         startDate:
           type: string
           format: date-time
@@ -3538,3 +4324,451 @@ components:
           type: string
         phone:
           type: string
+
+    # ===== Kongre icerik yonetimi (Faz 3) =====
+
+    ReorderRequest:
+      type: object
+      description: >-
+        Yeni nihai siradaki TUM id'ler bu diziye konur; displayOrder
+        degerleri 0'dan baslayarak dizideki sıraya gore yeniden yazilir.
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+
+    VenueType:
+      type: string
+      enum: [MAIN, HOTEL]
+      description: MAIN = kongre merkezi/ana mekan, HOTEL = konaklama oteli.
+
+    Venue:
+      type: object
+      required:
+        - id
+        - congressId
+        - type
+        - name
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+          description: Google Maps baglantisi.
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VenueCreate:
+      type: object
+      required:
+        - congressId
+        - name
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+          minLength: 1
+        address:
+          type: string
+        city:
+          type: string
+        phone:
+          type: string
+        websiteUrl:
+          type: string
+        mapUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+
+    VenueUpdate:
+      type: object
+      description: VenueCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+          minLength: 1
+        address:
+          type: string
+        city:
+          type: string
+        phone:
+          type: string
+        websiteUrl:
+          type: string
+        mapUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+
+    Announcement:
+      type: object
+      required:
+        - id
+        - congressId
+        - title
+        - body
+        - isPinned
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        isPinned:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = taslak (mobilde gorunmez). publish/unpublish uc noktalariyla degisir.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AnnouncementCreate:
+      type: object
+      required:
+        - congressId
+        - title
+        - body
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPinned:
+          type: boolean
+
+    AnnouncementUpdate:
+      type: object
+      description: >-
+        AnnouncementCreate ile ayni alanlar (congressId haric), hepsi
+        opsiyonel (PATCH). publishedAt burada YOKTUR, publish/unpublish
+        uc noktalari kullanilir.
+      properties:
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPinned:
+          type: boolean
+
+    SponsorTier:
+      type: string
+      enum: [PLATINUM, GOLD, SILVER, BRONZE, SUPPORTER]
+      description: >-
+        Bildirilen sirayla prestij sirasidir (MySQL ENUM bildirim sirasina
+        gore siralanir) - liste varsayilan olarak bu sirayla doner.
+
+    Sponsor:
+      type: object
+      required:
+        - id
+        - congressId
+        - name
+        - tier
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SponsorCreate:
+      type: object
+      required:
+        - congressId
+        - name
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+        websiteUrl:
+          type: string
+        description:
+          type: string
+
+    SponsorUpdate:
+      type: object
+      description: SponsorCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        name:
+          type: string
+          minLength: 1
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+        websiteUrl:
+          type: string
+        description:
+          type: string
+
+    KeynoteSpeaker:
+      type: object
+      required:
+        - id
+        - congressId
+        - fullName
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: 'Unvanli tam hali, ornek: "Prof. Dr. Ahmet Yilmaz".'
+        title:
+          type: string
+          nullable: true
+          description: 'Ornek: "Kardiyoloji Profesoru".'
+        institution:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KeynoteSpeakerCreate:
+      type: object
+      required:
+        - congressId
+        - fullName
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          minLength: 1
+        title:
+          type: string
+        institution:
+          type: string
+        country:
+          type: string
+        bio:
+          type: string
+        photoUrl:
+          type: string
+
+    KeynoteSpeakerUpdate:
+      type: object
+      description: KeynoteSpeakerCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+        title:
+          type: string
+        institution:
+          type: string
+        country:
+          type: string
+        bio:
+          type: string
+        photoUrl:
+          type: string
+
+    CongressInfoSection:
+      type: object
+      required:
+        - id
+        - congressId
+        - title
+        - body
+        - displayOrder
+        - isPublished
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: 'Ornek: "Kongre Hakkinda", "Ulasim", "Kayit Bilgileri".'
+        body:
+          type: string
+          description: Markdown olarak saklanir, mobilde render edilir.
+        displayOrder:
+          type: integer
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CongressInfoSectionCreate:
+      type: object
+      required:
+        - congressId
+        - title
+        - body
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPublished:
+          type: boolean
+
+    CongressInfoSectionUpdate:
+      type: object
+      description: >-
+        CongressInfoSectionCreate ile ayni alanlar (congressId haric),
+        hepsi opsiyonel (PATCH).
+      properties:
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPublished:
+          type: boolean

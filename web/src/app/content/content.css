@@ -1,0 +1,397 @@
+/* Kongre İçerik Yönetimi (`/content`) — 5 içerik türü (Genel Bilgi/Mekan/
+   Duyuru/Sponsor/Konuşmacı) sekmeleri ORTAK stilleri. Tablo gövdesi
+   paylaşılan `.panel-table`i (bkz. globals.css) kullanır; burada yalnızca bu
+   sayfaya özgü sekme çubuğu, form ızgarası, satır-içi düzenleme, markdown
+   önizleme ve sıralama okları tanımlanır. */
+
+/* ===== Sekmeler ===== */
+.content-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.75rem;
+  padding-bottom: 0.1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.content-tab {
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  color: var(--text-dim);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  transform: translateY(1px);
+}
+
+.content-tab:hover {
+  color: var(--text);
+}
+
+.content-tab[data-active] {
+  color: var(--signal);
+  background: var(--surface);
+  border-color: var(--border);
+  border-bottom: 1px solid var(--surface);
+}
+
+.content-section-hint {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.82rem;
+  color: var(--text-faint);
+  max-width: 62ch;
+}
+
+/* ===== Oluşturma formları ===== */
+.content-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  align-items: start;
+}
+
+.content-form-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.content-form-span-2 {
+  grid-column: 1 / -1;
+}
+
+.content-form-optional {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.content-form-hint {
+  font-size: 0.74rem;
+  color: var(--text-faint);
+}
+
+.content-form-footer {
+  display: flex;
+}
+
+.panel-form textarea {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.88rem;
+  resize: vertical;
+  min-height: 3.5rem;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.panel-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.content-checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+  font-size: 0.85rem !important;
+  color: var(--text) !important;
+}
+
+.content-checkbox-label input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--signal);
+}
+
+/* ===== Markdown editörü + önizleme (Genel Bilgi) ===== */
+.content-markdown-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.content-markdown-preview-panel {
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.content-markdown-preview-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.content-markdown-preview {
+  color: var(--text);
+  font-size: 0.85rem;
+  line-height: 1.55;
+}
+
+.content-markdown-preview h2 {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.content-markdown-preview h3 {
+  font-size: 0.92rem;
+  margin: 0 0 0.4rem;
+  color: var(--text-dim);
+}
+
+.content-markdown-preview p {
+  margin: 0 0 0.6rem;
+}
+
+.content-markdown-preview ul {
+  margin: 0 0 0.6rem 1.1rem;
+  padding: 0;
+}
+
+.content-markdown-preview li {
+  margin-bottom: 0.2rem;
+}
+
+.content-markdown-preview > *:last-child {
+  margin-bottom: 0;
+}
+
+.content-markdown-empty {
+  color: var(--text-faint);
+  font-size: 0.8rem;
+}
+
+/* ===== Liste tabloları ===== */
+.content-table {
+  margin-top: 0.5rem;
+}
+
+.content-table td {
+  vertical-align: top;
+}
+
+.content-cell-title {
+  color: var(--text);
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.content-cell-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: var(--text-faint);
+}
+
+.content-thumbnail {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.content-thumbnail-placeholder {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-strong);
+  background: var(--bg-elevated);
+}
+
+.content-thumbnail-round,
+.content-thumbnail-round.content-thumbnail-placeholder {
+  border-radius: var(--radius-full);
+}
+
+.content-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.content-row-actions button {
+  padding: 0.3rem 0.65rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.content-row-actions button:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.content-row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.content-row-error {
+  width: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.7rem;
+}
+
+/* ===== Sıralama okları ===== */
+.content-reorder-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.content-reorder-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.content-reorder-buttons button:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.content-reorder-buttons button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ===== Satır-içi düzenleme formu ===== */
+.content-edit-cell {
+  padding: 0.85rem 1rem;
+}
+
+.content-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+/* Mekan/sponsor/konuşmacı satırları düzenleme formunda HEM .content-edit-form
+   HEM .content-form-grid sınıflarını birlikte kullanır (bkz. venue-row.tsx
+   vb.) - ikisi de tek sınıf özgüllüğünde olduğundan CSS kaynak sırası
+   kazanıyor ve grid yerine yukarıdaki flex-column uygulanıyordu (girdiler
+   konteyner genişliğine YAYILMAK yerine daralıp sola yaslanıyordu, oluşturma
+   formundaki gerçek 2 sütunlu görünümle tutarsız). Birleşik seçici daha
+   yüksek özgüllükle bunu kaynak sırasından bağımsız şekilde çözer. */
+.content-edit-form.content-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem 1.25rem;
+  align-items: start;
+}
+
+.content-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.content-edit-form input,
+.content-edit-form textarea {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.85rem;
+}
+
+.content-edit-form input:focus-visible,
+.content-edit-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.content-edit-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.content-edit-form-actions button {
+  padding: 0.5rem 1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.content-edit-form-actions button[type='submit'] {
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+}
+
+.content-edit-form-actions button[type='submit']:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+}
+
+.content-edit-form-actions button[type='button'] {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.content-edit-form-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .content-form-grid,
+  .content-edit-form.content-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content-edit-cell {
+    white-space: normal;
+  }
+
+  .content-edit-form {
+    white-space: normal;
+    width: min(24rem, calc(100vw - 3rem));
+  }
+}

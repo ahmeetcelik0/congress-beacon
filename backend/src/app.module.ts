@@ -20,6 +20,8 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SessionModule } from './session/session.module';
 import { RedisModule } from './redis/redis.module';
 import { RegistrationsModule } from './registrations/registrations.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { ContentModule } from './content/content.module';
 
 @Module({
   imports: [
@@ -42,6 +44,8 @@ import { RegistrationsModule } from './registrations/registrations.module';
     NotificationsModule,
     SessionModule,
     RegistrationsModule,
+    UploadsModule,
+    ContentModule,
   ],
   controllers: [AppController],
   providers: [AppService],

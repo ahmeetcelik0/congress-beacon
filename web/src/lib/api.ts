@@ -66,6 +66,14 @@ export type Congress = {
   observationIntervalSeconds: number;
   createdAt: string;
   updatedAt: string;
+  // Kongre içerik yönetimi (mobil ana ekran kart/tanıtım alanları) — hepsi
+  // opsiyonel, PATCH ile ayrı ayrı güncellenebilir (bkz. `updateCongress`).
+  fullName: string | null;
+  description: string | null;
+  coverImageUrl: string | null;
+  websiteUrl: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
 } & AlgorithmTuning;
 
 export type Hall = {
@@ -460,6 +468,90 @@ export type RegistrationImportApproveResult = {
   skipped: number;
 };
 
+// ===== Kongre içerik yönetimi (Faz: kongre içerik yönetimi) =====
+// Backend sozlesmesi `backend/src/content/**` altinda tamamlanip test edildi
+// (`feature/kongre-icerik-yonetimi` dali) - burada birebir eslenir. Bes tur
+// de AYNI CRUD+reorder desenini izler (bkz. `api` nesnesindeki fonksiyonlar);
+// liste uc noktalari zaten `displayOrder`'a gore SIRALI doner (sponsors:
+// once tier sonra displayOrder; announcements: once isPinned sonra
+// publishedAt desc), panel tarafinda EKSTRA siralama YAPILMAZ.
+
+export type CongressInfoSection = {
+  id: string;
+  congressId: string;
+  title: string;
+  body: string;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VenueType = 'MAIN' | 'HOTEL';
+
+export type Venue = {
+  id: string;
+  congressId: string;
+  type: VenueType;
+  name: string;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  websiteUrl: string | null;
+  mapUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  description: string | null;
+  imageUrl: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Announcement = {
+  id: string;
+  congressId: string;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  // null = taslak, dolu = yayinda. Create/update DTO'sunda YOK - yalnizca
+  // `publishAnnouncement`/`unpublishAnnouncement` uc noktalariyla degisir.
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SponsorTier = 'PLATINUM' | 'GOLD' | 'SILVER' | 'BRONZE' | 'SUPPORTER';
+
+export type Sponsor = {
+  id: string;
+  congressId: string;
+  name: string;
+  tier: SponsorTier;
+  logoUrl: string | null;
+  websiteUrl: string | null;
+  description: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KeynoteSpeaker = {
+  id: string;
+  congressId: string;
+  fullName: string;
+  title: string | null;
+  institution: string | null;
+  country: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UploadPurpose = 'cover' | 'venue' | 'sponsor' | 'speaker';
+
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -487,7 +579,16 @@ export const api = {
   }) => request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
   updateCongress: (
     id: string,
-    data: Partial<{ observationIntervalSeconds: number } & AlgorithmTuning>,
+    data: Partial<
+      { observationIntervalSeconds: number } & AlgorithmTuning & {
+        fullName: string;
+        description: string;
+        coverImageUrl: string;
+        websiteUrl: string;
+        contactEmail: string;
+        contactPhone: string;
+      }
+    >,
   ) => request<Congress>(`/congresses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
@@ -674,4 +775,136 @@ export const api = {
     request<RegistrationImportRef>(`/admin/registrations/imports/${importId}/cancel`, {
       method: 'POST',
     }),
+
+  // ===== Kongre içerik yönetimi =====
+  listInfoSections: (congressId: string) =>
+    request<CongressInfoSection[]>(`/admin/info-sections${buildQuery({ congressId })}`),
+  createInfoSection: (data: { congressId: string; title: string; body: string; isPublished?: boolean }) =>
+    request<CongressInfoSection>('/admin/info-sections', { method: 'POST', body: JSON.stringify(data) }),
+  updateInfoSection: (
+    id: string,
+    data: Partial<{ title: string; body: string; isPublished: boolean }>,
+  ) =>
+    request<CongressInfoSection>(`/admin/info-sections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteInfoSection: (id: string) => request<void>(`/admin/info-sections/${id}`, { method: 'DELETE' }),
+  reorderInfoSections: (ids: string[]) =>
+    request<void>('/admin/info-sections/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listVenues: (congressId: string) => request<Venue[]>(`/admin/venues${buildQuery({ congressId })}`),
+  createVenue: (data: {
+    congressId: string;
+    name: string;
+    type?: VenueType;
+    address?: string;
+    city?: string;
+    phone?: string;
+    websiteUrl?: string;
+    mapUrl?: string;
+    latitude?: number;
+    longitude?: number;
+    description?: string;
+    imageUrl?: string;
+  }) => request<Venue>('/admin/venues', { method: 'POST', body: JSON.stringify(data) }),
+  updateVenue: (
+    id: string,
+    data: Partial<{
+      type: VenueType;
+      name: string;
+      address: string;
+      city: string;
+      phone: string;
+      websiteUrl: string;
+      mapUrl: string;
+      latitude: number;
+      longitude: number;
+      description: string;
+      imageUrl: string;
+    }>,
+  ) => request<Venue>(`/admin/venues/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteVenue: (id: string) => request<void>(`/admin/venues/${id}`, { method: 'DELETE' }),
+  reorderVenues: (ids: string[]) =>
+    request<void>('/admin/venues/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listAnnouncements: (congressId: string) =>
+    request<Announcement[]>(`/admin/announcements${buildQuery({ congressId })}`),
+  createAnnouncement: (data: { congressId: string; title: string; body: string; isPinned?: boolean }) =>
+    request<Announcement>('/admin/announcements', { method: 'POST', body: JSON.stringify(data) }),
+  updateAnnouncement: (id: string, data: Partial<{ title: string; body: string; isPinned: boolean }>) =>
+    request<Announcement>(`/admin/announcements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAnnouncement: (id: string) => request<void>(`/admin/announcements/${id}`, { method: 'DELETE' }),
+  reorderAnnouncements: (ids: string[]) =>
+    request<void>('/admin/announcements/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+  publishAnnouncement: (id: string) =>
+    request<Announcement>(`/admin/announcements/${id}/publish`, { method: 'POST' }),
+  unpublishAnnouncement: (id: string) =>
+    request<Announcement>(`/admin/announcements/${id}/unpublish`, { method: 'POST' }),
+
+  listSponsors: (congressId: string) => request<Sponsor[]>(`/admin/sponsors${buildQuery({ congressId })}`),
+  createSponsor: (data: {
+    congressId: string;
+    name: string;
+    tier?: SponsorTier;
+    logoUrl?: string;
+    websiteUrl?: string;
+    description?: string;
+  }) => request<Sponsor>('/admin/sponsors', { method: 'POST', body: JSON.stringify(data) }),
+  updateSponsor: (
+    id: string,
+    data: Partial<{
+      name: string;
+      tier: SponsorTier;
+      logoUrl: string;
+      websiteUrl: string;
+      description: string;
+    }>,
+  ) => request<Sponsor>(`/admin/sponsors/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSponsor: (id: string) => request<void>(`/admin/sponsors/${id}`, { method: 'DELETE' }),
+  reorderSponsors: (ids: string[]) =>
+    request<void>('/admin/sponsors/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listKeynoteSpeakers: (congressId: string) =>
+    request<KeynoteSpeaker[]>(`/admin/keynote-speakers${buildQuery({ congressId })}`),
+  createKeynoteSpeaker: (data: {
+    congressId: string;
+    fullName: string;
+    title?: string;
+    institution?: string;
+    country?: string;
+    bio?: string;
+    photoUrl?: string;
+  }) => request<KeynoteSpeaker>('/admin/keynote-speakers', { method: 'POST', body: JSON.stringify(data) }),
+  updateKeynoteSpeaker: (
+    id: string,
+    data: Partial<{
+      fullName: string;
+      title: string;
+      institution: string;
+      country: string;
+      bio: string;
+      photoUrl: string;
+    }>,
+  ) =>
+    request<KeynoteSpeaker>(`/admin/keynote-speakers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteKeynoteSpeaker: (id: string) =>
+    request<void>(`/admin/keynote-speakers/${id}`, { method: 'DELETE' }),
+  reorderKeynoteSpeakers: (ids: string[]) =>
+    request<void>('/admin/keynote-speakers/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // Gorsel yukleme (kapak/mekan/sponsor logosu/konusmaci fotografi) - ortak
+  // uc nokta, `purpose` yalnizca backend tarafinda dosyalama/etiketleme icin
+  // kullanilir. `request()` FormData govdesini oldugu gibi gecirir (bkz.
+  // yukarisi, `uploadRegistrationImport` ile ayni desen).
+  uploadFile: (congressId: string, file: File, purpose?: UploadPurpose) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    if (purpose) formData.set('purpose', purpose);
+    formData.set('file', file);
+    return request<{ url: string }>('/admin/uploads', { method: 'POST', body: formData });
+  },
 };

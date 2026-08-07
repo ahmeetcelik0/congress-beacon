@@ -21,6 +21,16 @@ model Congress {
   beaconUuid                 String
   startDate                  DateTime?
   endDate                    DateTime?
+  // Mobil ana sayfa kongre karti icin Faz 3 alanlari - hepsi nullable,
+  // mevcut kongreler (bu alanlar hic doldurulmadan) bozulmasin diye.
+  // `name` kisa/etiket adi olarak KALIYOR (kod/URL/panel listelerinde
+  // kullanilir); `fullName` resmi tam addir (mobil kartta gosterilir).
+  fullName                   String?
+  description                String?   @db.Text
+  coverImageUrl              String?
+  websiteUrl                 String?
+  contactEmail               String?
+  contactPhone               String?
   // Mobil cihazlarin observation batch'lerini kac saniyede bir gonderecegini
   // belirler. Panelden degistirilebilir; mobil uygulama bunu koda gomulu
   // sabit yerine her batch gonderiminde backend'den ogrenir (bkz.
@@ -58,6 +68,120 @@ model Congress {
   sessions            Session[]
   registrations       CongressRegistration[]
   registrationImports RegistrationImport[]
+  venues              Venue[]
+  announcements       Announcement[]
+  sponsors            Sponsor[]
+  keynoteSpeakers     KeynoteSpeaker[]
+  infoSections        CongressInfoSection[]
+}
+
+enum VenueType {
+  MAIN // kongre merkezi / ana mekan
+  HOTEL // konaklama oteli
+}
+
+model Venue {
+  id           String    @id @default(uuid())
+  congressId   String
+  type         VenueType @default(HOTEL)
+  name         String
+  address      String?   @db.Text
+  city         String?
+  phone        String?
+  websiteUrl   String?
+  mapUrl       String? // Google Maps baglantisi
+  latitude     Float?
+  longitude    Float?
+  description  String?   @db.Text
+  imageUrl     String?
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, type, displayOrder])
+}
+
+model Announcement {
+  id          String    @id @default(uuid())
+  congressId  String
+  title       String
+  body        String    @db.Text
+  isPinned    Boolean   @default(false)
+  // null = taslak, mobilde gorunmez. Push bildirimi bu fazda YOK (Faz 9) -
+  // yalnizca icerik.
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, publishedAt])
+}
+
+enum SponsorTier {
+  PLATINUM
+  GOLD
+  SILVER
+  BRONZE
+  SUPPORTER
+}
+
+model Sponsor {
+  id           String      @id @default(uuid())
+  congressId   String
+  name         String
+  tier         SponsorTier @default(SUPPORTER)
+  logoUrl      String?
+  websiteUrl   String?
+  description  String?     @db.Text
+  displayOrder Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, tier, displayOrder])
+}
+
+// Elle yonetilen bir VITRIN listesi - Faz 4'teki bilimsel program
+// konusmaci/moderator isimleriyle (isim eslestirmeyle ele alinacak) KASITLI
+// olarak bagli DEGIL, bkz. docs/decisions.md.
+model KeynoteSpeaker {
+  id           String   @id @default(uuid())
+  congressId   String
+  fullName     String // unvanli tam hali: "Prof. Dr. Ahmet Yilmaz"
+  title        String? // "Kardiyoloji Profesoru"
+  institution  String? // "Hacettepe Universitesi"
+  country      String?
+  bio          String?  @db.Text
+  photoUrl     String?
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, displayOrder])
+}
+
+// Sabit alanlar yerine serbest bolumler secildi cunku her kongrenin "genel
+// bilgi" icerigi farkli (biri "Ulasim" ister, biri "Duzenleme Kurulu").
+// Icerik Markdown olarak saklanir, mobil tarafta render edilir.
+model CongressInfoSection {
+  id           String   @id @default(uuid())
+  congressId   String
+  title        String // "Kongre Hakkinda", "Ulasim", "Duzenleme Kurulu", "Kayit Bilgileri"
+  body         String   @db.Text
+  displayOrder Int      @default(0)
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, displayOrder])
 }
 
 enum UserRole {

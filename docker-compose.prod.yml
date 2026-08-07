@@ -40,6 +40,15 @@ services:
       REDIS_URL: redis://redis:6379
       API_PREFIX: api
       PORT: 3001
+    # Yuklenen gorseller (Faz 3, backend/src/uploads) konteyner icinde
+    # /app/uploads'a yaziliyor (Dockerfile WORKDIR /app). Bu volume OLMADAN
+    # her `up -d --build backend` (yeniden deploy) konteyneri SIFIRDAN
+    # olusturur ve o ana kadar yuklenmis TUM gorseller kaybolur - bu satir
+    # olmadan "eski dosya diskten silindi" davranisi da anlamsizlasir
+    # (zaten hicbir sey kalici degil). DB'deki imageUrl/coverImageUrl vb.
+    # kayitlar bu volume'a bagimlidir.
+    volumes:
+      - backend-uploads:/app/uploads
     depends_on:
       mysql:
         condition: service_healthy
@@ -76,3 +85,4 @@ volumes:
   redis-data:
   caddy-data:
   caddy-config:
+  backend-uploads:

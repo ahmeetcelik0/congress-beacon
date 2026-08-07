@@ -6,12 +6,16 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
+import { UploadsService } from '../uploads/uploads.service';
 import { CreateCongressDto } from './dto/create-congress.dto';
 import { UpdateCongressDto } from './dto/update-congress.dto';
 
 @Injectable()
 export class CongressService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly uploads: UploadsService,
+  ) {}
 
   create(dto: CreateCongressDto) {
     return this.prisma.congress.create({
@@ -80,6 +84,16 @@ export class CongressService {
       throw new BadRequestException(
         'Bitis tarihi baslangic tarihinden once olamaz.',
       );
+    }
+
+    // Kapak gorseli DEGISIYORSA (yeni bir url'e ya da bos'a) ve ESKI deger
+    // doluysa, eski dosya diskten silinir.
+    if (
+      dto.coverImageUrl !== undefined &&
+      current.coverImageUrl &&
+      current.coverImageUrl !== dto.coverImageUrl
+    ) {
+      await this.uploads.deleteFile(current.coverImageUrl);
     }
 
     return this.prisma.congress.update({

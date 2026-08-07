@@ -37,3 +37,7 @@ coverage/
 
 # Yerel ekran görüntüleri - GitHub'a asla pushlanmayacak
 /ekranGörüntüleri/
+
+# Yuklenen gorseller (Faz 3) - kalici depolama production'da bir Docker
+# volume ile saglanir (bkz. docker-compose.prod.yml), repo'ya girmez.
+backend/uploads/

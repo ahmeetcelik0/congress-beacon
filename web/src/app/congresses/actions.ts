@@ -50,6 +50,47 @@ export async function createCongressAction(
   return { error: null, success: true };
 }
 
+export type MetaFormState = { error: string | null; saved: boolean };
+
+// Kongre kartı üzerindeki "tanıtım" alanları (mobil ana ekranda gösterilecek
+// kapak görseli, açıklama, iletişim bilgileri vb.) — kongrenin KİMLİK
+// alanlarından (isim/kod/erişim kodu/beacon UUID, yalnızca oluşturmada
+// girilir) AYRI bir düzenleme formu, aynı `/congresses` sayfasında kart
+// üzerinde açılır/kapanır (bkz. `congress-edit-form.tsx`). Tüm alanlar
+// opsiyonel PATCH alanları - `updateRegistration` ile aynı kural: form HER
+// ZAMAN tüm alanları gönderir, boş string o alanı temizler.
+export async function updateCongressMetaAction(
+  congressId: string,
+  _prevState: MetaFormState,
+  formData: FormData,
+): Promise<MetaFormState> {
+  const fullName = String(formData.get('fullName') ?? '').trim();
+  const description = String(formData.get('description') ?? '').trim();
+  const coverImageUrl = String(formData.get('coverImageUrl') ?? '').trim();
+  const websiteUrl = String(formData.get('websiteUrl') ?? '').trim();
+  const contactEmail = String(formData.get('contactEmail') ?? '').trim();
+  const contactPhone = String(formData.get('contactPhone') ?? '').trim();
+
+  try {
+    await api.updateCongress(congressId, {
+      fullName,
+      description,
+      coverImageUrl,
+      websiteUrl,
+      contactEmail,
+      contactPhone,
+    });
+  } catch (error) {
+    return {
+      error: error instanceof ApiError ? error.message : 'Kongre bilgileri güncellenemedi.',
+      saved: false,
+    };
+  }
+
+  revalidatePath('/congresses');
+  return { error: null, saved: true };
+}
+
 export type DeleteCongressResult = { error: string | null };
 
 /**

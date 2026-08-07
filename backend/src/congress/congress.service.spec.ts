@@ -123,6 +123,13 @@ function createFakePrismaForUpdate(current: {
   };
 }
 
+const baseCurrentForCover = {
+  startDate: new Date('2026-08-01T00:00:00.000Z'),
+  endDate: new Date('2026-08-10T00:00:00.000Z'),
+  entryProbabilityThreshold: 60,
+  exitProbabilityThreshold: 40,
+};
+
 describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () => {
   const baseCurrent = {
     startDate: new Date('2026-08-01T00:00:00.000Z'),
@@ -133,7 +140,10 @@ describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () =>
 
   it("yalnizca startDate guncelleniyor ve mevcut endDate'ten SONRA kaliyorsa 400 verir", async () => {
     const fakePrisma = createFakePrismaForUpdate(baseCurrent);
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(
       service.update('congress-1', {
@@ -144,7 +154,10 @@ describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () =>
 
   it("yalnizca endDate guncelleniyor ve mevcut startDate'ten ONCE kaliyorsa 400 verir", async () => {
     const fakePrisma = createFakePrismaForUpdate(baseCurrent);
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(
       service.update('congress-1', {
@@ -155,7 +168,10 @@ describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () =>
 
   it('yalnizca startDate guncelleniyor ve mevcut endDate ile tutarliysa basarili', async () => {
     const fakePrisma = createFakePrismaForUpdate(baseCurrent);
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(
       service.update('congress-1', {
@@ -166,7 +182,10 @@ describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () =>
 
   it('tek gunluk PATCH (startDate === endDate) basarili', async () => {
     const fakePrisma = createFakePrismaForUpdate(baseCurrent);
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(
       service.update('congress-1', {
@@ -174,6 +193,60 @@ describe('CongressService.update() - kismi PATCH birlesik tarih kontrolu', () =>
         endDate: '2026-08-03',
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe('CongressService.update() - kapak gorseli degistirilince eski dosya silinir', () => {
+  it('coverImageUrl DEGISTIRILINCE eski dosyayi UploadsService.deleteFile ile siler', async () => {
+    const fakePrisma = createFakePrismaForUpdate({
+      ...baseCurrentForCover,
+      coverImageUrl: '/uploads/congress-1/old.jpg',
+    } as never);
+    const deleteFile = jest.fn().mockResolvedValue(undefined);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile } as never,
+    );
+
+    await service.update('congress-1', {
+      coverImageUrl: '/uploads/congress-1/new.jpg',
+    });
+
+    expect(deleteFile).toHaveBeenCalledWith('/uploads/congress-1/old.jpg');
+  });
+
+  it('coverImageUrl DISINDA bir alan guncellenince eski gorsele DOKUNMAZ', async () => {
+    const fakePrisma = createFakePrismaForUpdate({
+      ...baseCurrentForCover,
+      coverImageUrl: '/uploads/congress-1/old.jpg',
+    } as never);
+    const deleteFile = jest.fn().mockResolvedValue(undefined);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile } as never,
+    );
+
+    await service.update('congress-1', { description: 'Yeni aciklama' });
+
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+
+  it('mevcut kapak gorseli yoksa (ilk yukleme) deleteFile cagrilmaz', async () => {
+    const fakePrisma = createFakePrismaForUpdate({
+      ...baseCurrentForCover,
+      coverImageUrl: null,
+    } as never);
+    const deleteFile = jest.fn().mockResolvedValue(undefined);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile } as never,
+    );
+
+    await service.update('congress-1', {
+      coverImageUrl: '/uploads/congress-1/first.jpg',
+    });
+
+    expect(deleteFile).not.toHaveBeenCalled();
   });
 });
 
@@ -191,7 +264,10 @@ describe('CongressService.remove() - Prisma FK kisitlamasi siniflandirmasi', () 
     const fakePrisma = createFakePrismaForRemove(() =>
       Promise.resolve({ id: 'congress-1' }),
     );
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(service.remove('congress-1')).resolves.toBeUndefined();
     expect(fakePrisma.congress.delete).toHaveBeenCalledWith({
@@ -212,7 +288,10 @@ describe('CongressService.remove() - Prisma FK kisitlamasi siniflandirmasi', () 
         ),
       ),
     );
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     let caught: unknown;
     try {
@@ -238,7 +317,10 @@ describe('CongressService.remove() - Prisma FK kisitlamasi siniflandirmasi', () 
     const fakePrisma = createFakePrismaForRemove(() =>
       Promise.reject(otherError),
     );
-    const service = new CongressService(fakePrisma as never);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
 
     await expect(service.remove('congress-1')).rejects.toBe(otherError);
   });
