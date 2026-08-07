@@ -70,6 +70,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/register-request:
+    post:
+      summary: Ilk giristen once dogrulama kodu iste
+      description: >-
+        emailOrPhone icin aktif bir CongressRegistration'i olan bir kullanici
+        aranir; varsa 6 haneli bir kod uretilip GECICI SIFRE olarak kaydedilir
+        (mustChangePassword=true) ve e-postaya gonderilir. IP+hedef basina
+        dakikada 1, saatte 5 istekle sinirlidir.
+      operationId: registerRequest
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailOrPhoneRequest'
+      responses:
+        '201':
+          description: Kod uretildi ve gonderildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Bu bilgiyle kayitli aktif bir kongre kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Kayitta e-posta adresi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/login:
+    post:
+      summary: E-posta/telefon + sifre ile giris
+      description: >-
+        Basarili giriste activeCongressId NULL olan bir token doner;
+        kullanici /auth/select-congress ile kongre secmeli. IP basina
+        dakikada 10 istekle sinirlidir.
+      operationId: login
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '201':
+          description: Giris basarili.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: E-posta/telefon veya sifre hatali.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/me:
+    get:
+      summary: Giris yapmis kullanicinin profili ve kongre listesi
+      description: >-
+        Mobil uygulama her acilista bunu cagirip token'in gecerliligini
+        dogrular ve profil/kongre listesini tazeler.
+      operationId: getMe
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil bilgisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/change-password:
+    post:
+      summary: Sifre degistir
+      description: >-
+        Basarili degisiklikte tum diger oturumlar duser (tokenVersion artar);
+        bu istekten donen YENI accessToken ayni aktif kongre secimini tasir.
+      operationId: changePassword
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Sifre degisti, yeni token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Token gecersiz veya mevcut sifre hatali.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/forgot-password:
+    post:
+      summary: Sifremi unuttum - dogrulama kodu iste
+      description: /auth/register-request ile ayni akis ve limitler.
+      operationId: forgotPassword
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailOrPhoneRequest'
+      responses:
+        '201':
+          description: Kod uretildi ve gonderildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Bu bilgiyle kayitli aktif bir kongre kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Kayitta e-posta adresi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/my-congresses:
+    get:
+      summary: Kullanicinin aktif kayitli oldugu kongreler
+      operationId: getMyCongresses
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Kongre listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyCongressesResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/select-congress:
+    post:
+      summary: Aktif kongreyi sec
+      description: >-
+        Kullanicinin o kongrede aktif bir CongressRegistration'i olmali.
+        Eski token gecerliligini korur (tokenVersion artmaz), yalnizca yeni
+        secim yeni bir token'a tasinir.
+      operationId: selectCongress
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectCongressRequest'
+      responses:
+        '201':
+          description: Kongre secildi, yeni token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '403':
+          description: Kullanicinin bu kongrede aktif kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /devices/register:
     post:
       summary: Mobil cihazi giris yapmis kullaniciya kaydet
@@ -1877,6 +2099,168 @@ components:
             beaconUuid:
               type: string
               format: uuid
+
+    AuthUserSummary:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+        - email
+        - phone
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+
+    AuthCongressSummary:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    EmailOrPhoneRequest:
+      type: object
+      required:
+        - emailOrPhone
+      properties:
+        emailOrPhone:
+          type: string
+          minLength: 3
+          description: >-
+            E-posta adresi veya telefon numarasi (yerel ya da E.164 format
+            ikisi de kabul edilir).
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - emailOrPhone
+        - password
+      properties:
+        emailOrPhone:
+          type: string
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required:
+        - accessToken
+        - mustChangePassword
+        - user
+        - congresses
+      properties:
+        accessToken:
+          type: string
+          description: >-
+            JWT. activeCongressId bu asamada NULL'dur - /auth/select-congress
+            ile bir kongre secilene kadar ActiveCongressGuard korumali
+            uc noktalar 403 doner.
+        mustChangePassword:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/AuthUserSummary'
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
+
+    MeResponse:
+      type: object
+      required:
+        - user
+        - activeCongressId
+        - mustChangePassword
+        - congresses
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUserSummary'
+        activeCongressId:
+          type: string
+          format: uuid
+          nullable: true
+        mustChangePassword:
+          type: boolean
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+
+    TokenResponse:
+      type: object
+      required:
+        - accessToken
+      properties:
+        accessToken:
+          type: string
+
+    SelectCongressRequest:
+      type: object
+      required:
+        - congressId
+      properties:
+        congressId:
+          type: string
+          format: uuid
+
+    MyCongressesResponse:
+      type: object
+      required:
+        - congresses
+      properties:
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
 
     ErrorResponse:
       type: object

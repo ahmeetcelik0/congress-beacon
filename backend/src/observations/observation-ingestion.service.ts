@@ -1,7 +1,8 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma, type User } from '../../generated/prisma/client';
+import { Prisma } from '../../generated/prisma/client';
 import { ObservationBatchDto } from './dto/observation-batch.dto';
+import type { AuthenticatedUser } from '../auth/authenticated-request';
 
 export type AcceptedSnapshot = {
   observationId: string;
@@ -27,7 +28,10 @@ export type IngestionResult = {
 export class ObservationIngestionService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async ingest(user: User, dto: ObservationBatchDto): Promise<IngestionResult> {
+  async ingest(
+    user: AuthenticatedUser,
+    dto: ObservationBatchDto,
+  ): Promise<IngestionResult> {
     const device = await this.prisma.device.findUnique({
       where: { id: dto.deviceId },
     });
@@ -67,7 +71,9 @@ export class ObservationIngestionService {
           const beacon = await this.prisma.beacon.findUnique({
             where: {
               congressId_uuid_major_minor: {
-                congressId: user.congressId,
+                // ActiveCongressGuard bu uc noktada congressId'nin dolu
+                // olmasini garanti eder.
+                congressId: user.congressId as string,
                 uuid: reading.uuid,
                 major: reading.major,
                 minor: reading.minor,
@@ -85,7 +91,7 @@ export class ObservationIngestionService {
             observationId: snapshot.observationId,
             batchId: batch.id,
             userId: user.id,
-            congressId: user.congressId,
+            congressId: user.congressId as string,
             observedAt: new Date(snapshot.observedAt),
             beaconId: reading.beaconId,
             uuid: reading.uuid,
@@ -127,7 +133,7 @@ export class ObservationIngestionService {
     });
 
     const congress = await this.prisma.congress.findUnique({
-      where: { id: user.congressId },
+      where: { id: user.congressId as string },
       select: { observationIntervalSeconds: true },
     });
 

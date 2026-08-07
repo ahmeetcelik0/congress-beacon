@@ -83,7 +83,13 @@ export class NotificationSchedulerService
     const devices = await this.prisma.device.findMany({
       where: {
         pushToken: { not: null },
-        user: { congressId: session.congressId },
+        // Faz 1: User artik tek bir kongreye kilitli degil - kongre
+        // katilimi CongressRegistration uzerinden kontrol edilir.
+        user: {
+          registrations: {
+            some: { congressId: session.congressId, isActive: true },
+          },
+        },
       },
     });
 

@@ -30,6 +30,41 @@ https://beacon.photofocustr.com/api
 
 ---
 
+## 0.5) Yeni kimlik modeli ve giriş akışı (Faz 1 — henüz mobilde bağlanmadı)
+
+Backend tarafında katılımcı kimliği artık tek bir kongreye kilitli değil:
+kullanıcı e-posta/telefon + şifre ile giriş yapıp **kayıtlı olduğu kongreler**
+arasından birini seçebiliyor ve profilinden kongre değiştirebiliyor. Bu, Faz 6
+(mobil tarafta yeni giriş ekranları) için backend hazırlığıdır — mobil kod
+bu fazda **değişmedi**, `pilot-login` hâlâ eskisi gibi çalışıyor.
+
+Yeni uç noktalar (tam sözleşme için `shared/openapi.yaml`, `Auth` tag'i):
+
+- `POST /auth/register-request` — `{ emailOrPhone }`: dernek kayıt sistemi
+  üzerinden (Faz 2) zaten bir kongreye kaydı olan ama henüz şifresi olmayan
+  katılımcı için 6 haneli bir kod üretir, e-postaya gönderir.
+- `POST /auth/login` — `{ emailOrPhone, password }`: `{ accessToken,
+  mustChangePassword, user, congresses }` döner. Dönen token'da
+  `activeCongressId` **null**'dur.
+- `GET /auth/me` — token doğrulama + profil/kongre listesi tazeleme
+  (Faz 6'da uygulama her açılışta bunu çağıracak).
+- `POST /auth/change-password` — `{ currentPassword, newPassword }`: yeni bir
+  `accessToken` döner (aynı aktif kongre seçimiyle).
+- `POST /auth/forgot-password` — `register-request` ile aynı akış.
+- `GET /auth/my-congresses` — kullanıcının aktif kayıtlı olduğu kongreler.
+- `POST /auth/select-congress` — `{ congressId }`: o kongrede aktif kaydı
+  varsa `activeCongressId` dolu yeni bir `accessToken` döner.
+
+**Faz 6'da mobil tarafta yapılacaklar (bu fazın kapsamında değil, ileriye
+dönük not):** giriş/kod-doğrulama/kongre-seçim ekranları, `pilot-login`
+yerine bu akışa geçiş, token'da `activeCongressId` boşsa (kongre seçilmemiş)
+veya `mustChangePassword=true` ise kullanıcıyı ilgili ekrana yönlendirme.
+**`pilot-login` Faz 6'da bu akış devreye girdiğinde kaldırılacak** — o zamana
+kadar TestFlight'taki mevcut sürüm için geçiş köprüsü olarak duruyor, hâlâ
+çalışıyor ve değişmedi.
+
+---
+
 ## 1) Push token gönderimi (Faz 7)
 
 Backend'de yeni endpoint hazır:

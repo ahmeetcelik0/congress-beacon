@@ -17,7 +17,12 @@ export class TrackingHealthService {
 
   async getTrackingHealth(congressId: string) {
     const users = await this.prisma.user.findMany({
-      where: { congressId, role: 'PARTICIPANT' },
+      // Faz 1: User artik tek bir kongreye kilitli degil - kongre katilimi
+      // CongressRegistration uzerinden kontrol edilir.
+      where: {
+        role: 'PARTICIPANT',
+        registrations: { some: { congressId, isActive: true } },
+      },
       include: {
         devices: { orderBy: { updatedAt: 'desc' }, take: 1 },
         presenceState: {

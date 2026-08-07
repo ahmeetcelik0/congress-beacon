@@ -53,10 +53,10 @@ model Congress {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  halls    Hall[]
-  beacons  Beacon[]
-  users    User[]
-  sessions Session[]
+  halls         Hall[]
+  beacons       Beacon[]
+  sessions      Session[]
+  registrations CongressRegistration[]
 }
 
 enum UserRole {
@@ -65,18 +65,29 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  congressId   String
-  firstName    String
-  lastName     String
-  phoneLast4   String
-  role         UserRole @default(PARTICIPANT)
-  tokenVersion Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String  @id @default(uuid())
+  firstName String
+  lastName  String
+  // Faz 1 oncesi tum kullanicilar icin doluydu (pilot-login eslestirmesi);
+  // artik nullable - Faz 2'de dernek kayit listesinden e-postasi olup
+  // telefonu olmayan katilimcilar gelecek. pilot-login bu alani hala her
+  // zaman doldurur.
+  phoneLast4 String?
+  // E.164 normalize edilmis (ornek: +905321234567).
+  email        String?  @unique
+  phone        String?  @unique
+  passwordHash String?
+  // true ise kullanici gecici bir kodla/sifreyle giris yapmis demektir -
+  // ActiveCongressGuard bu durumda kongre gerektiren uc noktalari kapatir.
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  role               UserRole  @default(PARTICIPANT)
+  tokenVersion       Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  congress Congress @relation(fields: [congressId], references: [id])
-  devices  Device[]
+  devices       Device[]
+  registrations CongressRegistration[]
 
   observationBatches ObservationBatch[]
   beaconObservations BeaconObservation[]
@@ -84,8 +95,32 @@ model User {
   hallVisits         HallVisit[]
   presenceState      UserPresenceState?
   notificationLogs   NotificationLog[]
+}
 
-  @@unique([congressId, firstName, lastName, phoneLast4])
+enum RegistrationSource {
+  API // dernek kayit sitesinden cekilen (Faz 2'de baglanacak)
+  IMPORT // Excel/CSV yuklemesi
+  MANUAL // panelden elle eklenen
+  PILOT // eski pilot-login akisinin otomatik olusturdugu
+}
+
+model CongressRegistration {
+  id           String             @id @default(uuid())
+  userId       String
+  congressId   String
+  source       RegistrationSource @default(MANUAL)
+  externalId   String? // dernek sistemindeki kayit numarasi
+  isActive     Boolean            @default(true)
+  registeredAt DateTime           @default(now())
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id])
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@unique([congressId, userId])
+  @@index([congressId])
+  @@index([userId])
 }
 
 enum DevicePlatform {

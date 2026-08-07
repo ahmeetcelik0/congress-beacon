@@ -116,6 +116,56 @@ spesifikasyonla çelişki sanmasın diye burada kayıtlı:
   tarafı yeniden `pilot-login` akışına yönlendirir. Sunucu tarafı token iptal
   listesi (blacklist) bu fazda yoktur.
 
+## Faz 1 — Global Kullanici Modeli
+
+Katilimcinin artik tek bir kongreye degil, e-posta/telefon + sifre ile
+dogrulanan bir kimlige sahip olmasi ve kayitli oldugu kongreler arasindan
+birini secip degistirebilmesi gerekiyordu. Bu, `User`in `congressId`ye
+kilitli olmasindan (Faz 2 kararindaki pilot modelin devami) coktan-coka bir
+iliskiye (`CongressRegistration`) gecisi zorunlu kildi.
+
+### Neden guard enjeksiyonu (User.congressId kaldirilirken davranis korunuyor)
+
+`user.congressId` okuyan kod (attendance/observation-ingestion, vb.) beacon
+zincirinin bir parcasi - bu faz **beacon zincirine dokunmama** kisitiyla
+sinirliydi (bkz. Faz 1 talimati, MUTLAK KISITLAR). Iki secenek vardi:
+(a) DB'deki `User.congressId`yi kaldirip her kullanim yerini
+`CongressRegistration`e gore yeniden yazmak, ya da (b) DB'den kaldirip
+runtime'da `JwtAuthGuard` icinde `request.user`e o istekteki aktif kongreyi
+(`JwtPayload.activeCongressId`) `congressId` adiyla enjekte etmek. (b) secildi:
+- Beacon zincirindeki tum okuma noktalari (observation-ingestion.service.ts)
+  TEK SATIR bile degismeden calismaya devam ediyor - regresyon riski en
+  dusuk secenek.
+- "Aktif kongre" kavrami zaten DOGASI GEREGI kalici bir DB alani degil,
+  o oturumun (token'in) tasidigi gecici bir secim - bunu bir guard'da
+  runtime'da tasimak, bir DB kolonunda tasimaktan daha dogru bir modelleme.
+- Yalnizca 3 yer (attendance-processing, notification-scheduler,
+  tracking-health) congressId'yi DOGRUDAN DB'den (User uzerinden) okuyordu;
+  bunlar `CongressRegistration`e gore elle guncellendi, geri kalani
+  dokunulmadan calisti.
+
+### Neden `/auth/*` ActiveCongressGuard kullanmiyor
+
+Kullanici kongre secmeden VE zorunlu sifre degisikligini tamamlamadan once
+de giris yapip `/auth/me` ve `/auth/my-congresses` ile kendi kongrelerini
+gorebilmeli, `/auth/select-congress` ile kongre secebilmeli ve
+`/auth/change-password` ile sifresini degistirebilmeli - bunlarin hepsi
+`ActiveCongressGuard`in tam da engellemeye calistigi durumun (kongre
+secilmemis / sifre degistirilmemis) icinde calismak zorunda. Bu yuzden
+guard `/auth/*` disindaki (observations, devices, notifications) kongre-ozel
+uc noktalara eklendi; ayri bir "haric tutma" listesi tutmaya gerek kalmadi.
+
+### pilot-login geriye donuk uyumlulugu
+
+`POST /auth/pilot-login` (Faz 2 karari) TestFlight'taki mevcut mobil surum
+tarafindan hala kullaniliyor ve bu fazda **silinmedi/degistirilmedi** -
+yalnizca ic eslestirme mantigi `CongressRegistration`e tasindi (ayni
+ad+soyad+telefon-son-4-hane eslesmesi, artik "bu kongride kaydi var mi"
+kontrolu `CongressRegistration` uzerinden). Response sozlesmesi birebir
+ayni kaldi. Faz 6'da yeni mobil giris akisi (bu fazda eklenen
+`/auth/login` + `/auth/select-congress`) devreye girdiginde bu endpoint
+kaldirilacak - o zamana kadar gecis koprusu olarak duruyor.
+
 ### Ham veri / backend-karar mimarisi
 
 - Mobil uygulama salon kararı **vermez**. Yalnızca o anki ham iBeacon anlık

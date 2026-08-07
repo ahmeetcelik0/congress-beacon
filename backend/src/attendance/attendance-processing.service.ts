@@ -63,9 +63,10 @@ export class AttendanceProcessingService {
 
   async processSnapshots(
     userId: string,
+    congressId: string,
     snapshots: AcceptedSnapshot[],
   ): Promise<void> {
-    const context = await this.loadContext(userId);
+    const context = await this.loadContext(congressId);
     if (!context) {
       return;
     }
@@ -82,18 +83,15 @@ export class AttendanceProcessingService {
 
   // Batch basina BIR kez calisir. Onceki surumde salon-beacon atamalari her
   // snapshot icin yeniden sorgulaniyordu; atamalar bir batch suresince
-  // degismeyecegi icin tek sorgu yeterli.
-  private async loadContext(userId: string): Promise<ProcessingContext | null> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { congressId: true },
-    });
-    if (!user) {
-      return null;
-    }
-
+  // degismeyecegi icin tek sorgu yeterli. congressId artik DB'den User
+  // uzerinden okunmuyor - cagiran taraf (ObservationsController) bunu
+  // guard'dan (JwtPayload.activeCongressId) zaten aliyor ve dogrudan gecirir
+  // (Faz 1 - User.congressId kolonu kaldirildi, bkz. docs/decisions.md).
+  private async loadContext(
+    congressId: string,
+  ): Promise<ProcessingContext | null> {
     const congress = await this.prisma.congress.findUnique({
-      where: { id: user.congressId },
+      where: { id: congressId },
       select: {
         emaAlpha: true,
         hampelK: true,
@@ -110,7 +108,7 @@ export class AttendanceProcessingService {
     }
 
     const assignments = await this.prisma.hallBeacon.findMany({
-      where: { isActive: true, hall: { congressId: user.congressId } },
+      where: { isActive: true, hall: { congressId } },
       select: {
         beaconId: true,
         hallId: true,
