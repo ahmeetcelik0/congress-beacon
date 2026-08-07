@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { api, ApiError } from '@/lib/api';
 
 export type FormState = { error: string | null };
+export type ActionResult = { error: string | null };
 
 export async function createSessionAction(
   _prevState: FormState,
@@ -12,10 +13,12 @@ export async function createSessionAction(
   const congressId = String(formData.get('congressId') ?? '');
   const hallId = String(formData.get('hallId') ?? '');
   const title = String(formData.get('title') ?? '').trim();
-  const speaker = String(formData.get('speaker') ?? '').trim();
   const startTime = String(formData.get('startTime') ?? '');
   const endTime = String(formData.get('endTime') ?? '');
   const description = String(formData.get('description') ?? '').trim();
+  const sessionType = String(formData.get('sessionType') ?? '').trim();
+  const dayLabel = String(formData.get('dayLabel') ?? '').trim();
+  const keywords = String(formData.get('keywords') ?? '').trim();
 
   if (!congressId || !hallId || !title || !startTime || !endTime) {
     return { error: 'Salon, başlık, başlangıç ve bitiş zamanı zorunludur.' };
@@ -26,10 +29,12 @@ export async function createSessionAction(
       congressId,
       hallId,
       title,
-      speaker: speaker || undefined,
       startTime: new Date(startTime).toISOString(),
       endTime: new Date(endTime).toISOString(),
       description: description || undefined,
+      sessionType: sessionType || undefined,
+      dayLabel: dayLabel || undefined,
+      keywords: keywords || undefined,
     });
   } catch (error) {
     return { error: error instanceof ApiError ? error.message : 'Oturum oluşturulamadı.' };
@@ -39,7 +44,22 @@ export async function createSessionAction(
   return { error: null };
 }
 
-export async function deleteSessionAction(id: string) {
-  await api.deleteSession(id);
+export async function deleteSessionAction(id: string): Promise<ActionResult> {
+  try {
+    await api.deleteSession(id);
+  } catch (error) {
+    return { error: error instanceof ApiError ? error.message : 'Oturum silinemedi.' };
+  }
   revalidatePath('/sessions');
+  return { error: null };
+}
+
+export async function reorderSessionsAction(ids: string[]): Promise<ActionResult> {
+  try {
+    await api.reorderSessions(ids);
+  } catch (error) {
+    return { error: error instanceof ApiError ? error.message : 'Sıralama güncellenemedi.' };
+  }
+  revalidatePath('/sessions');
+  return { error: null };
 }

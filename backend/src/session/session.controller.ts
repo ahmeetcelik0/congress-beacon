@@ -15,6 +15,7 @@ import {
 import { SessionService } from './session.service';
 import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
+import { ReorderSessionsDto } from './dto/reorder-sessions.dto';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { AuditLogInterceptor } from '../admin-auth/audit-log.interceptor';
 
@@ -27,6 +28,12 @@ export class SessionController {
   @Post()
   create(@Body() dto: CreateSessionDto) {
     return this.sessionService.create(dto);
+  }
+
+  @Post('reorder')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  reorder(@Body() dto: ReorderSessionsDto) {
+    return this.sessionService.reorder(dto.ids);
   }
 
   @Get()

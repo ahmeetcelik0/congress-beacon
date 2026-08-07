@@ -193,6 +193,13 @@ model User {
   id                 String    @id @default(uuid())
   firstName          String
   lastName           String
+  // Faz 4a: bilimsel program konusmaci/moderator eslestirmesi icin -
+  // normalizeTurkishName(firstName + ' ' + lastName). Kullanici olusturulurken/
+  // ad-soyadi guncellenirken hesaplanir (bkz. common/normalize-turkish-name.ts).
+  // Nullable: Faz 4a ONCESI olusmus kayitlar icin migration ile geriye donuk
+  // dolduruldu, ama sema seviyesinde NOT NULL zorunlu tutulmadi (gelecekte
+  // farkli bir olusturma yolu bu adimi atlarsa sessizce hata vermesin diye).
+  searchName         String?
   // Faz 1 oncesi tum kullanicilar icin doluydu (pilot-login eslestirmesi);
   // artik nullable - Faz 2'de dernek kayit listesinden e-postasi olup
   // telefonu olmayan katilimcilar gelecek. pilot-login bu alani hala her
@@ -227,6 +234,9 @@ model User {
   hallVisits         HallVisit[]
   presenceState      UserPresenceState?
   notificationLogs   NotificationLog[]
+  programRoles       ProgramRole[]
+
+  @@index([searchName])
 }
 
 enum RegistrationSource {
@@ -548,24 +558,95 @@ model UserPresenceState {
 }
 
 model Session {
-  id          String   @id @default(uuid())
-  congressId  String
-  hallId      String
-  title       String
-  speaker     String?
-  startTime   DateTime
-  endTime     DateTime
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  congressId   String
+  hallId       String
+  title        String
+  // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
+  // tutulur (bkz. asagisi). Bu alan yalnizca Faz 4a ONCESI olusmus mevcut
+  // verinin ve /sessions panelinin eski gorunumunun bozulmamasi icin
+  // KORUNUYOR - silinmedi, yeni yazimlarda kullanilmasi beklenmiyor.
+  speaker      String?
+  startTime    DateTime
+  endTime      DateTime
+  description  String?
+  // --- Faz 4a: iki seviyeli bilimsel program alanlari (hepsi nullable/
+  // varsayilanli - mevcut oturumlar bozulmadan gecerli kalir) ---
+  sessionType  String? // "Panel", "Sempozyum", "Kurs", "Ana Konusma", "Uydu Sempozyumu"
+  dayLabel     String? // programdaki gun etiketi: "1. Gun", "Calistaylar"
+  keywords     String? // virgulle ayrilmis anahtar kelimeler (Faz 9 bildirimleri icin hazirlik - bu fazda KULLANILMIYOR)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   congress Congress @relation(fields: [congressId], references: [id])
   hall     Hall     @relation(fields: [hallId], references: [id])
+
+  presentations Presentation[]
+  roles         ProgramRole[]
 
   notificationLogs NotificationLog[]
 
   @@index([congressId, startTime])
   @@index([hallId])
+}
+
+model Presentation {
+  id           String    @id @default(uuid())
+  sessionId    String
+  title        String
+  startTime    DateTime?
+  endTime      DateTime?
+  abstract     String?   @db.Text
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  session Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  roles   ProgramRole[]
+
+  @@index([sessionId, displayOrder])
+}
+
+enum ProgramRoleType {
+  MODERATOR // oturum baskani
+  SPEAKER // konusmaci
+  DISCUSSANT // tartismaci
+}
+
+enum RoleMatchStatus {
+  MATCHED // otomatik eslesti (tek aday)
+  AMBIGUOUS // birden fazla aday - yetkili secmeli
+  UNMATCHED // aday yok
+  MANUAL // yetkili elle bagladi
+  IGNORED // yetkili "bu kisi katilimci degil" dedi
+}
+
+// Bir rol ya bir oturuma ya bir sunuma baglidir - ikisi birden dolu veya
+// ikisi birden bos OLAMAZ. Prisma/MySQL seviyesinde CHECK kisiti
+// yazilamadigi icin bu kural servis katmaninda (ProgramRoleService)
+// dogrulanir, bkz. docs/decisions.md "neden tek ProgramRole tablosu".
+model ProgramRole {
+  id             String          @id @default(uuid())
+  sessionId      String?
+  presentationId String?
+  type           ProgramRoleType
+  rawName        String // programda yazdigi hali: "Prof. Dr. Ahmet Yilmaz"
+  searchName     String // normalizeTurkishName(rawName)
+  userId         String? // eslesen katilimci
+  matchStatus    RoleMatchStatus @default(UNMATCHED)
+  displayOrder   Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  session      Session?      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  presentation Presentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([sessionId])
+  @@index([presentationId])
+  @@index([searchName])
+  @@index([userId])
 }
 
 enum NotificationStatus {

@@ -4,6 +4,18 @@ import { CreateSessionDto } from './dto/create-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
 import { NotificationSchedulerService } from '../notifications/notification-scheduler.service';
 
+// Program roluyle eslesen kullanicinin panelde gosterilecek asgari alanlari -
+// tam User satirini (passwordHash dahil) sizdirmamak icin daima bu select
+// kullanilir.
+const ROLE_USER_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  phoneRaw: true,
+} as const;
+
 @Injectable()
 export class SessionService {
   constructor(
@@ -21,6 +33,10 @@ export class SessionService {
         startTime: new Date(dto.startTime),
         endTime: new Date(dto.endTime),
         description: dto.description,
+        sessionType: dto.sessionType,
+        dayLabel: dto.dayLabel,
+        keywords: dto.keywords,
+        displayOrder: dto.displayOrder,
       },
     });
 
@@ -28,12 +44,46 @@ export class SessionService {
     return session;
   }
 
+  // Sunumlari ve rolleri IC ICE doner - panelin ayrica istek atmasina
+  // gerek kalmaz (bkz. gorev tanimi). Siralama: gun etiketi -> gercek
+  // baslangic saati -> elle belirlenen displayOrder (aym gun+saatteki
+  // esitlik bozucu).
   findAll(congressId: string) {
     return this.prisma.session.findMany({
       where: { congressId },
-      include: { hall: true },
-      orderBy: { startTime: 'asc' },
+      include: {
+        hall: true,
+        presentations: {
+          orderBy: { displayOrder: 'asc' },
+          include: {
+            roles: {
+              orderBy: { displayOrder: 'asc' },
+              include: { user: { select: ROLE_USER_SELECT } },
+            },
+          },
+        },
+        roles: {
+          orderBy: { displayOrder: 'asc' },
+          include: { user: { select: ROLE_USER_SELECT } },
+        },
+      },
+      orderBy: [
+        { dayLabel: 'asc' },
+        { startTime: 'asc' },
+        { displayOrder: 'asc' },
+      ],
     });
+  }
+
+  async reorder(ids: string[]): Promise<void> {
+    await this.prisma.$transaction(
+      ids.map((id, index) =>
+        this.prisma.session.update({
+          where: { id },
+          data: { displayOrder: index },
+        }),
+      ),
+    );
   }
 
   async findOne(id: string) {

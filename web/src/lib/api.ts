@@ -120,15 +120,100 @@ export type HallOccupancy = {
   count: number;
 };
 
+// ===== Bilimsel program modeli (Faz 4a) =====
+// Backend sozlesmesi `backend/src/session/**` ve `backend/src/program/**`
+// altinda dogrulandi (curl ile uctan uca test edildi, `feature/bilimsel-
+// program-modeli` dali) - burada birebir eslenir.
+
+export type Presentation = {
+  id: string;
+  sessionId: string;
+  title: string;
+  startTime: string | null;
+  endTime: string | null;
+  abstract: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  roles: ProgramRole[];
+};
+
+export type ProgramRoleType = 'MODERATOR' | 'SPEAKER' | 'DISCUSSANT';
+export type RoleMatchStatus = 'MATCHED' | 'AMBIGUOUS' | 'UNMATCHED' | 'MANUAL' | 'IGNORED';
+
+export type ProgramRoleUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+};
+
+export type ProgramRole = {
+  id: string;
+  sessionId: string | null;
+  presentationId: string | null;
+  type: ProgramRoleType;
+  // Yetkiliye HER ZAMAN gosterilecek ham isim (unvan temizlenmemis) -
+  // eslestirme icin kullanilan `searchName` DEGIL.
+  rawName: string;
+  searchName: string;
+  userId: string | null;
+  matchStatus: RoleMatchStatus;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  user: ProgramRoleUser | null;
+};
+
+export type ProgramRoleMatch = ProgramRole & {
+  session: { id: string; title: string; congressId: string } | null;
+  presentation: { id: string; title: string; session: { id: string; title: string; congressId: string } } | null;
+};
+
+export type ProgramRoleMatchesPage = {
+  items: ProgramRoleMatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type RematchSummary = {
+  matched: number;
+  ambiguous: number;
+  unmatched: number;
+  skipped: number;
+};
+
+export type ProgramRoleCandidate = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+};
+
 export type Session = {
   id: string;
   congressId: string;
   hallId: string;
   title: string;
+  // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
+  // eklenir (bkz. asagisi) - yeni formda kullanilmaz, yalnizca eski veri icin
+  // korunur.
   speaker: string | null;
   startTime: string;
   endTime: string;
   description: string | null;
+  // --- iki seviyeli bilimsel program alanlari ---
+  sessionType: string | null;
+  dayLabel: string | null;
+  keywords: string | null;
+  displayOrder: number;
+  presentations: Presentation[];
+  roles: ProgramRole[];
   createdAt: string;
   updatedAt: string;
   hall?: Hall;
@@ -666,6 +751,10 @@ export const api = {
   getBeaconHealthReport: (congressId: string) =>
     request<BeaconHealthItem[]>(`/reports/beacon-health${buildQuery({ congressId })}`),
 
+  // `GET /sessions` sunumlari ve rolleri IC ICE doner, sunucuda zaten
+  // `dayLabel -> startTime -> displayOrder` sirali - panel EKSTRA siralama
+  // yapmaz, gun/salon filtresi istemci tarafinda uygulanir (bkz. sessions
+  // sayfasi gorev tanimi).
   listSessions: (congressId: string) =>
     request<Session[]>(`/sessions${buildQuery({ congressId })}`),
   createSession: (data: {
@@ -676,6 +765,9 @@ export const api = {
     startTime: string;
     endTime: string;
     description?: string;
+    sessionType?: string;
+    dayLabel?: string;
+    keywords?: string;
   }) => request<Session>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
   updateSession: (
     id: string,
@@ -686,9 +778,78 @@ export const api = {
       startTime: string;
       endTime: string;
       description: string;
+      sessionType: string;
+      dayLabel: string;
+      keywords: string;
     }>,
   ) => request<Session>(`/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSession: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
+  // Yalnizca GORUNEN (ornegin gun/salon filtresiyle filtrelenmis) listedeki
+  // id'leri gonder - sunucu SADECE gonderilen id'lerin displayOrder'ini 0'dan
+  // yeniden yazar, filtre disindaki oturumlara dokunmaz (bkz. api sozlesmesi).
+  reorderSessions: (ids: string[]) =>
+    request<void>('/sessions/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // ===== Sunumlar (bir oturumun ic ice sunum listesi) =====
+  // `GET /sessions` sunumlari zaten ic ice dondurdugu icin bu fonksiyon
+  // yalnizca create/update/delete/reorder sonrasi kullanilir, ilk yuklemede
+  // AYRICA cagrilmaz.
+  listPresentations: (sessionId: string) =>
+    request<Presentation[]>(`/admin/presentations${buildQuery({ sessionId })}`),
+  createPresentation: (data: {
+    sessionId: string;
+    title: string;
+    startTime?: string;
+    endTime?: string;
+    abstract?: string;
+  }) => request<Presentation>('/admin/presentations', { method: 'POST', body: JSON.stringify(data) }),
+  updatePresentation: (
+    id: string,
+    data: Partial<{ title: string; startTime: string; endTime: string; abstract: string }>,
+  ) =>
+    request<Presentation>(`/admin/presentations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deletePresentation: (id: string) => request<void>(`/admin/presentations/${id}`, { method: 'DELETE' }),
+  reorderPresentations: (ids: string[]) =>
+    request<void>('/admin/presentations/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // ===== Program rolleri (moderator/konusmaci/tartismaci + katilimci eslestirme) =====
+  createProgramRole: (data: {
+    sessionId?: string;
+    presentationId?: string;
+    type: ProgramRoleType;
+    rawName: string;
+  }) => request<ProgramRole>('/admin/program-roles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProgramRole: (id: string, data: Partial<{ type: ProgramRoleType; rawName: string }>) =>
+    request<ProgramRole>(`/admin/program-roles/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProgramRole: (id: string) => request<void>(`/admin/program-roles/${id}`, { method: 'DELETE' }),
+  linkProgramRole: (id: string, userId: string) =>
+    request<ProgramRole>(`/admin/program-roles/${id}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+  ignoreProgramRole: (id: string) =>
+    request<ProgramRole>(`/admin/program-roles/${id}/ignore`, { method: 'POST' }),
+  // MANUAL/IGNORED durumundaki roller asla degistirilmez (skipped sayisina
+  // girer) - yalnizca diger durumlar (ozellikle katilimci listesi sonradan
+  // guncellendigi icin artik eslesebilecek UNMATCHED kayitlar) yeniden hesaplanir.
+  rematchProgramRoles: (congressId: string) =>
+    request<RematchSummary>('/admin/program-roles/rematch', {
+      method: 'POST',
+      body: JSON.stringify({ congressId }),
+    }),
+  listProgramRoleMatches: (params: {
+    congressId: string;
+    status?: RoleMatchStatus;
+    page?: number;
+    pageSize?: number;
+  }) => request<ProgramRoleMatchesPage>(`/admin/program-roles/matches${buildQuery(params)}`),
+  // AMBIGUOUS'ta birebir isim eslesenler, UNMATCHED'te gevsek kelime-arama
+  // sonucu doner - iki durumda da otomatik atama YOK, yetkili elle secer.
+  getProgramRoleCandidates: (id: string) =>
+    request<ProgramRoleCandidate[]>(`/admin/program-roles/${id}/candidates`),
 
   // ===== Katılımcı yönetimi (Faz 2) =====
   listRegistrations: (params: {

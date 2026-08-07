@@ -361,3 +361,90 @@ icin ortak arayuz (`ContentDelegate<T>`) parametre tiplerinde bilinçli olarak
 gevsek (`any`) tutuldu - gercek tip guvenligi her turun kendi DTO'sunda
 (controller sinirinda) zaten var, bu tek arayuz sinirindaki gevseklik
 kapsamli ve yorumla belgelenmis bir tercih.
+
+## Faz 4a — Bilimsel Program Veri Modeli ve Konusmaci Eslestirme
+
+Eski `Session` modeli tek seviyeliydi (bir oturum, tek serbest metin
+"konusmaci" alani) - gercek kongre programi iki seviyelidir: bir oturum
+icinde birden fazla sunum, her sunumun kendi konusmacisi/moderatoru olur.
+Bilimsel program dosyalarinda katilimci e-postasi yazmadigi icin eslestirme
+**isim uzerinden** yapiliyor. Bu faz veri modelini, isim eslestirme mantigini
+ve panelden elle yonetimi kurdu - PDF/Excel'den otomatik program cikarimi
+Faz 4b'nin konusu.
+
+### Neden iki seviye (Session -> Presentation), tek seviye degil
+
+Bir oturumun (ornek: "Kardiyoloji Sempozyumu", 09:00-10:30) icinde birden
+fazla bagimsiz sunum olur, her birinin kendi baslik/saat/ozet/konusmacisi
+vardir. Tek seviyeli bir modelde ya her sunumu ayri bir "Session" yapmak
+gerekirdi (salon/gun bilgisini her satirda tekrarlamak, oturum-duzeyi
+moderatoru hicbir sunuma ait olmadan nereye koyacagini bilememek) ya da
+sunumlari `Session.description` gibi bir serbest metin alanina sikistirmak
+gerekirdi (yapisal sorgulanamaz, sıralanamaz, ayrica rol eslestirilemez).
+`Presentation`, `Session`e `onDelete: Cascade` ile bagli ayri bir tablo
+olarak eklendi - oturum silinince sunumlari da (ve onlarin rolleri de)
+otomatik silinir, bu canli test edildi.
+
+### Neden tek `ProgramRole` tablosu, `SessionRole`/`PresentationRole` diye ikiye bolunmedi
+
+Moderator/konusmaci/tartismaci rolu davranissal olarak AYNI (isim + tur +
+eslesme durumu) - tek fark hangi seviyeye bagli oldugu. Iki ayri tablo bu
+ortak alanlarin tamamini tekrar ederdi ve "bir kongredeki tum rolleri
+listele" (matches denetim sayfasi) gibi bir sorgu icin iki tabloyu
+birlestirmek gerekirdi. Bunun yerine `ProgramRole`de `sessionId` VE
+`presentationId` ikisi de nullable - bir rol ya birine ya digerine baglidir,
+**ikisi birden dolu veya ikisi birden bos olamaz**. MySQL/Prisma seviyesinde
+bunu zorunlu kilan bir CHECK kisiti yazilamadigi icin (Prisma CHECK
+constraint desteklemiyor), bu kural `ProgramRolesService.resolveCongressId()`
+icinde servis katmaninda dogrulanir (`400` doner) - hem create hem update
+akisinda canli test edildi (ikisi de dolu -> 400, ikisi de bos -> 400).
+
+### Neden bulanik/benzerlik (fuzzy) eslestirme YOK
+
+Eslestirme yalnizca BIREBIR `searchName` esitligine bakiyor. Bulanik
+eslestirme (ornek: Levenshtein mesafesi, ses benzerligi) yanlis kisiyi doğru
+gibi gosterme riski tasir - katilimciya "senin sunumun şu salonda" diye
+YANLIS bir bilgi göstermek, hic göstermemekten daha kotu bir kullanici
+deneyimidir (sessiz veri bozulmasi). Bunun yerine sistem NET uc durumlar
+uretir: `MATCHED` (tek aday), `AMBIGUOUS` (birden fazla aday - ayni isimde
+iki katilimci GERCEK bir senaryo, sessizce ilk aday SECILMEZ), `UNMATCHED`
+(aday yok). Belirsiz/eslesmeyen durumlarda yetkili `/sessions/matches`
+sayfasindan adaylar arasindan seçip elle baglar (`MANUAL`) veya "katilimci
+degil" isaretler (`IGNORED`) - bu iki durum `rematchCongress()` tarafindan
+ASLA otomatik ezilmez (yetkilinin karari sabit kalir), canli test edildi.
+
+### Neden `Session.speaker` silinmedi, yalnizca DEPRECATED isaretlendi
+
+Faz 4a ONCESI olusmus oturumlarda bu alan dolu ve mevcut panel gorunumu
+buna dayaniyordu. Alani silmek geriye donuk veri kaybina yol acardi (mutlak
+kisit: "Session.speaker alanini SILME"). Yeni yazimlarda kullanilmiyor,
+`CreateSessionDto`/`Session` OpenAPI semasinda `deprecated: true` olarak
+isaretlendi ve panelin yeni formunda bu alana hic yer verilmedi - ama eski
+veri okunabilir/gorunur kaldi.
+
+### Neden `toLowerCase()`/`toLocaleLowerCase('tr')` yerine elle karakter esleme
+
+`normalizeTurkishName()` Turkce harfleri (İ/I/ı -> i, Ş/ş -> s, Ğ/ğ -> g,
+Ü/ü -> u, Ö/ö -> o, Ç/ç -> c) ASCII'ye indirgemeden ONCE, genel
+`toLowerCase()` cagrisina GUVENMEDI. Sebep: `"İ".toLowerCase()` JS'te
+platforma gore `"i"` yerine `"i̇"` (i + U+0307 birlesik nokta) uretebiliyor,
+ve `"I".toLowerCase()` `Intl`/locale ayarina gore `"ı"` (noktasiz i)
+verebiliyor - ikisi de arama/eslestirme icin YANLIS/tutarsiz sonuc anlamina
+gelir (ayni kisi iki farkli `searchName` uretebilir). Bunun yerine bu 6 harf
+cifti ELLE, tek tek ASCII karsiligina cevrilir (`TURKISH_CHAR_MAP`), SONRA
+geriye kalan (artik sadece ASCII olan) metin uzerinde genel `toLowerCase()`
+cagrilir - bu sıralama, platform/locale farkliliklarindan tamamen bagimsiz,
+her zaman ayni sonucu ureten deterministik bir fonksiyon saglar.
+
+### Neden `User.searchName` migration icinde degil, ayri bir betikle dolduruldu
+
+Turkce unvan temizleme + karakter normalizasyonu SQL'de pratik degil (regex
+tabanli unvan listesi + iki asamali karakter/kucultme donusumu). Migration
+yalnizca nullable kolonu ekliyor (`ALTER TABLE User ADD COLUMN searchName`),
+geriye donuk doldurma `backend/scripts/backfill-search-name.ts` ile
+migration SONRASI bir kez calistiriliyor (bkz. `DEPLOY-REHBERI.md` §9.6).
+Betik idempotent (`WHERE searchName IS NULL`) - tekrar calistirmak
+guvenlidir. Yeni kullanicilar (manuel ekleme, Excel/CSV onay, pilot-login)
+bu alani OLUSTURULURKEN zaten dolduruyor (bkz. `registrations.service.ts`,
+`registration-import.service.ts`, `auth.service.ts`), bu yuzden betik yalnizca
+GECMIS veri icin gerekli.

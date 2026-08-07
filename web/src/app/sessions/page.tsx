@@ -1,21 +1,19 @@
 import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
-import { SessionForm } from './session-form';
-import { deleteSessionAction } from './actions';
+import { SessionsBoard } from './sessions-board';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
 import { loadCongresses } from '@/lib/load-congresses';
+import './sessions.css';
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
+/**
+ * Bilimsel Program — iki seviyeli model: oturum (moderatörlü) içinde birden
+ * fazla sunum (konuşmacılı) olur. `GET /sessions` sunum+rol ağacını İÇ İÇE
+ * döndürdüğü için burada TEK istekle tüm veri gelir (bkz. api sözleşmesi),
+ * gün/salon filtresi ve genişleyen kart durumu `SessionsBoard`da (istemci)
+ * yönetilir.
+ */
 export default async function SessionsPage({
   searchParams,
 }: {
@@ -41,6 +39,9 @@ export default async function SessionsPage({
     <main className="panel-page">
       <PageHeader
         title="Bilimsel Program"
+        description="Oturumları, oturum içindeki sunumları ve moderatör/konuşmacı/tartışmacı
+          rollerini yönetin. Katılımcı eşleştirme durumları için Konuşmacı Eşleşmeleri
+          sayfasını kullanın."
         actions={
           <CongressSelector congresses={congresses} selectedId={congressId} basePath="/sessions" />
         }
@@ -48,45 +49,7 @@ export default async function SessionsPage({
 
       {!congressId && <EmptyState title="Oturumları görmek için bir kongre seçin." />}
 
-      {congressId && (
-        <>
-          <SessionForm congressId={congressId} halls={halls} />
-
-          <table className="panel-table">
-            <thead>
-              <tr>
-                <th>Başlık</th>
-                <th>Salon</th>
-                <th>Konuşmacı</th>
-                <th>Başlangıç</th>
-                <th>Bitiş</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((session) => (
-                <tr key={session.id}>
-                  <td>{session.title}</td>
-                  <td>{session.hall?.name ?? halls.find((h) => h.id === session.hallId)?.name ?? '—'}</td>
-                  <td>{session.speaker ?? '—'}</td>
-                  <td>{formatDateTime(session.startTime)}</td>
-                  <td>{formatDateTime(session.endTime)}</td>
-                  <td>
-                    <form action={deleteSessionAction.bind(null, session.id)}>
-                      <button type="submit">Sil</button>
-                    </form>
-                  </td>
-                </tr>
-              ))}
-              {sessions.length === 0 && (
-                <tr>
-                  <td colSpan={6}>Bu kongrede henüz oturum yok.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </>
-      )}
+      {congressId && <SessionsBoard congressId={congressId} sessions={sessions} halls={halls} />}
     </main>
   );
 }

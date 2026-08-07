@@ -19,6 +19,7 @@ import type { AuthenticatedUser } from './authenticated-request';
 import { MAIL_SENDER } from '../mail/mail-sender.interface';
 import type { MailSender } from '../mail/mail-sender.interface';
 import { RegistrationSource } from '../../generated/prisma/client';
+import { computeSearchName } from '../common/normalize-turkish-name';
 
 const PASSWORD_HASH_ROUNDS = 10;
 
@@ -314,6 +315,7 @@ export class AuthService {
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
+          searchName: computeSearchName(dto.firstName, dto.lastName),
           phoneLast4: dto.phoneLast4,
           registrations: {
             create: {

@@ -555,6 +555,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
 
+  /sessions/reorder:
+    post:
+      summary: Oturumlarin gosterim sirasini topluca degistir
+      description: >-
+        Govdedeki ids dizisinin sirasina gore displayOrder degerleri 0'dan
+        baslayarak yeniden yazilir. Yalnizca gonderilen id'ler etkilenir -
+        panel gun/salon filtresi uygulanmis GORUNEN listeyi gonderebilir,
+        filtre disindaki oturumlara dokunulmaz.
+      operationId: reorderSessions
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
   /sessions/{id}:
     patch:
       summary: Oturumu guncelle (bildirim zamanlamasi yeniden hesaplanir)
@@ -585,6 +608,9 @@ paths:
                 $ref: '#/components/schemas/Session'
     delete:
       summary: Oturumu sil (zamanlanmis bildirimi de iptal eder)
+      description: >-
+        Cascade: altindaki tum sunumlar VE o sunumlarin/oturumun rolleri de
+        silinir.
       operationId: deleteSession
       tags:
         - Sessions
@@ -600,6 +626,376 @@ paths:
       responses:
         '204':
           description: Silindi.
+
+  /admin/presentations:
+    get:
+      summary: Bir oturumun sunumlarini listele
+      operationId: listPresentations
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: displayOrder'a gore sirali sunum listesi (roller dahil).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Presentation'
+    post:
+      summary: Oturuma yeni sunum ekle
+      operationId: createPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationCreate'
+      responses:
+        '201':
+          description: Sunum olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presentation'
+        '404':
+          description: sessionId ile eslesen oturum bulunamadi.
+
+  /admin/presentations/reorder:
+    post:
+      summary: Bir oturumdaki sunumlarin sirasini topluca degistir
+      operationId: reorderPresentations
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/presentations/{id}:
+    patch:
+      summary: Sunumu guncelle
+      operationId: updatePresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presentation'
+        '404':
+          description: Sunum bulunamadi.
+    delete:
+      summary: Sunumu sil
+      description: Cascade - bagli roller de silinir.
+      operationId: deletePresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Sunum bulunamadi.
+
+  /admin/program-roles:
+    post:
+      summary: Yeni oturum/sunum rolu ekle (moderator/konusmaci/tartismaci)
+      description: >-
+        sessionId/presentationId'den TAM OLARAK biri gonderilmelidir - ikisi
+        de dolu ya da ikisi de bos gelirse 400. Eslesme (matchStatus/userId)
+        `rawName` uzerinden OTOMATIK hesaplanir, istekte gonderilmez.
+      operationId: createProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRoleCreate'
+      responses:
+        '201':
+          description: Rol olusturuldu, otomatik eslestirme uygulanmis halde doner.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '400':
+          description: sessionId/presentationId ikisi birden dolu veya ikisi birden bos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/program-roles/rematch:
+    post:
+      summary: Bir kongredeki tum rolleri yeniden eslestir
+      description: >-
+        `MANUAL` ve `IGNORED` durumundaki roller ASLA degistirilmez (yetkilinin
+        elle verdigi karar otomatik hesaplamayla ezilmez) - bu rollerin sayisi
+        `skipped` alaninda doner. Katilimci listesi guncellendiginde (Faz 2
+        akisiyla yeni kayit eklendiginde) calistirilir.
+      operationId: rematchProgramRoles
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - congressId
+              properties:
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Yeniden eslestirme ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RematchSummary'
+
+  /admin/program-roles/matches:
+    get:
+      summary: Bir kongredeki tum rollerin eslesme durumu denetim listesi
+      operationId: listProgramRoleMatches
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RoleMatchStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        '200':
+          description: Sayfalanmis rol listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRoleMatchesPage'
+
+  /admin/program-roles/{id}:
+    patch:
+      summary: Rolu guncelle
+      description: >-
+        `rawName` degisirse `searchName`/`matchStatus`/`userId` OTOMATIK
+        yeniden hesaplanir.
+      operationId: updateProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRoleUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol bulunamadi.
+    delete:
+      summary: Rolu sil
+      operationId: deleteProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Rol bulunamadi.
+
+  /admin/program-roles/{id}/link:
+    post:
+      summary: Rolu elle bir katilimciya bagla (matchStatus = MANUAL olur)
+      operationId: linkProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Baglandi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol veya katilimci bulunamadi.
+
+  /admin/program-roles/{id}/ignore:
+    post:
+      summary: Rolu "katilimci degil" olarak isaretle (matchStatus = IGNORED olur)
+      operationId: ignoreProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol bulunamadi.
+
+  /admin/program-roles/{id}/candidates:
+    get:
+      summary: Bir rol icin aday katilimci listesi
+      description: >-
+        AMBIGUOUS'ta birebir searchName eslesen adaylar, UNMATCHED'te daha
+        gevsek kelime-icerir aramasinin sonucu doner. Otomatik atama YAPMAZ -
+        yalnizca yetkiliye secenek sunar (bkz. /link).
+      operationId: getProgramRoleCandidates
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Aday katilimci listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgramRoleCandidate'
+        '404':
+          description: Rol bulunamadi.
 
   /devices/push-token:
     put:
@@ -2627,6 +3023,10 @@ components:
         - startTime
         - endTime
         - description
+        - sessionType
+        - dayLabel
+        - keywords
+        - displayOrder
         - createdAt
         - updatedAt
       properties:
@@ -2644,6 +3044,11 @@ components:
         speaker:
           type: string
           nullable: true
+          deprecated: true
+          description: >-
+            DEPRECATED (Faz 4a) - yeni programlarda moderator/konusmaci
+            ProgramRole uzerinden eklenir. Yalnizca eski veri/panel gorunumu
+            icin korunuyor, yeni yazimlarda kullanilmasi beklenmiyor.
         startTime:
           type: string
           format: date-time
@@ -2653,12 +3058,39 @@ components:
         description:
           type: string
           nullable: true
+        sessionType:
+          type: string
+          nullable: true
+          description: 'Serbest metin, ornek: "Panel", "Sempozyum", "Kurs", "Ana Konusma", "Uydu Sempozyumu".'
+        dayLabel:
+          type: string
+          nullable: true
+          description: 'Programdaki gun etiketi, ornek: "1. Gun", "Calistaylar".'
+        keywords:
+          type: string
+          nullable: true
+          description: >-
+            Virgulle ayrilmis anahtar kelimeler. Faz 9 (bildirimler) icin
+            hazirlik - bu fazda kullanilmiyor.
+        displayOrder:
+          type: integer
+          description: 'Siralama: dayLabel -> startTime -> displayOrder (esitlik bozucu).'
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+        presentations:
+          type: array
+          description: GET /sessions listesinde HER ZAMAN dolu doner (bos dizi olabilir).
+          items:
+            $ref: '#/components/schemas/Presentation'
+        roles:
+          type: array
+          description: Dogrudan bu oturuma bagli roller (ornek moderator).
+          items:
+            $ref: '#/components/schemas/ProgramRole'
 
     SessionCreate:
       type: object
@@ -2679,6 +3111,7 @@ components:
           type: string
         speaker:
           type: string
+          deprecated: true
         startTime:
           type: string
           format: date-time
@@ -2687,6 +3120,15 @@ components:
           format: date-time
         description:
           type: string
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+        displayOrder:
+          type: integer
+          minimum: 0
 
     SessionUpdate:
       allOf:
@@ -4772,3 +5214,310 @@ components:
           minLength: 1
         isPublished:
           type: boolean
+
+    # ===== Bilimsel program - iki seviyeli model ve konusmaci eslestirme (Faz 4a) =====
+
+    Presentation:
+      type: object
+      required:
+        - id
+        - sessionId
+        - title
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramRole'
+
+    PresentationCreate:
+      type: object
+      required:
+        - sessionId
+        - title
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        abstract:
+          type: string
+
+    PresentationUpdate:
+      type: object
+      description: PresentationCreate ile ayni alanlar (sessionId haric), hepsi opsiyonel (PATCH).
+      properties:
+        title:
+          type: string
+          minLength: 1
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        abstract:
+          type: string
+
+    ProgramRoleType:
+      type: string
+      enum: [MODERATOR, SPEAKER, DISCUSSANT]
+      description: MODERATOR = oturum baskani, SPEAKER = konusmaci, DISCUSSANT = tartismaci.
+
+    RoleMatchStatus:
+      type: string
+      enum: [MATCHED, AMBIGUOUS, UNMATCHED, MANUAL, IGNORED]
+      description: >-
+        MATCHED = otomatik eslesti (tek aday). AMBIGUOUS = birden fazla aday,
+        yetkili secmeli. UNMATCHED = aday yok. MANUAL = yetkili elle bagladi.
+        IGNORED = yetkili "bu kisi katilimci degil" dedi. MANUAL ve IGNORED
+        rematch ile ASLA degistirilmez.
+
+    ProgramRoleUser:
+      type: object
+      description: Rolun eslestigi katilimcinin panelde gosterilecek asgari alanlari.
+      required:
+        - id
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phoneRaw:
+          type: string
+          nullable: true
+
+    ProgramRole:
+      type: object
+      required:
+        - id
+        - sessionId
+        - presentationId
+        - type
+        - rawName
+        - searchName
+        - userId
+        - matchStatus
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          description: 'Programda yazdigi hali, ornek: "Prof. Dr. Ahmet Yilmaz".'
+        searchName:
+          type: string
+          description: normalizeTurkishName(rawName) - unvansiz, ASCII, kucuk harf.
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        matchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          allOf:
+            - $ref: '#/components/schemas/ProgramRoleUser'
+          nullable: true
+
+    ProgramRoleCreate:
+      type: object
+      description: >-
+        sessionId/presentationId'den TAM OLARAK biri gonderilmelidir - ikisi
+        de dolu ya da ikisi de bos gelirse 400.
+      required:
+        - type
+        - rawName
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          minLength: 1
+
+    ProgramRoleUpdate:
+      type: object
+      description: >-
+        sessionId/presentationId burada YOK (bir rolun bagli oldugu
+        oturum/sunum degistirilemez). rawName degisirse eslesme otomatik
+        yeniden hesaplanir.
+      properties:
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          minLength: 1
+
+    ProgramRoleMatch:
+      description: ProgramRole + ait oldugu oturum/sunumun ozet bilgisi (matches listesinde).
+      allOf:
+        - $ref: '#/components/schemas/ProgramRole'
+        - type: object
+          properties:
+            session:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                congressId:
+                  type: string
+                  format: uuid
+            presentation:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                session:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    congressId:
+                      type: string
+                      format: uuid
+
+    ProgramRoleMatchesPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramRoleMatch'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    RematchSummary:
+      type: object
+      required:
+        - matched
+        - ambiguous
+        - unmatched
+        - skipped
+      properties:
+        matched:
+          type: integer
+        ambiguous:
+          type: integer
+        unmatched:
+          type: integer
+        skipped:
+          type: integer
+          description: MANUAL veya IGNORED oldugu icin dokunulmadan atlanan rol sayisi.
+
+    ProgramRoleCandidate:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phoneRaw:
+          type: string
+          nullable: true

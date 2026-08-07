@@ -22,6 +22,7 @@ import { RedisModule } from './redis/redis.module';
 import { RegistrationsModule } from './registrations/registrations.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { ContentModule } from './content/content.module';
+import { ProgramModule } from './program/program.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ContentModule } from './content/content.module';
     RegistrationsModule,
     UploadsModule,
     ContentModule,
+    ProgramModule,
   ],
   controllers: [AppController],
   providers: [AppService],

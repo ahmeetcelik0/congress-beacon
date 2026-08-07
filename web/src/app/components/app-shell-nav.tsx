@@ -82,6 +82,14 @@ const ICONS = {
       <path d="M3 7.5h14M7 3.5v-1M13 3.5v-1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   ),
+  match: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <circle cx="6" cy="7" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="14" cy="13" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 8.5 12 11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M14 5.5 16 3.5M16 7.5 18 5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  ),
 };
 
 const ChevronIcon = () => (
@@ -117,6 +125,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Yönetim',
     items: [
       { href: '/sessions', label: 'Bilimsel Program', icon: ICONS.program },
+      { href: '/sessions/matches', label: 'Konuşmacı Eşleşmeleri', icon: ICONS.match },
       { href: '/reports', label: 'Raporlar', icon: ICONS.report },
     ],
   },

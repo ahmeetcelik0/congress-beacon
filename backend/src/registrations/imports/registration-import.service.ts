@@ -11,6 +11,7 @@ import {
   RegistrationSource,
 } from '../../../generated/prisma/client';
 import { derivePhoneLast4 } from '../../common/normalize-phone';
+import { computeSearchName } from '../../common/normalize-turkish-name';
 import { RegistrationImportParserService } from './registration-import-parser.service';
 import { classifyRawRow } from './classify-raw-row';
 import { ImportRowsQueryDto } from '../dto/import-rows-query.dto';
@@ -363,6 +364,10 @@ export class RegistrationImportService {
               data: {
                 firstName: row.rawFirstName ?? '',
                 lastName: row.rawLastName ?? '',
+                searchName: computeSearchName(
+                  row.rawFirstName ?? '',
+                  row.rawLastName ?? '',
+                ),
                 email: row.normalizedEmail,
                 phone: row.normalizedPhone,
                 phoneRaw: row.rawPhone,

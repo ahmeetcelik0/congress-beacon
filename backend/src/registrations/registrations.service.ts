@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma, RegistrationSource } from '../../generated/prisma/client';
 import { derivePhoneLast4, normalizePhone } from '../common/normalize-phone';
+import { computeSearchName } from '../common/normalize-turkish-name';
 import { RegistrationsQueryDto } from './dto/registrations-query.dto';
 import { CreateRegistrationDto } from './dto/create-registration.dto';
 import { UpdateRegistrationDto } from './dto/update-registration.dto';
@@ -130,6 +131,7 @@ export class RegistrationsService {
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
+          searchName: computeSearchName(dto.firstName, dto.lastName),
           email: contact.email,
           phone: contact.phone,
           phoneRaw: contact.phoneRaw,
@@ -194,6 +196,14 @@ export class RegistrationsService {
     const data: Prisma.UserUpdateInput = {};
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
     if (dto.lastName !== undefined) data.lastName = dto.lastName;
+    if (dto.firstName !== undefined || dto.lastName !== undefined) {
+      // Kismi PATCH: yalnizca biri gonderilmis olabilir, digeri icin kayitli
+      // degeri kullan - aksi halde searchName eksik/yanlis isimden hesaplanir.
+      data.searchName = computeSearchName(
+        dto.firstName ?? registration.user.firstName,
+        dto.lastName ?? registration.user.lastName,
+      );
+    }
     if (dto.email !== undefined) {
       const trimmed = dto.email.trim();
       data.email = trimmed ? trimmed.toLowerCase() : null;
