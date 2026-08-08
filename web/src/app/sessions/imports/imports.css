@@ -1,0 +1,749 @@
+/* Program dosyası içe aktarma (`/sessions/imports`, `/sessions/imports/[id]`)
+   — hem yükleme panelinin (`/sessions` sayfası içinde) hem de onay/önizleme
+   sayfasının stilleri burada toplanır. Temel kart/rol/sunum düzeni Faz 4a'nın
+   `sessions.css`inden yeniden kullanılır (bkz. ilgili page.tsx'lerdeki
+   import notu) — burada yalnızca bu modüle ÖZGÜ ekler tanımlanır: yükleme
+   paneli, durum/uyarı renk tonları, düzenleme formu ızgarası, onay paneli. */
+
+/* ===== Yükleme paneli (`/sessions` sayfası) ===== */
+.imports-panel-section {
+  margin-bottom: 1.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.imports-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.imports-panel-toggle {
+  flex: 1;
+  min-width: 14rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1.1rem;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.88rem;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.imports-panel-toggle:hover {
+  background: rgba(130, 170, 210, 0.05);
+}
+
+.imports-panel-chevron {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-right: 1.4px solid var(--text-faint);
+  border-bottom: 1.4px solid var(--text-faint);
+  transform: rotate(45deg);
+  transition: transform var(--transition-fast);
+}
+
+.imports-panel-chevron[data-open='true'] {
+  transform: rotate(-135deg);
+}
+
+.imports-panel-spend {
+  flex-shrink: 0;
+  padding: 0.85rem 1.1rem;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.imports-panel-spend strong {
+  color: var(--text-dim);
+  font-family: var(--font-mono), monospace;
+}
+
+.imports-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0 1.1rem 1.1rem;
+  border-top: 1px solid var(--border);
+  margin-top: -1px;
+}
+
+.imports-panel-hint {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  max-width: 68ch;
+}
+
+.imports-upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.85rem;
+}
+
+.imports-upload-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.imports-upload-label input[type='file'] {
+  font-size: 0.8rem;
+  color: var(--text);
+  max-width: 18rem;
+}
+
+.imports-upload-row > button {
+  padding: 0.55rem 1.1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.imports-upload-row > button:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.imports-upload-row > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.imports-upload-secondary {
+  border: 1px solid var(--border-strong) !important;
+  background: transparent !important;
+  color: var(--text-dim) !important;
+  box-shadow: none !important;
+}
+
+.imports-upload-secondary:hover:not(:disabled) {
+  border-color: var(--status-critical) !important;
+  color: var(--status-critical) !important;
+}
+
+.imports-estimate-card {
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--signal);
+  border-radius: var(--radius);
+  background: var(--signal-dim);
+}
+
+.imports-estimate-card h3 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+
+.imports-estimate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.85rem;
+  margin: 0;
+}
+
+.imports-estimate-grid dt {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+  margin-bottom: 0.25rem;
+}
+
+.imports-estimate-grid dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.imports-estimate-cost {
+  color: var(--signal) !important;
+}
+
+.imports-estimate-note {
+  margin: 0.85rem 0 0;
+  font-size: 0.76rem;
+  color: var(--text-faint);
+  max-width: 68ch;
+}
+
+.imports-estimate-actions {
+  margin-top: 0.85rem;
+  display: flex;
+}
+
+.imports-confirm-button {
+  padding: 0.6rem 1.3rem;
+  min-height: 42px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-positive);
+  background: var(--status-positive-dim);
+  color: var(--status-positive);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.imports-confirm-button:hover:not(:disabled) {
+  background: rgba(46, 230, 166, 0.24);
+}
+
+.imports-confirm-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.imports-history {
+  padding: 1rem 1.1rem 1.1rem;
+  border-top: 1px solid var(--border);
+}
+
+.imports-history-heading {
+  margin: 0 0 0.6rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+}
+
+.imports-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.imports-history-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+}
+
+.imports-history-item a {
+  color: var(--signal);
+  text-decoration: none;
+}
+
+.imports-history-item a:hover {
+  text-decoration: underline;
+}
+
+.imports-history-date {
+  color: var(--text-faint);
+  font-size: 0.74rem;
+  font-family: var(--font-mono), monospace;
+}
+
+/* ===== Önizleme sayfası (`/sessions/imports/[id]`) ===== */
+.import-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.import-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.import-status-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 2rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.import-status-message {
+  max-width: 60ch;
+  font-size: 0.88rem;
+  color: var(--text-dim);
+}
+
+.import-status-cancel {
+  padding: 0.5rem 1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.import-status-cancel:hover {
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+/* Oturum kart tonu - `data-tone` staging satirinin uc gorsel durumunu
+   ayristirir (bkz. gorev tanimi): critical=INVALID, excluded=EXCLUDED,
+   warning=uyarili-ama-gecerli, clean=hicbiri. */
+.import-session-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.import-session-card[data-tone='critical'] {
+  border-color: var(--status-critical);
+  background: var(--status-critical-dim);
+}
+
+.import-session-card[data-tone='warning'] {
+  border-color: var(--status-warning);
+  background: var(--status-warning-dim);
+}
+
+.import-session-card[data-tone='excluded'] {
+  opacity: 0.62;
+}
+
+.import-session-header {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.import-session-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.import-row-actions > button:first-child {
+  padding: 0.35rem 0.7rem;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.import-row-actions > button:first-child:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.import-message-text {
+  margin: 0 0.75rem 0.6rem;
+  font-size: 0.8rem;
+}
+
+.import-message-critical {
+  color: var(--status-critical);
+}
+
+.import-message-neutral {
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.import-warning-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin: 0 0.75rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--status-warning);
+}
+
+.import-warning-item::before {
+  content: '⚠ ';
+}
+
+.import-tone-warning {
+  border-color: var(--status-warning) !important;
+  background: var(--status-warning-dim) !important;
+}
+
+/* ===== Satır-içi düzenleme formu (oturum/sunum ortak) ===== */
+.import-edit-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  margin: 0 0.75rem 0.75rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.import-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.import-edit-form input {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.84rem;
+}
+
+.import-edit-form input:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.import-edit-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.import-edit-form-actions button,
+.import-edit-form button[type='submit'] {
+  padding: 0.5rem 1.1rem;
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.import-edit-form-actions button:hover:not(:disabled),
+.import-edit-form button[type='submit']:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+}
+
+.import-edit-form-actions button:disabled,
+.import-edit-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.import-session-edit-form {
+  margin-top: 0.1rem;
+}
+
+/* ===== Rol yöneticisi (staging - Faz 4a'nınkinden farkı: rawName düzenlenebilir) ===== */
+.import-role-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.import-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.import-role-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.import-role-item-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.84rem;
+}
+
+.import-role-type {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.import-role-name {
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.import-role-item-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.import-role-item-actions > button:first-child {
+  padding: 0.3rem 0.6rem;
+  min-height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.import-role-item-actions > button:first-child:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.import-role-edit-form {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.import-role-edit-form input {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.import-role-edit-form button {
+  padding: 0.35rem 0.7rem;
+  min-height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.import-role-edit-form button[type='submit'] {
+  border-color: var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+}
+
+.import-role-form-error {
+  width: 100%;
+}
+
+/* ===== Elle oturum ekleme (LLM'in atladığı satırlar için) ===== */
+.import-add-session-details {
+  margin-bottom: 1.25rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.1rem;
+}
+
+.import-add-session-details summary {
+  cursor: pointer;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.84rem;
+  color: var(--text-dim);
+}
+
+.import-add-session-details summary:hover {
+  color: var(--signal);
+}
+
+.import-add-session-form {
+  margin: 0.85rem 0 0;
+}
+
+/* ===== Onaylama paneli (Faz 2'nin `.reg-approve-*`iyle AYNI görsel dil,
+   modüller arası CSS bağımlılığı olmasın diye burada AYRI tanımlanır). ===== */
+.import-approve-panel {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.import-approve-summary {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.import-approve-summary strong {
+  color: var(--text);
+}
+
+.import-approve-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.import-approve-actions button {
+  padding: 0.55rem 1.2rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.import-approve-confirm {
+  border: 1px solid var(--status-positive);
+  background: var(--status-positive-dim);
+  color: var(--status-positive);
+}
+
+.import-approve-confirm:hover:not(:disabled) {
+  background: rgba(46, 230, 166, 0.24);
+}
+
+.import-approve-cancel {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.import-approve-cancel:hover:not(:disabled) {
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+.import-approve-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.import-approve-result {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--status-positive-dim);
+  color: var(--status-positive);
+  font-size: 0.85rem;
+}
+
+.import-approve-result ul {
+  margin: 0.35rem 0 0 1.1rem;
+  padding: 0;
+}
+
+/* ===== Sayfalama (Faz 2'nin `.reg-pagination`iyle AYNI görsel dil) ===== */
+.import-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.import-pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.import-pagination-buttons a {
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.import-pagination-buttons a:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.import-pagination-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .imports-panel-spend {
+    width: 100%;
+  }
+
+  .import-edit-form {
+    grid-template-columns: 1fr;
+  }
+
+  .import-role-item {
+    flex-wrap: wrap;
+  }
+
+  .import-status-screen {
+    padding: 1.25rem 1rem;
+  }
+}

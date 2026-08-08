@@ -1,6 +1,7 @@
 import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
 import { SessionsBoard } from './sessions-board';
+import { ProgramImportPanel } from './imports/program-import-panel';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
@@ -34,6 +35,9 @@ export default async function SessionsPage({
   const congresses = congressesResult.congresses;
   const halls = congressId ? await api.listHalls(congressId) : [];
   const sessions = congressId ? await api.listSessions(congressId) : [];
+  // Program dosyasi (PDF/Excel) yukleme gecmisi + kongre bazinda toplam LLM
+  // harcamasi - yalnizca kongre secildiginde anlamli (bkz. `ProgramImportPanel`).
+  const programImports = congressId ? await api.listProgramImports(congressId) : null;
 
   return (
     <main className="panel-page">
@@ -48,6 +52,14 @@ export default async function SessionsPage({
       />
 
       {!congressId && <EmptyState title="Oturumları görmek için bir kongre seçin." />}
+
+      {congressId && (
+        <ProgramImportPanel
+          congressId={congressId}
+          totalSpendUsd={programImports?.totalSpendUsd ?? 0}
+          recentImports={programImports?.imports ?? []}
+        />
+      )}
 
       {congressId && <SessionsBoard congressId={congressId} sessions={sessions} halls={halls} />}
     </main>

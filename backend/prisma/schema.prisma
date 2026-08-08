@@ -73,6 +73,7 @@ model Congress {
   sponsors            Sponsor[]
   keynoteSpeakers     KeynoteSpeaker[]
   infoSections        CongressInfoSection[]
+  programImports      ProgramImport[]
 }
 
 enum VenueType {
@@ -514,6 +515,7 @@ model AdminUser {
 
   auditLogs           AuditLog[]
   registrationImports RegistrationImport[]
+  programImports      ProgramImport[]
 }
 
 model AuditLog {
@@ -561,7 +563,10 @@ model Session {
   id           String   @id @default(uuid())
   congressId   String
   hallId       String
-  title        String
+  // Faz 4b canli testinde gercek bir kongre programinda VARCHAR(191)'i asan
+  // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
+  // docs/decisions.md. @db.Text'e genisletildi.
+  title        String   @db.Text
   // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
   // tutulur (bkz. asagisi). Bu alan yalnizca Faz 4a ONCESI olusmus mevcut
   // verinin ve /sessions panelinin eski gorunumunun bozulmamasi icin
@@ -594,7 +599,7 @@ model Session {
 model Presentation {
   id           String    @id @default(uuid())
   sessionId    String
-  title        String
+  title        String    @db.Text
   startTime    DateTime?
   endTime      DateTime?
   abstract     String?   @db.Text
@@ -647,6 +652,118 @@ model ProgramRole {
   @@index([presentationId])
   @@index([searchName])
   @@index([userId])
+}
+
+enum ProgramSourceType {
+  PDF
+  EXCEL
+}
+
+enum ProgramImportStatus {
+  PENDING // dosya alindi, cikarim kuyruga girdi
+  EXTRACTING // LLM cagrisi suruyor
+  DRAFT // cikarim bitti, yetkili onayi bekliyor
+  APPROVED // canliya islendi
+  CANCELLED
+  FAILED // cikarim basarisiz (errorMessage dolu)
+}
+
+// LLM'in ham cikarimini tutan STAGING katmani (Faz 2'nin RegistrationImport
+// deseniyle ayni fikir: yukle -> onizle/duzelt -> onayla). Onaylanmadan
+// hicbir satir canli Session/Presentation/ProgramRole tablolarina yazilmaz.
+model ProgramImport {
+  id               String              @id @default(uuid())
+  congressId       String
+  adminUserId      String
+  fileName         String
+  sourceType       ProgramSourceType
+  status           ProgramImportStatus @default(PENDING)
+  model            String? // gercekte kullanilan model kimligi (env ANTHROPIC_MODEL o an ne ise)
+  inputTokens      Int?
+  outputTokens     Int?
+  estimatedCostUsd Float? // kayit aninda MODEL_PRICING ile hesaplanmis gercek maliyet
+  pageCount        Int?
+  errorMessage     String?             @db.Text
+  approvedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  congress  Congress               @relation(fields: [congressId], references: [id])
+  adminUser AdminUser              @relation(fields: [adminUserId], references: [id])
+  sessions  ProgramImportSession[]
+
+  @@index([congressId, status])
+}
+
+// Faz 2'nin ImportRowStatus enum'u yeniden kullanilir (NEW/INVALID/EXCLUDED
+// bu baglamda da ayni anlami tasir: NEW = onaya hazir, INVALID = baslik
+// yoksa/kritik hata, EXCLUDED = yetkili elle cikardi).
+model ProgramImportSession {
+  id           String          @id @default(uuid())
+  importId     String
+  rowOrder     Int
+  // Faz 4b canli testinde gercek bir kongre programinda VARCHAR(191)'i asan
+  // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
+  // docs/decisions.md. @db.Text'e genisletildi (canli Session.title ile ayni).
+  title        String?         @db.Text
+  rawHallName  String? // belgede yazan salon adi
+  hallId       String? // eslesen Hall (backend hesaplar, bkz. hall-matching.ts)
+  dayLabel     String?
+  rawDate      String? // belgede yazan tarih metni, varsa
+  rawStartTime String? // "09:00"
+  rawEndTime   String?
+  startTime    DateTime? // backend hesaplar (bkz. derive-datetime.ts)
+  endTime      DateTime?
+  sessionType  String?
+  keywords     String?
+  status       ImportRowStatus
+  message      String? // status=INVALID oldugunda neden
+  warning      String? // islenebilir ama dikkat gerektiriyor (ornek: tarih kongre baslangicindan turetildi)
+
+  import        ProgramImport               @relation(fields: [importId], references: [id], onDelete: Cascade)
+  presentations ProgramImportPresentation[]
+  roles         ProgramImportRole[]
+
+  @@index([importId, rowOrder])
+}
+
+model ProgramImportPresentation {
+  id              String    @id @default(uuid())
+  importSessionId String
+  rowOrder        Int
+  title           String?   @db.Text
+  rawStartTime    String?
+  rawEndTime      String?
+  startTime       DateTime?
+  endTime         DateTime?
+  abstract        String?   @db.Text
+  warning         String?
+
+  importSession ProgramImportSession @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
+  roles         ProgramImportRole[]
+
+  @@index([importSessionId, rowOrder])
+}
+
+// Faz 4a'daki ProgramRole ile AYNI "ya oturuma ya sunuma, ikisi birden
+// degil" kurali burada da servis katmaninda dogrulanir. previewMatchStatus/
+// previewUserId onayda oldugu gibi canli ProgramRole'e tasinir - yeni bir
+// eslestirme calismasi yapilmaz, Faz 4a'nin matchRole() servisi cagrilir.
+model ProgramImportRole {
+  id                   String          @id @default(uuid())
+  importSessionId      String?
+  importPresentationId String?
+  type                 ProgramRoleType
+  rawName              String
+  searchName           String
+  previewMatchStatus   RoleMatchStatus
+  previewUserId        String?
+
+  importSession      ProgramImportSession?      @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
+  importPresentation ProgramImportPresentation? @relation(fields: [importPresentationId], references: [id], onDelete: Cascade)
+
+  @@index([importSessionId])
+  @@index([importPresentationId])
 }
 
 enum NotificationStatus {

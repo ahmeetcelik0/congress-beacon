@@ -6,6 +6,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    // Backend'in mesaj disinda ek yapisal veri dondurdugu hatalar icin (ör.
+    // program-imports approve: `{ message, sessions: [...] }` - hangi
+    // oturumlarda salon eksik oldugunu listeler). Cogu cagiran bunu yok
+    // sayar, sadece `message`i kullanir.
+    public details?: unknown,
   ) {
     super(message);
   }
@@ -33,7 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new ApiError(body?.message ?? `İstek başarısız (${response.status})`, response.status);
+    throw new ApiError(body?.message ?? `İstek başarısız (${response.status})`, response.status, body);
   }
 
   if (response.status === 204) {
@@ -217,6 +222,138 @@ export type Session = {
   createdAt: string;
   updatedAt: string;
   hall?: Hall;
+};
+
+// ===== Program dosyası içe aktarma / staging (Faz 4b) =====
+// Backend sozlesmesi `backend/src/program/imports/**` altinda dogrulandi
+// (controller + service + `shared/openapi.yaml` uctan uca okundu) - burada
+// birebir eslenir. PDF/Excel (100-150 sayfa) Claude API ile yapisal JSON'a
+// cevrilip bu STAGING tablolarina yazilir; hicbir sey onaylanmadan canli
+// Session/Presentation/ProgramRole tablolarina YAZILMAZ (bkz.
+// `approveProgramImport`).
+
+export type ProgramSourceType = 'PDF' | 'EXCEL';
+export type ProgramImportStatus =
+  | 'PENDING'
+  | 'EXTRACTING'
+  | 'DRAFT'
+  | 'APPROVED'
+  | 'CANCELLED'
+  | 'FAILED';
+// Pratikte yalnizca NEW/INVALID/EXCLUDED uretilir (MATCHED/DUPLICATE bu
+// modelde KULLANILMAZ - tip, backend enum'unu tam sozlesme icin birebir
+// yansitir).
+export type ProgramImportRowStatus = 'NEW' | 'MATCHED' | 'DUPLICATE' | 'INVALID' | 'EXCLUDED';
+
+// Para HARCAMAYAN tek uc nokta (yalnizca token sayar) - gercek cikarim
+// baslamadan ONCE gosterilir, kullanicinin ACIK onayi olmadan
+// `createProgramImport` cagrilmaz (Anthropic kredisi sinirli, bkz. gorev
+// tanimi).
+export type ProgramImportEstimate = {
+  model: string;
+  inputTokens: number;
+  // Girdi token sayisina dayali KABA bir tahmin - panelde HER ZAMAN "tahmini"
+  // etiketiyle sunulur, kesin bir taahhut degildir.
+  estimatedOutputTokens: number;
+  estimatedCostUsd: number | null;
+  // Yalnizca PDF icin best-effort sayim, Excel'de her zaman null.
+  pageCount: number | null;
+};
+
+export type ProgramImport = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  sourceType: ProgramSourceType;
+  status: ProgramImportStatus;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
+  pageCount: number | null;
+  errorMessage: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  adminUser?: { name: string; email: string };
+};
+
+export type ProgramImportRole = {
+  id: string;
+  importSessionId: string | null;
+  importPresentationId: string | null;
+  type: ProgramRoleType;
+  rawName: string;
+  searchName: string;
+  previewMatchStatus: RoleMatchStatus;
+  previewUserId: string | null;
+};
+
+export type ProgramImportPresentation = {
+  id: string;
+  importSessionId: string;
+  rowOrder: number;
+  title: string | null;
+  rawStartTime: string | null;
+  rawEndTime: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  abstract: string | null;
+  // Sunum/rol seviyesinde ayrica bir `status` alani YOK, yalnizca bu - dolu
+  // ise satir islenebilir ama dikkat gerektirir (sari gosterim).
+  warning: string | null;
+  roles: ProgramImportRole[];
+};
+
+export type ProgramImportSession = {
+  id: string;
+  importId: string;
+  rowOrder: number;
+  title: string | null;
+  rawHallName: string | null;
+  hallId: string | null;
+  dayLabel: string | null;
+  rawDate: string | null;
+  rawStartTime: string | null;
+  rawEndTime: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  sessionType: string | null;
+  keywords: string | null;
+  status: ProgramImportRowStatus;
+  // Dolu ise satir INVALID'i aciklar (kirmizi gosterim, ornegin "Baslik
+  // zorunludur").
+  message: string | null;
+  // Dolu ise satir islenebilir (status NEW) ama dikkat gerektirir (sari
+  // gosterim, ornegin "Salon secilmedi").
+  warning: string | null;
+  presentations: ProgramImportPresentation[];
+  roles: ProgramImportRole[];
+};
+
+export type ProgramImportDetail = {
+  import: ProgramImport;
+  sessions: ProgramImportSession[];
+  total: number;
+  page: number;
+  pageSize: number;
+  // Anahtarlar sirasiyla ProgramImportRowStatus/RoleMatchStatus degerleridir;
+  // yalnizca importun TUMU uzerinden (sayfalamadan BAGIMSIZ) hesaplanir.
+  summary: {
+    sessionsByStatus: Record<string, number>;
+    rolesByMatchStatus: Record<string, number>;
+    presentationCount: number;
+  };
+};
+
+export type ProgramImportApproveSummary = {
+  createdSessions: number;
+  createdPresentations: number;
+  createdRoles: number;
+  // Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi (Presentation.title
+  // semada NOT NULL, bkz. backend yorumu).
+  skippedPresentations: number;
 };
 
 export type HallDurationStats = {
@@ -850,6 +987,143 @@ export const api = {
   // sonucu doner - iki durumda da otomatik atama YOK, yetkili elle secer.
   getProgramRoleCandidates: (id: string) =>
     request<ProgramRoleCandidate[]>(`/admin/program-roles/${id}/candidates`),
+
+  // ===== Program dosyası içe aktarma / staging (Faz 4b) =====
+  // Dosya-yukleyen iki fonksiyon FormData kullanir - `request()` Content-Type
+  // header'ini FormData govdesinde ELLE eklemez (bkz. yukarisi,
+  // `uploadRegistrationImport` ile ayni desen).
+  estimateProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<ProgramImportEstimate>('/admin/program-imports/estimate', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  createProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<{ importId: string; status: ProgramImportStatus }>('/admin/program-imports', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  listProgramImports: (congressId: string) =>
+    request<{ imports: ProgramImport[]; totalSpendUsd: number }>(
+      `/admin/program-imports${buildQuery({ congressId })}`,
+    ),
+
+  getProgramImport: (id: string, params: { page?: number; pageSize?: number } = {}) =>
+    request<ProgramImportDetail>(`/admin/program-imports/${id}${buildQuery(params)}`),
+
+  updateProgramImportSession: (
+    importId: string,
+    sessionId: string,
+    data: Partial<{
+      title: string;
+      hallId: string;
+      startTime: string;
+      endTime: string;
+      sessionType: string;
+      dayLabel: string;
+      keywords: string;
+    }>,
+  ) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // Kalici SILME DEGIL - satiri EXCLUDED yapar, geri alma uc noktasi yok.
+  excludeProgramImportSession: (importId: string, sessionId: string) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+
+  createProgramImportSession: (
+    importId: string,
+    data: {
+      title: string;
+      hallId?: string;
+      startTime?: string;
+      endTime?: string;
+      sessionType?: string;
+      dayLabel?: string;
+      keywords?: string;
+    },
+  ) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProgramImportPresentation: (
+    importId: string,
+    presentationId: string,
+    data: Partial<{ title: string; startTime: string; endTime: string }>,
+  ) =>
+    request<ProgramImportPresentation>(
+      `/admin/program-imports/${importId}/presentations/${presentationId}`,
+      { method: 'PATCH', body: JSON.stringify(data) },
+    ),
+
+  // KALICI silme - rolleri de cascade siler, geri alinamaz.
+  deleteProgramImportPresentation: (importId: string, presentationId: string) =>
+    request<{ deleted: true }>(
+      `/admin/program-imports/${importId}/presentations/${presentationId}`,
+      { method: 'DELETE' },
+    ),
+
+  createProgramImportPresentation: (
+    importId: string,
+    data: { importSessionId: string; title: string; startTime?: string; endTime?: string },
+  ) =>
+    request<ProgramImportPresentation>(`/admin/program-imports/${importId}/presentations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // rawName duzeltilince searchName + previewMatchStatus/previewUserId
+  // backend'de OTOMATIK yeniden hesaplanir (tur DEGISTIRILEMEZ).
+  updateProgramImportRole: (importId: string, roleId: string, data: { rawName: string }) =>
+    request<ProgramImportRole>(`/admin/program-imports/${importId}/roles/${roleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // KALICI silme, geri alinamaz.
+  deleteProgramImportRole: (importId: string, roleId: string) =>
+    request<{ deleted: true }>(`/admin/program-imports/${importId}/roles/${roleId}`, {
+      method: 'DELETE',
+    }),
+
+  // importSessionId/importPresentationId'nin TAM OLARAK biri dolu olmali,
+  // ikisi de dolu/bos gelirse backend 400 doner.
+  createProgramImportRole: (
+    importId: string,
+    data: {
+      importSessionId?: string;
+      importPresentationId?: string;
+      type: ProgramRoleType;
+      rawName: string;
+    },
+  ) =>
+    request<ProgramImportRole>(`/admin/program-imports/${importId}/roles`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  approveProgramImport: (importId: string) =>
+    request<ProgramImportApproveSummary>(`/admin/program-imports/${importId}/approve`, {
+      method: 'POST',
+    }),
+
+  cancelProgramImport: (importId: string) =>
+    request<ProgramImport>(`/admin/program-imports/${importId}/cancel`, { method: 'POST' }),
 
   // ===== Katılımcı yönetimi (Faz 2) =====
   listRegistrations: (params: {

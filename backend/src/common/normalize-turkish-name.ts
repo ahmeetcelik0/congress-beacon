@@ -53,7 +53,9 @@ const TURKISH_CHAR_MAP: Record<string, string> = {
 
 const TURKISH_CHAR_PATTERN = /[İIıŞşĞğÜüÖöÇç]/g;
 
-function foldToAsciiLower(text: string): string {
+// Faz 4b (salon adi eslestirmesi) de bu fonksiyonu yeniden kullanir - ayni
+// platform/locale-bagimsiz kucultme garantisi orada da gerekli.
+export function foldToAsciiLower(text: string): string {
   const mapped = text.replace(
     TURKISH_CHAR_PATTERN,
     (char) => TURKISH_CHAR_MAP[char] ?? char,

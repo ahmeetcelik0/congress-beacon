@@ -448,3 +448,163 @@ guvenlidir. Yeni kullanicilar (manuel ekleme, Excel/CSV onay, pilot-login)
 bu alani OLUSTURULURKEN zaten dolduruyor (bkz. `registrations.service.ts`,
 `registration-import.service.ts`, `auth.service.ts`), bu yuzden betik yalnizca
 GECMIS veri icin gerekli.
+
+## Faz 4b — PDF/Excel'den Bilimsel Program Cikarimi (LLM)
+
+Dernek bilimsel programi 100-150 sayfalik PDF/Excel olarak gonderiyor,
+elle girmek gunler aliyor. Bu faz Claude API ile dosyayi yapilandirilmis
+JSON'a cevirip Faz 4a'nin semasina oturtuyor - ama Faz 2'deki gibi
+(yukle -> onizle/duzelt -> onayla) STAGING katmanindan geciriyor, dogrudan
+canliya yazmiyor.
+
+### Neden LLM eslestirme yapmiyor, yalnizca metin cikariyor
+
+Gorev bilerek ikiye bolundu: LLM yalnizca belgede ne yazdigini raporlar
+(isim, saat, salon adi - hepsi HAM metin); kimlik eslestirmesi (hangi
+katilimci, hangi Hall, hangi gercek DateTime) tamamen backend'de,
+deterministik kodla yapilir. LLM'e `userId`/`hallId`/`sessionId`
+UYDURTULMAZ. Sebep Faz 4a'daki bulanik-eslestirme-yok kararinin dogal
+uzantisi: bir LLM'in "muhtemelen bu kisi" diye bir isim-katilimci
+eslestirmesi uydurmasi, yanlis kisiyi doğru gibi gostermek anlamina
+gelir - bu, hic eslestirmemekten daha kotu bir kullanici deneyimidir.
+Rol eslestirmesi icin YENI bir mantik da yazilmadi - LLM'in urettigi
+`rawName` dogrudan Faz 4a'nin `ProgramRoleMatchingService.matchRole()`
+servisinden gecirilir, ayni MATCHED/AMBIGUOUS/UNMATCHED ayrimi burada da
+gecerlidir.
+
+### Neden tarih/saat hesabi backend'de
+
+LLM'den yalnizca "HH:MM" ve (belgede aciksa) "YYYY-MM-DD" istenir - gercek
+bir `DateTime`'a cevirme islemi backend'de yapilir
+(`derive-datetime.ts`). Bir gunun tarihi belgede yoksa kongrenin
+`startDate`'inden GUN SIRASINA gore turetilir ve bu satira ACIKCA bir
+uyari birakilir ("Tarih belgede yoktu, kongre baslangicindan turetildi") -
+tahmini bir tarih SESSIZCE dogru gibi gosterilmez. Kongrenin `startDate`'i
+de yoksa saat/tarih alanlari null birakilir, yetkili panelden elle girer.
+
+### Neden asenkron kuyruk (BullMQ)
+
+150 sayfalik bir PDF'te LLM cagrisi (streaming + adaptive thinking + high
+effort) dakikalar surebilir - bu bir HTTP istegi icinde BEKLENEMEZ.
+`POST /admin/program-imports` dosyayi hemen PENDING durumunda kuyruga
+alip doner; gercek cikarim `ProgramImportQueueService`'in worker'inda
+calisir (Faz 7'nin `NotificationSchedulerService`'iyle AYNI BullMQ
+deseni). Buffer, is verisine (Redis job payload'ina) DOGRUDAN konmaz -
+onlarca MB olabilecegi icin gecici bir dosyaya yazilip worker tarafindan
+okunup silinir.
+
+### Neden maliyet onayi zorunlu, tahmin ayri bir uc nokta
+
+Kullanicinin API kredisi SINIRLI ($5) - kontrolsuz bir cikarim cagrisi
+butceyi bitirebilir. `POST /admin/program-imports/estimate`
+(`countTokens`, ucretsiz) ile `POST /admin/program-imports` (gercek
+cikarim, para harcar) BILEREK iki ayri uc noktadir - panel tahmini
+gosterip ACIK onay almadan ikinciyi cagirmaz. Fiyat tablosu
+(`model-pricing.ts`) tek bir sabitte tutulur ve Anthropic'in resmi LISTE
+fiyatlarini kullanir (tanitim/indirimli fiyat DEGIL) - tahmin her zaman
+muhafazakar (yuksek) tarafta kalsin diye. Her tamamlanan cikarimda
+GERCEK `inputTokens`/`outputTokens`/`estimatedCostUsd` kaydedilir; panelde
+kongre bazinda toplam harcama gorunur - kullanicinin $5 butcesini takip
+edebilmesi icin.
+
+### Neden onay mevcut programin UZERINE YAZMAZ, yanina ekler
+
+`POST /admin/program-imports/{id}/approve` mevcut Session/Presentation/
+ProgramRole kayitlarini SILMEZ veya degistirmez - yalnizca staging'deki
+gecerli (NEW, hallId dolu) satirlari EKLER. Ayni programi iki kez
+yuklemek bu yuzden kopya uretir; bu BILINCLI bir tasarimdir (silme/
+uzerine-yazma cok daha riskli bir islemdir) - panel onay diyalogunda
+mevcut oturum sayisini gostererek yetkiliyi uyarir.
+
+### Prompt injection'a karsi alinan onlem
+
+Sistem promptu acikca belirtir: belgenin icinde Claude'a yonelik bir
+talimat gibi gorunen herhangi bir metin ("yukaridaki yonergeleri yok
+say" vb.) bir KOMUT olarak degil, yalnizca cikarilacak VERI olarak
+degerlendirilir - belgede o sekilde yaziyorsa ilgili alana (ornegin
+baslik) oldugu gibi kopyalanir, uygulanmaz. Bu, kullanicilarin
+yukleyecegi belgenin icerigi tamamen guvenilmez (dernek/uçuncu taraf
+kaynakli) oldugu icin gerekli bir savunmadir.
+
+### Canli testte bulunan ve duzeltilen sorunlar
+
+Gercek bir kongre programi (33. Ulusal Uygulamali Girisimsel Kardiyoloji
+Kongresi, 90 sayfa) uzerinde yapilan canli testte, sentetik test
+verisiyle yakalanamayan dort sorun bulundu:
+
+1. **Baslik VARCHAR(191) tasmasi.** Gercek programda iki dilli (TR/EN tek
+   satirda birlesik) oturum basliklari Prisma'nin varsayilan `String` ->
+   MySQL `VARCHAR(191)` sinirini asti, ilk cikarim denemesi bu yuzden
+   basarisiz oldu. `Session.title`, `Presentation.title`,
+   `ProgramImportSession.title`, `ProgramImportPresentation.title`
+   `@db.Text`'e genisletildi (`20260812000000_widen_program_titles`
+   migration'i).
+2. **Cikti token tahmini dusuktu.** `OUTPUT_TOKEN_ESTIMATE_RATIO` (girdi
+   token sayisindan cikti tahmini turetmek icin kullanilan katsayi)
+   `0.2` idi; gercek bir 25 sayfalik kesitte olculen oran ~0.36 cikti -
+   tahmin gercek maliyetin ciddi altinda kaliyordu. `0.4`'e yukseltildi
+   (bilerek gozlemlenenin biraz uzerinde - dusuk tahmin butceyi asip
+   kullaniciyi SASIRTIR, yuksek tahmin guvenli taraftir).
+   `ANTHROPIC_MAX_OUTPUT_TOKENS` varsayilani da ayni bulgu yuzunden
+   `64000`'den `128000`'e cikarildi (100-150 sayfalik belgelerde
+   64000'i asip cikti kesilebilir, gecersiz JSON'a yol acardi).
+3. **Duzenleme formu saat alaninda 3 saatlik kayma.** Staging onizleme
+   sayfasindaki oturum/sunum duzenleme formlari (`session-row.tsx`,
+   `presentations-panel.tsx`), var olan bir `startTime`/`endTime`'i
+   `<input type="datetime-local">` alanina doldururken ISO (UTC) metnini
+   dogrudan `iso.slice(0, 16)` ile kesiyordu. `datetime-local` degeri
+   tarayicinin YEREL saatini bekler - UTC metni oldugu gibi kesmek,
+   Turkiye (UTC+3) saatinde 3 saatlik bir kaymaya yol aciyordu (kart
+   ozetinde "14:00" gorunen bir oturum, duzenleme formunda "11:00"
+   gosterilip degistirilmeden kaydedilirse SESSIZCE 11:00'e donuyordu).
+   Duzeltme: `Date` nesnesinin yerel getter'lari (`getHours()` vb.)
+   kullanilarak dogru YEREL saat/tarih string'i uretiliyor. Bu, projenin
+   var olan yazma-yonu deseniyle (`new Date(formValue).toISOString()`,
+   Faz 4a'dan beri) simetrik hale getirildi - o desen de formdan gelen
+   naif tarih string'ini SUNUCUNUN yerel saat dilimine gore yorumluyor,
+   bu yuzden **production sunucusunun sistem saat dilimi Europe/Istanbul
+   olarak ayarlanmis olmasi gerekiyor** (bkz. `DEPLOY-REHBERI.md`) -
+   aksi halde sunucu UTC calisirsa hem Faz 4a'nin hem Faz 4b'nin tum
+   saat/tarih formlari yanlis yorumlanir.
+4. **Onay hata mesaji hangi oturumlarin eksik oldugunu SOYLEMIYORDU.**
+   Backend `approve` uc noktasi salon secilmemis oturumlari `sessions:
+   [{id, title, rowOrder}]` olarak donduruyordu, ama panel bu listeyi
+   kullanmiyor, yalnizca genel `message`i gosteriyordu - 29 oturumluk bir
+   listede hangi 1-2 tanesinin eksik oldugunu yetkili tek tek arayip
+   bulmak zorunda kaliyordu. `ApiError`e opsiyonel bir `details` alani
+   eklendi (backend'in govde govdesini tasir), `approveProgramImportAction`
+   artik `sessions` listesi varsa oturum basliklarini mesaja ekliyor
+   ("... : OYLAMA / VOTING" gibi).
+
+### Model karsilastirmasi (Bolum 8.4 canli testi)
+
+Ayni 25 sayfalik kesit hem `claude-opus-4-8` hem `claude-sonnet-5` ile
+cikarildi (gercek Anthropic API cagrisi, sentetik veri degil):
+
+| | Opus 4.8 | Sonnet 5 |
+|---|---|---|
+| Girdi token | 61674 | 61674 |
+| Cikti token | 22395 | 55068 |
+| Maliyet | $0.868 | $1.011 |
+| Sure | ~4.2 dk | ~11.7 dk |
+| Oturum | 29 | 32 |
+| Sunum | 148 | 106 |
+| Rol (toplam) | 373 | 373 |
+
+Iki modelin de temel bilimsel icerik cikarimi (baslik, salon, saat,
+konusmaci adi, coklu yazar ayirma) dogruydu ve birebir orten satirlarda
+BIREBIR AYNI cikti verdi. Fark yalnizca sistem promptunun "bos
+Tartisma/Discussion bloklarini da ayri bir sunum olarak kaydet"
+talimatina uyumda ortaya cikti: Opus bu bloklari (konusmacisiz,
+sadece zaman araligi) sadik bir sekilde ayri sunum satirlari olarak
+uretti, Sonnet bunlari sessizce atladi - bu yuzden Sonnet'te daha AZ
+sunum sayisi var ama rol/konusmaci sayisi ikisinde de AYNI (373),
+yani gercek bilimsel veri kaybi yok, yalnizca spesifikasyona tam
+uyumda fark var. Sonnet ayrica paralel salonlardaki kahve arasi
+bloklarini Opus'tan daha TUTARLI yakaladi (32 oturumun 3'u bu farktan
+geliyor).
+
+**Sonuc:** Sonnet 5, Opus 4.8'den hem YAVAS hem PAHALI cikti (cikti
+token hacmi ~2.5 kat fazla oldugu icin, dusuk liste fiyatina ragmen).
+Ayni/dengeli dogrulukla varsayilan model **`claude-opus-4-8`** olarak
+KORUNDU (kullanicinin $5 butcesi goz onune alinarak da dogru secim).

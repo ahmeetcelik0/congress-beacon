@@ -997,6 +997,559 @@ paths:
         '404':
           description: Rol bulunamadi.
 
+  /admin/program-imports/estimate:
+    post:
+      summary: PDF/Excel program dosyasi icin token/maliyet tahmini (para harcamaz)
+      description: >-
+        Yalnizca girdi token sayisini olcer (Anthropic'in countTokens'i
+        ucretsizdir) ve tahmini cikti/maliyeti hesaplar - hicbir LLM cikarimi
+        YAPMAZ. Panel bu tahmini gosterip acik onay almadan cikarimi
+        baslatmaz.
+      operationId: estimateProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Tahmin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportEstimate'
+        '400':
+          description: Desteklenmeyen format (.pdf/.xlsx/.xls disi).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+        '503':
+          description: ANTHROPIC_API_KEY yapilandirilmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/program-imports:
+    post:
+      summary: PDF/Excel program dosyasi yukle, cikarimi kuyruga al
+      description: >-
+        En fazla 32 MB. Dosya asenkron olarak islenir (BullMQ) - bu uc nokta
+        aninda PENDING doner, LLM cagrisini BEKLEMEZ. Ilerleme
+        GET /admin/program-imports/{id} ile sorgulanir.
+      operationId: createProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Kuyruga alindi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [importId, status]
+                properties:
+                  importId:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: '#/components/schemas/ProgramImportStatus'
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+        '503':
+          description: ANTHROPIC_API_KEY yapilandirilmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: Bir kongrenin program yuklemeleri (gecmis + durum)
+      operationId: listProgramImports
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Yukleme listesi + kongre bazinda toplam LLM harcamasi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imports, totalSpendUsd]
+                properties:
+                  imports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgramImport'
+                  totalSpendUsd:
+                    type: number
+
+  /admin/program-imports/{id}:
+    get:
+      summary: Bir yuklemenin staging agacini getir (oturum->sunum->rol, sayfali)
+      operationId: getProgramImportDetail
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Staging agaci + ozet sayimlar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportDetail'
+        '404':
+          description: Yukleme bulunamadi.
+
+  /admin/program-imports/{id}/sessions/{sessionId}:
+    patch:
+      summary: Staging oturum satirini duzelt (salon/saat/baslik/tur)
+      description: Duzeltme sonrasi status/warning MEVCUT alan degerlerinden yeniden hesaplanir.
+      operationId: updateProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportSessionUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil, duzenlenemez.
+    delete:
+      summary: Staging oturum satirini disarida birak (EXCLUDED, kalici silme degil)
+      operationId: excludeProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: EXCLUDED olarak isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/sessions:
+    post:
+      summary: Staging'e elle oturum ekle (LLM bir oturumu atladiysa)
+      operationId: createProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportSessionCreate'
+      responses:
+        '201':
+          description: Olusturuldu (status=NEW).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/presentations/{presentationId}:
+    patch:
+      summary: Staging sunum satirini duzelt
+      operationId: updateProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: presentationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportPresentationUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportPresentation'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+    delete:
+      summary: Staging sunum satirini kalici olarak sil (rolleri de cascade silinir)
+      operationId: deleteProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: presentationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Silindi.
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/presentations:
+    post:
+      summary: Bir staging oturumuna elle sunum ekle
+      operationId: createProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportPresentationCreate'
+      responses:
+        '201':
+          description: Olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportPresentation'
+        '404':
+          description: importSessionId ile eslesen bir satir yok.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/roles/{roleId}:
+    patch:
+      summary: Staging rol satirinin rawName'ini duzelt, yeniden eslestir
+      description: rawName degisince searchName + previewMatchStatus/previewUserId Faz 4a'nin matchRole() servisiyle YENIDEN hesaplanir.
+      operationId: updateProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportRoleUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportRole'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+    delete:
+      summary: Staging rol satirini kalici olarak sil
+      operationId: deleteProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Silindi.
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/roles:
+    post:
+      summary: Bir staging oturumuna/sunuma elle rol ekle
+      description: importSessionId/importPresentationId'nin TAM OLARAK biri dolu olmalidir.
+      operationId: createProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportRoleCreate'
+      responses:
+        '201':
+          description: Olusturuldu (eslestirme calisir).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportRole'
+        '400':
+          description: sessionId/presentationId'nin ikisi de dolu veya ikisi de bos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/approve:
+    post:
+      summary: Staging'i tek transaction'da canli programa isle
+      description: >-
+        INVALID/EXCLUDED satirlar atlanir. Basliksiz sunumlar atlanir
+        (Presentation.title NOT NULL). Mevcut programin UZERINE YAZMAZ,
+        yanina ekler. hallId eksik NEW bir oturum varsa 400 ile hangi
+        oturumlarin eksik oldugu listelenir, transaction hic BASLAMAZ.
+      operationId: approveProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Canliya islendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportApproveSummary'
+        '400':
+          description: Salon secilmemis oturumlar var.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                          nullable: true
+                        rowOrder:
+                          type: integer
+        '404':
+          description: Yukleme bulunamadi.
+        '409':
+          description: Yukleme zaten sonuclandirilmis (ikinci onay).
+
+  /admin/program-imports/{id}/cancel:
+    post:
+      summary: Yuklemeyi iptal et
+      operationId: cancelProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CANCELLED olarak isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImport'
+        '404':
+          description: Yukleme bulunamadi.
+        '409':
+          description: Yukleme zaten sonuclandirilmis.
+
   /devices/push-token:
     put:
       summary: Cihazin push token'ini guncelle
@@ -5521,3 +6074,427 @@ components:
         phoneRaw:
           type: string
           nullable: true
+
+    ProgramSourceType:
+      type: string
+      enum: [PDF, EXCEL]
+
+    ProgramImportStatus:
+      type: string
+      enum: [PENDING, EXTRACTING, DRAFT, APPROVED, CANCELLED, FAILED]
+
+    ProgramImportEstimate:
+      type: object
+      required:
+        - model
+        - inputTokens
+        - estimatedOutputTokens
+        - estimatedCostUsd
+        - pageCount
+      properties:
+        model:
+          type: string
+        inputTokens:
+          type: integer
+        estimatedOutputTokens:
+          type: integer
+          description: Girdi token sayisina dayali KABA bir tahmin - kesin bir taahhut degildir.
+        estimatedCostUsd:
+          type: number
+          nullable: true
+        pageCount:
+          type: integer
+          nullable: true
+          description: PDF icin en iyi-caba (best-effort) sayfa sayimi. Excel icin daima null.
+
+    ProgramImport:
+      type: object
+      required:
+        - id
+        - congressId
+        - adminUserId
+        - fileName
+        - sourceType
+        - status
+        - model
+        - inputTokens
+        - outputTokens
+        - estimatedCostUsd
+        - pageCount
+        - errorMessage
+        - approvedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        adminUserId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        sourceType:
+          $ref: '#/components/schemas/ProgramSourceType'
+        status:
+          $ref: '#/components/schemas/ProgramImportStatus'
+        model:
+          type: string
+          nullable: true
+        inputTokens:
+          type: integer
+          nullable: true
+        outputTokens:
+          type: integer
+          nullable: true
+        estimatedCostUsd:
+          type: number
+          nullable: true
+        pageCount:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        adminUser:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+
+    ProgramImportRole:
+      type: object
+      required:
+        - id
+        - importSessionId
+        - importPresentationId
+        - type
+        - rawName
+        - searchName
+        - previewMatchStatus
+        - previewUserId
+      properties:
+        id:
+          type: string
+          format: uuid
+        importSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        importPresentationId:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+        searchName:
+          type: string
+        previewMatchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+        previewUserId:
+          type: string
+          format: uuid
+          nullable: true
+
+    ProgramImportRoleCreate:
+      type: object
+      required:
+        - type
+        - rawName
+      properties:
+        importSessionId:
+          type: string
+          format: uuid
+        importPresentationId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+
+    ProgramImportRoleUpdate:
+      type: object
+      required:
+        - rawName
+      properties:
+        rawName:
+          type: string
+
+    ProgramImportPresentation:
+      type: object
+      required:
+        - id
+        - importSessionId
+        - rowOrder
+        - title
+        - rawStartTime
+        - rawEndTime
+        - startTime
+        - endTime
+        - abstract
+        - warning
+      properties:
+        id:
+          type: string
+          format: uuid
+        importSessionId:
+          type: string
+          format: uuid
+        rowOrder:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        rawStartTime:
+          type: string
+          nullable: true
+        rawEndTime:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        warning:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportRole'
+
+    ProgramImportPresentationCreate:
+      type: object
+      required:
+        - importSessionId
+        - title
+      properties:
+        importSessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    ProgramImportPresentationUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    ProgramImportSession:
+      type: object
+      required:
+        - id
+        - importId
+        - rowOrder
+        - title
+        - rawHallName
+        - hallId
+        - dayLabel
+        - rawDate
+        - rawStartTime
+        - rawEndTime
+        - startTime
+        - endTime
+        - sessionType
+        - keywords
+        - status
+        - message
+        - warning
+      properties:
+        id:
+          type: string
+          format: uuid
+        importId:
+          type: string
+          format: uuid
+        rowOrder:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        rawHallName:
+          type: string
+          nullable: true
+        hallId:
+          type: string
+          format: uuid
+          nullable: true
+        dayLabel:
+          type: string
+          nullable: true
+        rawDate:
+          type: string
+          nullable: true
+        rawStartTime:
+          type: string
+          nullable: true
+        rawEndTime:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        sessionType:
+          type: string
+          nullable: true
+        keywords:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ImportRowStatus'
+        message:
+          type: string
+          nullable: true
+        warning:
+          type: string
+          nullable: true
+        presentations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportPresentation'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportRole'
+
+    ProgramImportSessionCreate:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+
+    ProgramImportSessionUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+
+    ProgramImportDetail:
+      type: object
+      required:
+        - import
+        - sessions
+        - total
+        - page
+        - pageSize
+        - summary
+      properties:
+        import:
+          $ref: '#/components/schemas/ProgramImport'
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportSession'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        summary:
+          type: object
+          required: [sessionsByStatus, rolesByMatchStatus, presentationCount]
+          properties:
+            sessionsByStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            rolesByMatchStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            presentationCount:
+              type: integer
+
+    ProgramImportApproveSummary:
+      type: object
+      required:
+        - createdSessions
+        - createdPresentations
+        - createdRoles
+        - skippedPresentations
+      properties:
+        createdSessions:
+          type: integer
+        createdPresentations:
+          type: integer
+        createdRoles:
+          type: integer
+        skippedPresentations:
+          type: integer
+          description: Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi.
