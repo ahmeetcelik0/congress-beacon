@@ -65,6 +65,54 @@ kadar TestFlight'taki mevcut sürüm için geçiş köprüsü olarak duruyor, h�
 
 ---
 
+## 0.6) Mobil okuma API'leri (Faz 5 — henüz mobilde bağlanmadı, Faz 6'nın konusu)
+
+Ana sayfa, bilimsel program ve profil ekranlarının ihtiyaç duyduğu **tüm**
+okuma uçları backend'de hazır ve test edildi. Tam sözleşme için
+`shared/openapi.yaml`'daki `Mobile` tag'i (`operationId`ler `getMobile...`
+ile başlar) — burası yalnızca **hangi ucun hangi ekranı besleyeceğinin**
+özeti.
+
+**Ortak kurallar:**
+- Hepsi katılımcı JWT'si + seçili aktif kongre gerektirir
+  (`Authorization: Bearer <accessToken>`, token'da `activeCongressId` dolu
+  olmalı — bkz. §0.5). `congressId` **hiçbirinde** query/body parametresi
+  olarak gönderilmez, backend token'dan okur.
+- Her yanıtta bir `generatedAt` (ISO 8601, UTC) alanı var — önbelleğin ne
+  kadar eski olduğunu göstermek için kullanılabilir.
+- Tüm tarihler **UTC ISO 8601** (`...Z` sonekli) — cihazın kendi saat
+  dilimine göre yerelleştirme mobil tarafın işi.
+- `GET /mobile/program`, `ETag`/`If-None-Match` destekler: yanıtın `ETag`
+  header'ını sakla, bir sonraki çağrıda `If-None-Match` header'ı olarak
+  geri gönder — program değişmediyse gövdesiz `304` döner (indirme/parse
+  atlanabilir).
+- `GET /mobile/bootstrap` (beacon config) bu listede **yok** — o zaten
+  bağlı, değişmedi, hâlâ auth gerektirmiyor.
+
+### Mobil ekran → uç nokta eşlemesi
+
+| Ekran / bileşen | Uç nokta | Not |
+|---|---|---|
+| Ana Sayfa — kongre kartı (tam ad, tarih aralığı, mekan, kapak görseli) | `GET /mobile/home` → `congress` | `coverImageUrl` zaten mutlak URL |
+| Ana Sayfa — 6 içerik butonunun rozetleri (kaç duyuru/sponsor/konuşmacı/mekan/genel-bilgi-bölümü/oturum) | `GET /mobile/home` → `counts` | Tek istekte hepsi |
+| Ana Sayfa — "okunmamış duyuru" rozeti | `GET /mobile/home` → `announcements.hasPinned` / `latestPublishedAt` | "Okunmamış" durumu sunucuda tutulmuyor — mobil bunu kendi yerel "son görüleni" ile kıyaslar (bkz. `docs/decisions.md` Faz 5) |
+| Ana Sayfa — "Sıradaki Sunumum" kartı | `GET /mobile/home` → `myNextSession` (null olabilir) | `isOngoing:true` ise "Şu an devam ediyor" gibi bir etiket gösterilebilir |
+| Bilimsel Program — gün sekmeleri | `GET /mobile/program/days` | Kronolojik sırada, alfabetik değil |
+| Bilimsel Program — oturum listesi (gün/salon filtresi) | `GET /mobile/program?day=&hallId=` | Filtresiz çağrı TÜM programı döner — ilk açılışta bunu çekip yerelde önbellekle, sonraki açılışlarda ETag ile doğrula |
+| Bilimsel Program — arama (konuşmacı/saat/salon/başlık) | `GET /mobile/program?search=` | Sunum başlığı + salon adı + konuşmacı adında (`rawName`) arar |
+| Bilimsel Program — oturum detay ekranı | `GET /mobile/program/sessions/{id}` | Başka kongrenin ID'si denenirse 404 |
+| Profilim — kişisel bilgiler, kongre listesi | `GET /auth/me` (Faz 1, YENİ değil) | Ayrı bir mobil uç YOK, mevcut olan kullanılır |
+| Profilim — "Benim Programım" (kendi konuşma/moderatörlük listem) | `GET /mobile/my-program` | Kronolojik, `roleType` alanıyla (MODERATOR/SPEAKER/DISCUSSANT) etiketlenebilir |
+| Duyurular ekranı | `GET /mobile/announcements` | Yalnızca yayınlanmış, sabitlenmiş önce |
+| Sponsorlar ekranı | `GET /mobile/sponsors` | Prestij sırası (PLATINUM→SUPPORTER) sonra elle sıra |
+| Ana Konuşmacılar ekranı | `GET /mobile/speakers` | `photoUrl` mutlak URL |
+| Otel/Mekan ekranı | `GET /mobile/venues` | Ana mekan (`type=MAIN`) listenin başında |
+| Genel Bilgi ekranı | `GET /mobile/info-sections` | `body` Markdown, mobilde render edilmeli |
+
+**Kapsam dışı (bu fazda yapılmadı, ileriye dönük not):** favori/takvime
+ekleme, bildirim tercihleri, katılımcının salon/beacon geçmişi (hiçbir
+mobil uçta bu bilgi yok ve olmayacak — bkz. `docs/decisions.md`).
+
 ## 1) Push token gönderimi (Faz 7)
 
 Backend'de yeni endpoint hazır:

@@ -10,7 +10,11 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PrismaService } from '../../prisma/prisma.service';
-import { ProgramExtractionService } from './program-extraction.service';
+import {
+  ExtractionUsage,
+  ExtractionUsageError,
+  ProgramExtractionService,
+} from './program-extraction.service';
 import { ProgramRoleMatchingService } from '../program-role-matching.service';
 import { writeExtractionToStaging } from './write-extraction-to-staging';
 import { countPdfPagesBestEffort } from './prepare-extraction-input';
@@ -91,6 +95,11 @@ export class ProgramImportQueueService
 
   private async processJob(data: ExtractionJobData): Promise<void> {
     const { importId, tempFilePath, sourceType } = data;
+    // try disinda tanimlanir ki catch bloğu da erisebilsin - LLM cagrisi
+    // basariyla bir yanit alip (yani zaten faturalanip) SONRA bir adim
+    // (staging yazimi gibi) basarisiz olursa, gercek token bilgisi kaybolmasin
+    // (bkz. docs/decisions.md, Faz 5 - "FAILED kaydinin maliyeti yansitmasi").
+    let usage: ExtractionUsage | undefined;
 
     try {
       await this.prisma.programImport.update({
@@ -105,6 +114,11 @@ export class ProgramImportQueueService
           : null;
 
       const outcome = await this.extraction.extract(sourceType, buffer);
+      usage = {
+        model: outcome.model,
+        inputTokens: outcome.inputTokens,
+        outputTokens: outcome.outputTokens,
+      };
 
       const importRecord = await this.prisma.programImport.findUniqueOrThrow({
         where: { id: importId },
@@ -146,6 +160,14 @@ export class ProgramImportQueueService
         },
       });
     } catch (error) {
+      // ExtractionUsageError, mesaj alindiktan (yani faturalandiktan) SONRA
+      // olusan hatalarda (red/beklenen blok yok/gecersiz JSON) usage'i tasir -
+      // yukarida `outcome`dan zaten set edilmis olabilir ama bu durumda
+      // `outcome` hic olusmadigindan yalnizca hata nesnesi uzerinden erisilir.
+      if (error instanceof ExtractionUsageError) {
+        usage = error.usage;
+      }
+
       const message =
         error instanceof Error ? error.message : 'Bilinmeyen hata';
       this.logger.error(`Import ${importId} cikarimi basarisiz: ${message}`);
@@ -160,7 +182,24 @@ export class ProgramImportQueueService
       await this.prisma.programImport
         .update({
           where: { id: importId },
-          data: { status: ProgramImportStatus.FAILED, errorMessage: message },
+          data: {
+            status: ProgramImportStatus.FAILED,
+            errorMessage: message,
+            // Cagri hic baslamadiysa (ör. API anahtari yok, gecersiz PDF
+            // Anthropic'e ULASMADAN reddedildi) usage tanimsiz kalir, alanlar
+            // null'da kalir - panelin "toplam harcama"si yalnizca GERCEKTEN
+            // faturalanan cagrilari saysin (bkz. docs/decisions.md, Faz 5).
+            ...(usage && {
+              model: usage.model,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              estimatedCostUsd: estimateCostUsd(
+                usage.model,
+                usage.inputTokens,
+                usage.outputTokens,
+              ),
+            }),
+          },
         })
         .catch(() => {});
     } finally {

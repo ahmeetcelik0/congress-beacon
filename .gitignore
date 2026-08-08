@@ -41,3 +41,8 @@ coverage/
 # Yuklenen gorseller (Faz 3) - kalici depolama production'da bir Docker
 # volume ile saglanir (bkz. docker-compose.prod.yml), repo'ya girmez.
 backend/uploads/
+
+# Gercek kongre program dosyasi (Faz 4b canli testi) - gercek katilimci/
+# konusmaci isimleri gibi kisisel veri iceriyor, yanlislikla commit
+# edilmemeli.
+/docs/program.pdf

@@ -33,6 +33,27 @@ export type ExtractionOutcome = {
   result: ExtractionResult;
 };
 
+export type ExtractionUsage = {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+// Model'den yanit (message) alindiktan SONRA olusan hatalarda (red,
+// beklenen blok yok, gecersiz JSON) LLM cagrisi zaten faturalanmis olur -
+// bu bilgi normal bir Error ile fircalanip kaybolmasin diye ayri bir hata
+// sinifinda tasinir. Cagiran taraf (ProgramImportQueueService) bunu
+// yakalayip FAILED kaydina gercek token/maliyet bilgisini yazabilir
+// (bkz. docs/decisions.md, Faz 5).
+export class ExtractionUsageError extends Error {
+  constructor(
+    message: string,
+    public readonly usage: ExtractionUsage,
+  ) {
+    super(message);
+  }
+}
+
 const NO_API_KEY_MESSAGE =
   'Program çıkarımı için API anahtarı yapılandırılmamış';
 
@@ -119,10 +140,19 @@ export class ProgramExtractionService {
     });
 
     const message = await stream.finalMessage();
+    // Bu noktadan itibaren cagri zaten faturalanmis - asagidaki her hata
+    // ExtractionUsageError ile firlatilir ki cagiran taraf gercek
+    // inputTokens/outputTokens'i kaybetmesin (bkz. yukaridaki sinif yorumu).
+    const usage: ExtractionUsage = {
+      model: message.model,
+      inputTokens: message.usage.input_tokens,
+      outputTokens: message.usage.output_tokens,
+    };
 
     if (message.stop_reason === 'refusal') {
-      throw new Error(
+      throw new ExtractionUsageError(
         'Model belgeyi islemeyi reddetti (guvenlik siniflandiricisi). Belgeyi kontrol edip tekrar deneyin.',
+        usage,
       );
     }
 
@@ -130,14 +160,20 @@ export class ProgramExtractionService {
       (block): block is Anthropic.TextBlock => block.type === 'text',
     );
     if (!textBlock) {
-      throw new Error('Model beklenen yapilandirilmis ciktiyi dondurmedi.');
+      throw new ExtractionUsageError(
+        'Model beklenen yapilandirilmis ciktiyi dondurmedi.',
+        usage,
+      );
     }
 
     let parsed: ExtractionResult;
     try {
       parsed = JSON.parse(textBlock.text) as ExtractionResult;
     } catch {
-      throw new Error('Model ciktisi gecerli JSON degil.');
+      throw new ExtractionUsageError(
+        'Model ciktisi gecerli JSON degil.',
+        usage,
+      );
     }
 
     this.logger.log(

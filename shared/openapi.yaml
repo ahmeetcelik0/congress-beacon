@@ -1825,6 +1825,352 @@ paths:
         '404':
           description: Kongre bulunamadi.
 
+  /mobile/home:
+    get:
+      summary: Ana sayfa - kongre karti, icerik sayaclari, siradaki sunumum
+      description: >-
+        Mobil ana sayfanin TEK istekte ihtiyac duydugu her sey. congressId
+        istemciden ALINMAZ, token'daki activeCongressId kullanilir - katilimci
+        baska bir kongrenin verisini isteyemez (bkz. docs/decisions.md, Faz 5).
+      operationId: getMobileHome
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ana sayfa verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileHomeResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program:
+    get:
+      summary: Bilimsel program - oturum/sunum/rol agaci, filtrelenebilir
+      description: >-
+        Filtresiz cagrida kongrenin TUM programi doner (mobil cevrimdisi
+        onbellekleyebilsin diye). `search` oturum/sunum basligi, salon adi ve
+        konusmaci adinda (rawName) arar. ETag/If-None-Match destekler - program
+        kongre boyunca nadiren degistigi icin mobil, ayni ETag'i tekrar
+        gonderirse govde yeniden indirilmez, `304` doner (bkz.
+        docs/decisions.md, Faz 5).
+      operationId: getMobileProgram
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: day
+          in: query
+          required: false
+          description: Session.dayLabel ile birebir eslesir.
+          schema:
+            type: string
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Onceki cagridan alinan ETag - degismediyse 304 doner.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Program agaci.
+          headers:
+            ETag:
+              description: Bu program icerigi icin surum etiketi.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProgramResponse'
+        '304':
+          description: Program If-None-Match'teki ETag'den beri degismedi, govde yok.
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program/days:
+    get:
+      summary: Program sekmesindeki gun etiketleri, program sirasina gore
+      description: >-
+        Alfabetik DEGIL, ilk oturumun baslangic saatine gore kronolojik
+        sirayla doner ("2. Gun" "1. Gun"den once gelmez).
+      operationId: getMobileProgramDays
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Gun etiketleri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProgramDaysResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program/sessions/{id}:
+    get:
+      summary: Tek bir oturumun detayi (sunumlar, roller, salon, saat)
+      description: >-
+        Oturum, katilimcinin aktif kongresine ait DEGILSE (baska bir
+        kongrenin ID'si tahmin edilip denenirse) 404 doner - veri sizmaz.
+      operationId: getMobileProgramSessionDetail
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Oturum detayi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSessionDetailResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Oturum bulunamadi (veya baska bir kongreye ait).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/my-program:
+    get:
+      summary: Katilimcinin kendi konusmaci/moderator/tartismaci oldugu program
+      description: >-
+        `ProgramRole.userId` = giris yapan katilimci VE `matchStatus`
+        MATCHED/MANUAL olan tum oturum/sunumlar, kronolojik sirada.
+      operationId: getMobileMyProgram
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Katilimcinin kisisel programi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileMyProgramResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/announcements:
+    get:
+      summary: Yayinlanmis duyurular (sabitlenmis once, sonra en yeni)
+      description: Taslak (publishedAt=null) duyurular ASLA donmez.
+      operationId: getMobileAnnouncements
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Duyuru listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileAnnouncementsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/sponsors:
+    get:
+      summary: Sponsor listesi (prestij sirasi, sonra displayOrder)
+      operationId: getMobileSponsors
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sponsor listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSponsorsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/speakers:
+    get:
+      summary: Ana konusmaci vitrin listesi
+      operationId: getMobileSpeakers
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Konusmaci listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSpeakersResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/venues:
+    get:
+      summary: Mekan listesi (ana mekan once, sonra oteller)
+      operationId: getMobileVenues
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Mekan listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileVenuesResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/info-sections:
+    get:
+      summary: Genel bilgi bolumleri (yalnizca yayinlanmislar)
+      description: isPublished=false olan bolumler ASLA donmez.
+      operationId: getMobileInfoSections
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Genel bilgi bolumleri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileInfoSectionsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /congresses:
     post:
       summary: Yeni kongre olustur
@@ -4998,6 +5344,575 @@ components:
                       type: integer
                     minor:
                       type: integer
+
+    MobileProgramRole:
+      type: object
+      description: >-
+        ProgramRole'un mobil-guvenli izdusumu - eslesen katilimcinin
+        iletisim bilgisi (email/phone/searchName) ASLA icermez, yalnizca
+        userId doner (bkz. docs/decisions.md, Faz 5).
+      required:
+        - id
+        - type
+        - rawName
+        - userId
+        - matchStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        matchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+
+    MobilePresentation:
+      type: object
+      required:
+        - id
+        - title
+        - startTime
+        - endTime
+        - abstract
+        - roles
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProgramRole'
+
+    MobileSession:
+      type: object
+      required:
+        - id
+        - hallId
+        - title
+        - startTime
+        - endTime
+        - description
+        - sessionType
+        - dayLabel
+        - keywords
+        - hall
+        - roles
+        - presentations
+      properties:
+        id:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        sessionType:
+          type: string
+          nullable: true
+        dayLabel:
+          type: string
+          nullable: true
+        keywords:
+          type: string
+          nullable: true
+        hall:
+          type: object
+          required:
+            - id
+            - name
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProgramRole'
+        presentations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobilePresentation'
+
+    MobileProgramResponse:
+      type: object
+      required:
+        - generatedAt
+        - sessions
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSession'
+
+    MobileProgramDaysResponse:
+      type: object
+      required:
+        - generatedAt
+        - days
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        days:
+          type: array
+          items:
+            type: string
+          description: Program sirasina gore (kronolojik, alfabetik DEGIL).
+
+    MobileSessionDetailResponse:
+      type: object
+      required:
+        - generatedAt
+        - session
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        session:
+          $ref: '#/components/schemas/MobileSession'
+
+    MobileNextSession:
+      type: object
+      description: >-
+        Katilimcinin kendi programindaki SUREGELEN (varsa) veya en yakin
+        GELECEK oturum/sunum. `isOngoing:true` ise startTime<=simdi<=endTime.
+      required:
+        - sessionId
+        - presentationId
+        - title
+        - hallName
+        - startTime
+        - endTime
+        - roleType
+        - isOngoing
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Dolu ise bu bir SUNUM rolu, bos ise dogrudan bir OTURUM rolu.
+        title:
+          type: string
+        hallName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        roleType:
+          $ref: '#/components/schemas/ProgramRoleType'
+        isOngoing:
+          type: boolean
+
+    MobileMyProgramItem:
+      type: object
+      required:
+        - sessionId
+        - presentationId
+        - title
+        - hallName
+        - startTime
+        - endTime
+        - roleType
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+        hallName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        roleType:
+          $ref: '#/components/schemas/ProgramRoleType'
+
+    MobileMyProgramResponse:
+      type: object
+      required:
+        - generatedAt
+        - items
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileMyProgramItem'
+          description: Kronolojik sirada (startTime asc).
+
+    MobileHomeResponse:
+      type: object
+      required:
+        - generatedAt
+        - congress
+        - counts
+        - announcements
+        - myNextSession
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - fullName
+            - startDate
+            - endDate
+            - description
+            - coverImageUrl
+            - mainVenueName
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            fullName:
+              type: string
+              nullable: true
+              description: Mobil kartta gosterilen resmi tam ad (kisa `name` degil).
+            startDate:
+              type: string
+              format: date-time
+              nullable: true
+            endDate:
+              type: string
+              format: date-time
+              nullable: true
+            description:
+              type: string
+              nullable: true
+            coverImageUrl:
+              type: string
+              nullable: true
+              description: Mutlak URL (APP_PUBLIC_URL ile birlestirilmis, bkz. Faz 5).
+            mainVenueName:
+              type: string
+              nullable: true
+              description: VenueType=MAIN olan mekanin adi, yoksa null.
+        counts:
+          type: object
+          description: Ana sayfa butonlarindaki rozetler icin.
+          required:
+            - announcements
+            - sponsors
+            - speakers
+            - venues
+            - infoSections
+            - sessions
+          properties:
+            announcements:
+              type: integer
+              description: Yalnizca YAYINLANMIS duyurular sayilir.
+            sponsors:
+              type: integer
+            speakers:
+              type: integer
+            venues:
+              type: integer
+            infoSections:
+              type: integer
+              description: Yalnizca isPublished=true bolumler sayilir.
+            sessions:
+              type: integer
+        announcements:
+          type: object
+          description: >-
+            "Okunmamis" durumu SUNUCUDA tutulmaz (ayri bir okuma-durumu
+            tablosu bu fazin kapsaminda degil) - mobil, latestPublishedAt'i
+            kendi yerel "son goruleni" ile kiyaslayarak rozet gosterip
+            gostermeyecegine kendi karar verir (bkz. docs/decisions.md, Faz 5).
+          required:
+            - hasPinned
+            - latestPublishedAt
+          properties:
+            hasPinned:
+              type: boolean
+            latestPublishedAt:
+              type: string
+              format: date-time
+              nullable: true
+        myNextSession:
+          allOf:
+            - $ref: '#/components/schemas/MobileNextSession'
+          nullable: true
+
+    MobileAnnouncement:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - isPinned
+        - publishedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        isPinned:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          description: Bu uc nokta yalnizca yayinlanmis duyurulari dondugu icin her zaman doludur.
+
+    MobileAnnouncementsResponse:
+      type: object
+      required:
+        - generatedAt
+        - announcements
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        announcements:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileAnnouncement'
+
+    MobileSponsor:
+      type: object
+      required:
+        - id
+        - name
+        - tier
+        - logoUrl
+        - websiteUrl
+        - description
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+        websiteUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+
+    MobileSponsorsResponse:
+      type: object
+      required:
+        - generatedAt
+        - sponsors
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        sponsors:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSponsor'
+
+    MobileSpeaker:
+      type: object
+      required:
+        - id
+        - fullName
+        - title
+        - institution
+        - country
+        - bio
+        - photoUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: 'Unvanli tam hali: "Prof. Dr. Ahmet Yilmaz".'
+        title:
+          type: string
+          nullable: true
+        institution:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+
+    MobileSpeakersResponse:
+      type: object
+      required:
+        - generatedAt
+        - speakers
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        speakers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSpeaker'
+
+    MobileVenue:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - address
+        - city
+        - phone
+        - websiteUrl
+        - mapUrl
+        - latitude
+        - longitude
+        - description
+        - imageUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+          description: Google Maps baglantisi.
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+
+    MobileVenuesResponse:
+      type: object
+      required:
+        - generatedAt
+        - venues
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        venues:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileVenue'
+          description: MAIN once, sonra HOTEL'ler (VenueType.type asc siralamasi).
+
+    MobileInfoSection:
+      type: object
+      required:
+        - id
+        - title
+        - body
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+          description: Markdown formatinda, mobil tarafta render edilir.
+
+    MobileInfoSectionsResponse:
+      type: object
+      required:
+        - generatedAt
+        - infoSections
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        infoSections:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileInfoSection'
 
     RegistrationSource:
       type: string

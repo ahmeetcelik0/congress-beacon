@@ -608,3 +608,138 @@ geliyor).
 token hacmi ~2.5 kat fazla oldugu icin, dusuk liste fiyatina ragmen).
 Ayni/dengeli dogrulukla varsayilan model **`claude-opus-4-8`** olarak
 KORUNDU (kullanicinin $5 butcesi goz onune alinarak da dogru secim).
+
+---
+
+## Faz 5 — Mobil Okuma API'leri
+
+Mobil kodlamaya (Faz 6-7) gecmeden once tum okuma uclarinin backend'de tek
+elden yazildigi faz. Mobil uygulama HENUZ bu uclari kullanmiyor - hazirlik.
+
+### Once iki gercek Faz 4b hatasi duzeltildi
+
+Gercek fatura ile sistemin kaydettigi toplam maliyet uyusmuyordu ($2.36 vs
+$1.88 - Faz 4b'nin kapanis raporunda gorulen deger). Iki bagimsiz sebebi
+vardi:
+
+1. **Basarisiz cikarimin maliyeti kaydedilmiyordu.** LLM cagrisi bir yanit
+   DONDUKTEN sonra (yani zaten faturalandiktan sonra) basarisiz olan
+   durumlarda (model reddi, beklenen JSON blogu yok, gecersiz JSON, veya
+   `writeExtractionToStaging`'in DB hatasi - Faz 4b'nin VARCHAR(191) tasma
+   hatasinin tam olarak dustugu senaryo) `ProgramImportQueueService`'in
+   catch blogu yalnizca `status:FAILED` + `errorMessage` yaziyordu, gercek
+   token bilgisi kayboluyordu. Cozum: `ProgramExtractionService.extract()`
+   artik mesaj alindiktan sonraki her hatada bunu `ExtractionUsageError`
+   (usage bilgisini tasiyan ozel bir hata sinifi) ile firlatiyor;
+   `ProgramImportQueueService` bunu (veya `outcome`dan zaten elde ettigi
+   usage'i, staging yazimi gibi SONRAKI bir adimda hata olusursa) yakalayip
+   `FAILED` kaydina `model`/`inputTokens`/`outputTokens`/`estimatedCostUsd`
+   yaziyor. Cagri hic baslamadiysa (API anahtari yok, Anthropic'e ULASMADAN
+   reddedilen bir dosya) usage hala tanimsiz kalir, alanlar null kalir -
+   panelin "toplam harcama"si yalnizca GERCEKTEN faturalanan cagrilari sayar.
+2. **Sonnet 5 fiyati yanlisti.** `model-pricing.ts`'deki tablo Sonnet 5'i
+   sabit $3/$15 (tam liste fiyati) ile hesapliyordu; oysa 2026-08-31'e kadar
+   $2/$10 tanitim fiyati gecerli - bu yuzden Faz 4b'nin model
+   karsilastirmasi Sonnet'i gercekte oldugundan %50 pahali gostermisti
+   (yine de nihai "Opus 4.8 varsayilan kalsin" sonucunu DEGISTIRMEDI, cunku
+   Sonnet zaten cikti hacminden dolayi daha pahaliydi - ama rakamlar
+   yanlisti). Fiyat tablosu tarih farkindaligi kazanacak sekilde yeniden
+   yazildi: her model icin bir kural LISTESI, her kuralin opsiyonel bir
+   `validUntil`i var, ilk uyan (ya da son/varsayilan) kural kullanilir.
+   **Bu tablo elle guncellenmesi gereken bir kaynaktir** - Anthropic fiyat
+   degistirdiginde veya bir tanitim donemi bittiginde kod degisikligiyle
+   guncellenmeli, otomatik cekilmiyor (kaynak: Anthropic'in resmi
+   fiyatlandirma sayfasi).
+
+### Neden congressId istemciden alinmiyor
+
+Faz 1'den beri katilimci JWT'si `activeCongressId`yi TOKEN icinde tasir
+(`ActiveCongressGuard` bunun doluluğunu garanti eder). Mobil uc noktalarinin
+HICBIRI `congressId`yi query/body parametresi olarak KABUL ETMEZ - kongre
+kimligi her zaman `request.user.congressId`den (yani token'dan) okunur. Bu,
+kotu niyetli ya da hatali bir istemcinin URL'deki bir parametreyi degistirip
+baska bir kongrenin (kayitli olmadigi bir kongrenin) verisini istemesini
+IMKANSIZ kilar - saldiri yuzeyi client-side dogrulamaya degil, token'in
+kendisine (sunucu tarafinda imzalanmis, degistirilemez) dayanir.
+
+### Neden /mobile/home tek bir toplu yanit
+
+Mobil ana sayfa (kongre karti + 6 icerik butonu rozeti + "siradaki sunumum"
+karti) ayri ayri 6-7 istek atarsa hem acilis gecikir hem de zayif/degisken
+mobil baglantida kismi basarisizlik riski artar. `GET /mobile/home` TUM bu
+veriyi tek bir istekte, paralel Prisma sorgularinin (`Promise.all`)
+sonuclarini birlestirerek doner - `POST /observations/batch`in zaten
+kullandigi "tek istekte batch" felsefesiyle tutarli.
+
+### ETag stratejisi (yalnizca /mobile/program)
+
+Bilimsel program yuzlerce oturum icerebilir ve kongre boyunca nadiren
+degisir - mobil bunu her acilista yeniden indirmemeli. ETag, ilgili UC
+tablonun (`Session`, `Presentation`, `ProgramRole`, kongreye gore
+kapsamlanmis) SAYISI + en buyuk `updatedAt` degerinden turetilir
+(`common/etag.ts`). Yalnizca `MAX(updatedAt)`e bakmak YETMEZ - silinen bir
+satirin `updatedAt`i artik yok, bu yuzden sayim da seed'e dahil edilir
+(aksi halde bir oturum silinip degistirilmeden birakilirsa ETag
+degismezdi). Diger mobil uclara (duyurular, sponsorlar...) BILINCLI olarak
+ETag eklenmedi - onlar zaten kucuk govdeler, kazanc/karmasiklik orani
+`/mobile/program` kadar guclu degil (asiri muhendislik yapilmadi).
+
+### Kisisel veri siniri - nasil uygulaniyor
+
+Mobil uclar katilimciya acik (admin degil) - yanitlarda BASKA
+katilimcilarin e-postasi/telefonu/`searchName`i/giris gecmisi ASLA
+gorunmemeli. Bu, her mobil Prisma sorgusunda `ProgramRole` icin ASLA
+`user` iliskisinin JOIN edilmemesiyle (yalnizca skaler `userId` alani
+secilir) merkezi olarak saglanir - `MOBILE_PROGRAM_ROLE_SELECT` sabiti
+(`mobile.service.ts`) bu sinirin TEK dogrulama noktasidir, her cagiran
+kendi include/select'ini elle yazip bir alani unutma riski tasimaz. Bu,
+Faz 4a'nin admin-tarafi `ROLE_USER_SELECT` deseninden BILINCLI olarak
+FARKLIDIR - admin panelinde eslesen katilimcinin iletisim bilgisi
+gorunmesi gerekir (yetkili arayabilmeli), mobilde ise hicbir zaman.
+`mobile.service.spec.ts`teki "kisisel veri sizintisi" testi, `select`
+govdesinin JSON'unda `user`/`email`/`phone`/`searchName`/`passwordHash`
+gibi alanlarin GECMEDIGINI dogrulayan bir regresyon testidir.
+
+### myNextSession mantigi ve "okunmamis duyuru" karari
+
+`pickNextSession` (`mobile/my-next-session.ts`) saf, DB'den bagimsiz bir
+fonksiyondur - kullanicinin MATCHED/MANUAL rolleri DB'den cekilip aday
+listesine donusturulur, karar (SUREGELEN varsa onu, yoksa en yakin
+GELECEGI, o da yoksa `null`) bu fonksiyonda test edilir. `/mobile/home`
+(en yakin biri) ve `/mobile/my-program` (kronolojik hepsi) AYNI aday
+sorgusunu (`fetchMyProgramCandidates`) paylasir - mantik iki yerde
+tekrarlanmaz.
+
+"Okunmamis/sabitlenmis duyuru bilgisi" (gorev tanimindaki ifade) icin
+SUNUCU TARAFINDA per-kullanici bir okuma-durumu tablosu KURULMADI - bu,
+salt-okunur bir API fazi icin olcusuz bir kapsam genislemesi olurdu (yeni
+migration, yeni bir "goruldu" endpoint'i vb.). Bunun yerine `/mobile/home`
+`announcements.hasPinned` + `announcements.latestPublishedAt` doner; mobil
+uygulama (Faz 6-7) bu son-yayin-zamanini kendi YEREL "son goruleni" ile
+kiyaslayarak rozet gosterip gostermeyecegine kendisi karar verir - bu,
+birebir Faz 7'nin bildirim-analitigi disindaki cogu mobil uygulamada
+kullanilan standart, sunucu-durumsuz "okunmamis" deseni.
+
+### Tarihler her zaman UTC ISO 8601 - ozel bir donusum GEREKMEZ
+
+Faz 4b'de production sunucusunun `Europe/Istanbul` olmasi gerektigi
+ortaya cikmisti (panelin YAZMA yolu, `new Date(naifDatetimeLocalString)`,
+sunucunun yerel saatini kullaniyor). Bu, yalniz YAZMA yolunu etkiler -
+OKUMA (bu fazin tamami) etkilenmez: Prisma bir `DateTime` kolonunu
+okuyunca mutlak bir ana (instant) karsilik gelen bir JS `Date` nesnesi
+uretir, NestJS'in JSON serilestiricisi bunu `Date.prototype.toJSON()`
+uzerinden HER ZAMAN UTC ('Z' sonekli) olarak yazar - bu, calisan
+SUNUCUNUN saat diliminden BAGIMSIZDIR. Yani mobil GET yanitlari sunucu
+TZ'si ne olursa olsun her zaman dogru UTC doner; ozel bir donusum kodu
+gerekmez. Canli test (bkz. asagidaki dogrulama adimlari) panelde "14:00"
+gorunen bir oturumun mobil yanitinda `...T11:00:00.000Z` (Turkiye
+UTC+3'e gore dogru) donduğunu elle dogrulamistir.
+
+### Gorsel URL'leri neden mutlak
+
+Faz 3'te yuklenen gorseller GORELI yol olarak saklanir (`/uploads/...`) -
+panel ayni origin'den servis edildigi icin bu sorun degildi. Mobil FARKLI
+bir origin'den (production'da `https://beacon.photofocustr.com/api`)
+calisacagi icin bu donusum TEK bir yerde (`common/absolute-url.ts`,
+`APP_PUBLIC_URL` env degiskeni) yapilir - her mobil endpoint kendi
+gorsel alanini bu fonksiyondan gecirir, elle prefix eklemez.
