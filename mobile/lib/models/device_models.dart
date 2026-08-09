@@ -1,13 +1,25 @@
 class RegisterDeviceRequest {
   const RegisterDeviceRequest({
     required this.platform,
+    this.deviceModel,
+    this.osVersion,
+    this.appVersion,
+    this.pushToken,
   });
 
   final String platform;
+  final String? deviceModel;
+  final String? osVersion;
+  final String? appVersion;
+  final String? pushToken;
 
   Map<String, dynamic> toJson() {
     return {
       'platform': platform,
+      if (deviceModel != null) 'deviceModel': deviceModel,
+      if (osVersion != null) 'osVersion': osVersion,
+      if (appVersion != null) 'appVersion': appVersion,
+      if (pushToken != null) 'pushToken': pushToken,
     };
   }
 }
@@ -39,18 +51,12 @@ class Device {
 }
 
 class PushTokenRequest {
-  const PushTokenRequest({
-    required this.deviceId,
-    required this.pushToken,
-  });
+  const PushTokenRequest({required this.deviceId, required this.pushToken});
 
   final String deviceId;
   final String pushToken;
 
   Map<String, dynamic> toJson() {
-    return {
-      'deviceId': deviceId,
-      'pushToken': pushToken,
-    };
+    return {'deviceId': deviceId, 'pushToken': pushToken};
   }
 }

@@ -26,11 +26,23 @@ class ObservationServiceState {
 }
 
 class BeaconObservationService with WidgetsBindingObserver {
-  BeaconObservationService({required this.deviceId, ApiClient? apiClient})
-    : _apiClient = apiClient ?? ApiClient();
+  // `this._appVersion` onerisi UYGULANMADI: disariya ACIK bir ozel
+  // (private) parametre adi dayatirdi, disaridan `appVersion:` olarak
+  // cagirilamazdi (public API kirilirdi).
+  BeaconObservationService({
+    required this.deviceId,
+    ApiClient? apiClient,
+    String appVersion = '1.0.0',
+  }) : _apiClient = apiClient ?? ApiClient(),
+       // ignore: prefer_initializing_formals
+       _appVersion = appVersion;
 
   final String deviceId;
   final ApiClient _apiClient;
+  // Faz 6: artik cagiran taraftan (gercek PackageInfo.version) geliyor -
+  // yalnizca veri kaynagi degisti, asagidaki hicbir zamanlama/karar mantigi
+  // DOKUNULMADI (bkz. docs/decisions.md, Faz 6 kisiti §1).
+  final String _appVersion;
   final _uuid = const Uuid();
 
   // The main region to scan. In reality, we might have multiple, or one open region.
@@ -272,7 +284,10 @@ class BeaconObservationService with WidgetsBindingObserver {
   // gonderimden itibaren gecerli olmasi icin.
   void _applyServerIntervalIfChanged(int? intervalSeconds) {
     if (intervalSeconds == null) return;
-    final clamped = intervalSeconds.clamp(_minIntervalSeconds, _maxIntervalSeconds);
+    final clamped = intervalSeconds.clamp(
+      _minIntervalSeconds,
+      _maxIntervalSeconds,
+    );
     final newInterval = Duration(seconds: clamped);
     if (newInterval == _batchInterval) return;
 
@@ -342,7 +357,7 @@ class BeaconObservationService with WidgetsBindingObserver {
       observationId: _uuid.v4(),
       observedAt: DateTime.now().toUtc().toIso8601String(),
       beacons: observedBeacons,
-      appVersion: '1.0.0', // Can be fetched dynamically later
+      appVersion: _appVersion,
     );
 
     _queue.add(snapshot);

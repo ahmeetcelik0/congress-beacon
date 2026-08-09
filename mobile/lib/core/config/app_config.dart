@@ -3,7 +3,7 @@ class AppConfig {
   AppConfig._();
 
   /// API sunucusunun temel adresi.
-  /// 
+  ///
   /// Gerçek cihazlarda test ederken `localhost` (127.0.0.1) adresi çalışmayacaktır.
   /// Bilgisayarınızın yerel ağ IP adresini (örn: http://192.168.1.35:3001) kullanmak için
   /// uygulamayı çalıştırırken veya derlerken şu parametreyi ekleyin:

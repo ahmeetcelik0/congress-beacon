@@ -27,11 +27,11 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Yakındaki salon beaconlarını algılamak için Bluetooth kullanılır.</string>
+	<string>Kongre salonlarındaki katılım analizleri için uygulama kapalıyken de kullanılır.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Yakındaki salon beaconlarını algılamak için konum izni gerekir.</string>
+	<string>Kongre salonlarındaki katılım analizleri için konumunuz uygulama kapalıyken de kullanılır.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Yakındaki salon beaconlarını algılamak için konum izni gerekir.</string>
+	<string>Kongre salonlarındaki katılım analizlerini yapabilmek için konum izni gerekir.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

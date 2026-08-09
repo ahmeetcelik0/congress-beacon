@@ -4,18 +4,14 @@ import '../../../models/device_models.dart';
 import '../../../models/notification_models.dart';
 
 class PushNotificationService {
-  PushNotificationService({
-    ApiClient? apiClient,
-  }) : _apiClient = apiClient ?? ApiClient();
+  PushNotificationService({ApiClient? apiClient})
+    : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
   /// Updates the push token on the backend server.
   Future<void> updateTokenOnServer(String pushToken, String deviceId) async {
-    final request = PushTokenRequest(
-      deviceId: deviceId,
-      pushToken: pushToken,
-    );
+    final request = PushTokenRequest(deviceId: deviceId, pushToken: pushToken);
 
     try {
       await _apiClient.put(
