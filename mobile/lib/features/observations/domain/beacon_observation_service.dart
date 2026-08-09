@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:uuid/uuid.dart';
@@ -28,14 +29,18 @@ class ObservationServiceState {
 class BeaconObservationService with WidgetsBindingObserver {
   // `this._appVersion` onerisi UYGULANMADI: disariya ACIK bir ozel
   // (private) parametre adi dayatirdi, disaridan `appVersion:` olarak
-  // cagirilamazdi (public API kirilirdi).
+  // cagirilamazdi (public API kirilirdi). Ayni sebeple `beaconUuid` da
+  // `this._beaconUuid` olarak alinmadi.
   BeaconObservationService({
     required this.deviceId,
+    required String beaconUuid,
     ApiClient? apiClient,
     String appVersion = '1.0.0',
   }) : _apiClient = apiClient ?? ApiClient(),
        // ignore: prefer_initializing_formals
-       _appVersion = appVersion;
+       _appVersion = appVersion,
+       // ignore: prefer_initializing_formals
+       _beaconUuid = beaconUuid;
 
   final String deviceId;
   final ApiClient _apiClient;
@@ -45,13 +50,14 @@ class BeaconObservationService with WidgetsBindingObserver {
   final String _appVersion;
   final _uuid = const Uuid();
 
-  // The main region to scan. In reality, we might have multiple, or one open region.
-  // The user rule implies scanning for congress beacons, maybe we just scan all beacons or the specific UUID.
-  // We'll use the same UUID from POC, or just listen to all beacons if possible.
-  // Let's use the POC UUID for now, as we don't have the backend beaconUuid injected here yet,
-  // or we can just scan for everything. The POC uses 'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0'.
-  static const String _defaultRegionUuid =
-      'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0';
+  // Faz 6.1: artik cagiran taraftan (backend `/mobile/bootstrap`'in
+  // dondurdugu `Congress.beaconUuid`) geliyor - eskiden burada sabit bir
+  // POC UUID'si vardi ('E2C56DB5-DFFB-48D2-B060-D0F5A71096E0'), bu da
+  // yalnizca o UUID'ye sahip kongrede tesadufen calisiyordu, farkli bir
+  // kongrede sessizce hicbir beacon bulamazdi. `required` olmasi bilerek -
+  // gecersiz/bos bir varsayilanla sessizce "calisiyor gibi gorunup" hicbir
+  // sey bulamamak, hic baslamamaktan kotudur (bkz. Faz 6.1 talimati §2).
+  final String _beaconUuid;
 
   // Foreground duty-cycle: surekli tarama yerine periyodik pencere.
   // Pil uyarisini ve gereksiz surekli Bluetooth taramasini onlemek icin.
@@ -114,6 +120,14 @@ class BeaconObservationService with WidgetsBindingObserver {
 
   void _emitState(ObservationServiceState state) {
     _currentState = state;
+    if (kDebugMode) {
+      debugPrint(
+        '[BeaconObservationService] state=${state.status.name} '
+        'pending=${state.pendingSnapshotCount} '
+        'lastBatch=${state.lastBatchResult} '
+        'error=${state.errorMessage}',
+      );
+    }
     if (!_stateController.isClosed) {
       _stateController.add(state);
     }
@@ -130,6 +144,13 @@ class BeaconObservationService with WidgetsBindingObserver {
 
     try {
       final isReady = await flutterBeacon.initializeScanning;
+      if (kDebugMode) {
+        final authStatus = await flutterBeacon.authorizationStatus;
+        debugPrint(
+          '[BeaconObservationService] initializeScanning=$isReady '
+          'authorizationStatus=$authStatus regionUuid=$_beaconUuid',
+        );
+      }
       if (!isReady) {
         _emitState(
           ObservationServiceState(
@@ -146,7 +167,7 @@ class BeaconObservationService with WidgetsBindingObserver {
       final regions = <Region>[
         Region(
           identifier: 'kongre-salon-beaconlari',
-          proximityUUID: _defaultRegionUuid,
+          proximityUUID: _beaconUuid,
         ),
       ];
       _regions = regions;
@@ -329,6 +350,13 @@ class BeaconObservationService with WidgetsBindingObserver {
   }
 
   void _onMonitoringResult(MonitoringResult result) {
+    if (kDebugMode) {
+      debugPrint(
+        '[BeaconObservationService] monitoring '
+        'eventType=${result.monitoringEventType} '
+        'state=${result.monitoringState}',
+      );
+    }
     // Ranging bir sekilde durmus olabilir ihtimaline karsi guvenlik agi -
     // hem foreground hem background'da gecerli (orijinal tasarimin ruhu).
     final entered =
@@ -341,6 +369,12 @@ class BeaconObservationService with WidgetsBindingObserver {
   }
 
   void _onRangingResult(RangingResult result) {
+    if (kDebugMode) {
+      debugPrint(
+        '[BeaconObservationService] ranging beaconCount=${result.beacons.length} '
+        'foreground=$_isForeground',
+      );
+    }
     if (result.beacons.isEmpty) return;
 
     final observedBeacons = result.beacons.map((b) {
@@ -381,6 +415,12 @@ class BeaconObservationService with WidgetsBindingObserver {
   }
 
   Future<void> _trySendBatch() async {
+    if (kDebugMode) {
+      debugPrint(
+        '[BeaconObservationService] _trySendBatch cagrildi '
+        'queueLength=${_queue.length} isBatching=$_isBatching',
+      );
+    }
     if (_isBatching || _queue.isEmpty) return;
 
     _isBatching = true;
@@ -421,6 +461,13 @@ class BeaconObservationService with WidgetsBindingObserver {
         ),
       );
     } catch (e) {
+      if (kDebugMode) {
+        final statusCode = e is ApiException ? e.statusCode : null;
+        debugPrint(
+          '[BeaconObservationService] batch gonderim hatasi '
+          'statusCode=$statusCode error=$e',
+        );
+      }
       if (e is ApiException && e.statusCode == 401) {
         _emitState(
           ObservationServiceState(

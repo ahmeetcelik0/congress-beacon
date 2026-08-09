@@ -272,3 +272,123 @@ nedeni izole edemedim. **Ahmet'in/Berke'nin yapması gerekenler:**
 
 Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek —
 özellikle beacon veri akışı bulgusunun ilerleyişini.
+
+---
+
+## 2026-08-09 (devam) — Faz 6.1: Beacon veri akışı bulgusunun kök nedeni bulundu
+
+### Bağlam
+
+Bir önceki bölümde ("Faz 6 gerçek cihaz doğrulaması") beacon servisi 6+ dakika
+kesintisiz çalışmasına rağmen backend'e hiç veri ulaşmadığı, kök nedenin
+bulunamadığı yazılmıştı. Öncelikli şüpheli, kodda sabit yazılı POC UUID'si
+(`E2C56DB5-DFFB-48D2-B060-D0F5A71096E0`) idi.
+
+### Önce doğrulama: UUID şüphesi çürütüldü
+
+Test edilen "Test" kongresi için dört değer karşılaştırıldı: koddaki sabit,
+`Congress.beaconUuid` (DB), `Beacon` tablosu, ve gerçek Minew cihazın
+yayınladığı UUID (BeaconSET Plus ile teyit edildi) — **dördü de aynıydı**.
+Yani UUID sabit-yazılı olması, o kongrede tesadüfen doğru çalışıyordu; bu,
+gözlemlenen sıfır-veri hatasının açıklaması DEĞİLDİ (ama başka bir kongrede
+kesin çalışmayacağı için ayrıca düzeltildi, bkz. aşağı).
+
+### Gerçek kök neden: yerel önbellekte kalmış, artık DB'de olmayan `deviceId`
+
+`BeaconObservationService`'e (dokunulmadan) `_emitState`, `initializeScanning`,
+`authorizationStatus`, her ranging/monitoring callback'i ve her batch gönderim
+sonucunu loglayan `kDebugMode` teşhis logları eklenince (karar mantığı
+DEĞİŞMEDİ, yalnızca gözlem) tablo netleşti:
+
+- Ranging mükemmel çalışıyordu: her döngüde 4-5 beacon görülüyordu.
+- Kuyruk doluyor, batch düzenli deneniyordu.
+- Her batch denemesi **`403 Bu cihaz bu kullaniciya ait degil`** ile
+  reddediliyordu.
+
+Backend'de kontrol edilince: telefonun Keychain'inde (uygulama silinip
+yeniden kurulsa bile hayatta kalan) önbelleğe alınmış `deviceId`, `Device`
+tablosunda **hiç yoktu** — muhtemelen bu genişletilmiş test sürecinin bir
+noktasında veritabanı sıfırlanmış/yeniden seed edilmişti, ama telefonun
+Keychain'i backend durumundan tamamen bağımsız olduğu için eski ID'yi
+tutmaya devam etti. `ObservationLifecycleNotifier._sync()`'in mantığı
+(`deviceId ??= await _registerDevice()`) yalnızca `deviceId` **null**
+olduğunda yeniden kayıt tetikliyor — var olan ama artık geçersiz bir ID'yi
+asla sorgulamıyordu. Sonuç: sessiz, sonsuz 403 döngüsü, hiçbir yerde
+kullanıcıya veya geliştiriciye yansımayan (Faz 6'da eski debug kartları
+silindiğinden `ObservationServiceState` hiçbir UI'a bağlı değil).
+
+Doğrulama: backend veritabanına bu `deviceId` için doğru kullanıcıya ait bir
+`Device` satırı elle eklenince, bir sonraki batch denemesi anında
+`Accepted: 70` döndü ve veri akışı kesintisiz devam etti (11+ dakikalık arka
+plan testinde 2283 gözlem, ortalama ~3.3/saniye).
+
+**Bu, projenin ikinci beacon regresyonuydu (ilki 2026-07-17, ranging
+duty-cycle) ama farklı bir kategoride: kod her zaman doğruydu, sorun bir
+geliştirme-ortamı veri tutarsızlığıydı. Kalıcı ders:** yerel önbelleğe alınan
+bir kimlik (deviceId, ve benzer şekilde beaconUuid) sunucu tarafında
+silinebilir/değişebilir; istemci bunu sessizce varsaymak yerine ya
+periyodik olarak doğrulamalı ya da başarısızlık modunun (403/404) açıkça
+görünür olmasını sağlamalı. **Öneri (bu oturumda yapılmadı, ayrı görev
+olabilir):** `_trySendBatch`'in 403 "cihaz sahiplik" hatasını da (401 gibi)
+özel olarak ele alıp cihazı yeniden kaydetmeyi tetiklemesi.
+
+### Ayrıca düzeltilen: UUID artık backend'den geliyor (Faz 6.1 görevi 2-3)
+
+UUID şüphesi bu hatayı açıklamasa da, sabit yazılı olması mimari olarak
+yanlıştı (yalnızca "Test" kongresinde tesadüfen çalışırdı). Düzeltildi:
+
+- `BeaconObservationService`: `_defaultRegionUuid` sabiti kaldırıldı,
+  `beaconUuid` artık **zorunlu** bir constructor parametresi (yanlış/boş bir
+  varsayılanla sessizce çalışmak, hiç çalışmamaktan kötü olduğu için).
+- `ObservationLifecycleNotifier`: kongre seçildikten sonra, servis
+  başlatılmadan önce `GET /mobile/bootstrap?congressId=...` çağrılıyor
+  (bu uç nokta guard'sız - "TestFlight'taki mevcut sürüm bunu kullanıyor"
+  yorumuyla bilerek böyle bırakılmış, bkz. `mobile.controller.ts`).
+  Yanıttaki `congress.beaconUuid` servise geçiriliyor; `halls`/
+  `rssiThreshold` kısmı kullanılmıyor (salon kararı backend'de veriliyor).
+- Çevrimdışı dayanıklılık: bootstrap yanıtı kongre kimliğiyle birlikte
+  `SecureStorageService`'e yazılıyor. Ağ hatasında, AYNI kongre için daha
+  önce kaydedilmiş bir UUID varsa o kullanılıyor; farklı bir kongreye aitse
+  veya hiç yoksa servis **başlatılmıyor** (yanlış UUID'yle sessizce
+  "çalışıyor gibi görünmek" yerine).
+- Kongre değiştirme, gerçek cihazda log kanıtıyla doğrulandı: "Test"
+  kongresinden "Seed Test Kongresi 1"e geçişte `STOP` sonrası, DOĞRU ve
+  FARKLI UUID (`00000000-...0001`) ile `START` görüldü.
+
+### Panel/veri gözlemi (kod değişikliği DEĞİL, ayrı görev önerisi)
+
+Doğrulama sırasında kullanıcı panelden "Seed Test Kongresi 1"e gerçek UUID'li
+4 `Beacon` kaydı ekledi, ama kongrenin kendi `beaconUuid` alanı otomatik
+güncellenmedi (panel, tek tek beacon eklemeyi kongre-seviyesi UUID'den
+bağımsız yapıyor) - mobil uygulama ranging için KONGRE seviyesindeki
+`beaconUuid`'yi kullandığından (iOS'un bölge taraması UUID bazlı), bu
+kongre hâlâ veri toplayamadı. Veri elle düzeltildi (`Congress.beaconUuid`
+eklenen beacon'larla eşleşecek şekilde güncellendi). **Kullanıcının isteği,
+ayrı bir görev olarak:** panelden beacon eklendiğinde kongrenin
+`beaconUuid`'sinin otomatik güncellenmesi/doğrulanması - bu bir backend/panel
+kod değişikliği, bu oturumun kapsamı dışında bilerek bırakıldı.
+
+### Gerçek cihazda doğrulanan (bu oturumda)
+
+- 3 UUID karşılaştırması (kod/kongre/cihaz) - "Test" kongresi için hepsi
+  aynıydı.
+- Kök neden teşhisi: 403 "cihaz sahiplik" hatası, kDebugMode loglarıyla
+  kesin olarak izole edildi.
+- Uçtan uca veri akışı: 2750+ `BeaconObservation`, `HallVisit` (salon 1,
+  algorithmVersion=v3) ve `AttendanceEvent(ENTRY)` oluştu - backend'den
+  doğrulandı.
+- Arka plan akışı: 11+ dakika kesintisiz, 2283 gözlem (~3.3/saniye
+  ortalama), foreground/background geçişi boyunca kesinti yok.
+- Bootstrap entegrasyonu: kongre değiştirmede doğru/farklı UUID ile yeniden
+  başlatma, log kanıtıyla doğrulandı.
+- `flutter analyze`: "No issues found!", `dart format`: temiz,
+  `flutter test`: 17/17 geçti.
+
+### Doğrulanamayan / ertelenen
+
+- Çevrimdışı fallback yolu (ağ yokken önbellekteki UUID ile devam etme) kod
+  incelemesiyle doğrulandı ama gerçek cihazda uçak modu senaryosuyla canlı
+  test edilmedi (zaman kısıtı).
+- `flutter_beacon: ^0.5.1` paketi 4 yıldır güncellenmiyor (iOS 17/18'den
+  önce) - bu oturumda bir soruna yol açtığı KANITLANMADI (asıl sorun
+  deviceId'ydi), ama uzun vadede izlenmesi gereken bir risk faktörü.

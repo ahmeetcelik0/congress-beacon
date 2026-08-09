@@ -11,10 +11,15 @@ import '../../../core/storage/secure_storage_provider.dart';
 import '../../../models/auth_models.dart';
 import '../../auth/application/auth_session_provider.dart';
 import '../../devices/data/device_repository.dart';
+import '../data/bootstrap_repository.dart';
 import '../domain/beacon_observation_service.dart';
 
 final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
   return DeviceRepository(ref.watch(apiClientProvider));
+});
+
+final bootstrapRepositoryProvider = Provider<BootstrapRepository>((ref) {
+  return BootstrapRepository(ref.watch(apiClientProvider));
 });
 
 /// `BeaconObservationService`nin YAŞAM DÖNGÜSÜNÜ uygulama seviyesinde
@@ -93,9 +98,27 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
       return;
     }
 
+    final beaconUuid = await _resolveBeaconUuid(activeCongressId);
+    if (beaconUuid == null) {
+      // Gecerli bir UUID yoksa (ilk kez, ag yok, cevrimdisi onbellek de
+      // bos) servis KESINLIKLE baslatilmaz - yanlis/varsayilan bir UUID'yle
+      // sessizce "calisiyor gibi gorunup" hicbir beacon bulamamak, hic
+      // baslamamaktan kotudur (bkz. Faz 6.1 talimati §2). Bir sonraki
+      // senkronizasyonda tekrar denenir.
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationLifecycle] BASLATILAMADI - congressId=$activeCongressId '
+          'icin gecerli bir beaconUuid yok (bootstrap basarisiz + cevrimdisi '
+          'onbellek de bos/farkli kongreye ait)',
+        );
+      }
+      return;
+    }
+
     final packageInfo = await ref.read(packageInfoProvider.future);
     final service = BeaconObservationService(
       deviceId: deviceId,
+      beaconUuid: beaconUuid,
       apiClient: ref.read(apiClientProvider),
       appVersion: packageInfo.version,
     );
@@ -105,11 +128,38 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     if (kDebugMode) {
       debugPrint(
         '[ObservationLifecycle] START congressId=$activeCongressId '
-        'deviceId=$deviceId (uygulama kok seviyesinde - ekran/sekme '
-        'gecisleri bunu DURDURMAZ)',
+        'deviceId=$deviceId beaconUuid=$beaconUuid (uygulama kok '
+        'seviyesinde - ekran/sekme gecisleri bunu DURDURMAZ)',
       );
     }
     await service.start();
+  }
+
+  /// Kongrenin beacon UUID'sini `/mobile/bootstrap`'tan alir. Basarili
+  /// olursa (kongre kimligiyle birlikte) yerel olarak saklar. Ag hatasinda
+  /// - "cevrimdisi dayaniklilik" (bkz. Faz 6.1 talimati §3) - AYNI kongre
+  /// icin daha once kaydedilmis bir UUID varsa onu doner; farkli bir
+  /// kongreye ait veya hic yoksa `null` doner (cagiran taraf servisi
+  /// baslatmaz).
+  Future<String?> _resolveBeaconUuid(String congressId) async {
+    final storage = ref.read(secureStorageProvider);
+    try {
+      final bootstrap = await ref
+          .read(bootstrapRepositoryProvider)
+          .fetch(congressId);
+      final beaconUuid = bootstrap.congress.beaconUuid;
+      await storage.saveBeaconUuid(congressId, beaconUuid);
+      return beaconUuid;
+    } catch (_) {
+      final cached = await storage.getBeaconUuidForCongress(congressId);
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationLifecycle] bootstrap basarisiz - cevrimdisi onbellek '
+          '(congressId=$congressId): ${cached ?? "YOK"}',
+        );
+      }
+      return cached;
+    }
   }
 
   Future<String?> _registerDevice() async {

@@ -19,6 +19,8 @@ class SecureStorageService {
   static const String _activeCongressIdKey = 'active_congress_id';
   static const String _permissionOnboardingCompleteKey =
       'permission_onboarding_complete';
+  static const String _beaconUuidKey = 'beacon_uuid';
+  static const String _beaconUuidCongressIdKey = 'beacon_uuid_congress_id';
 
   Future<void> saveAccessToken(String token) async {
     await _storage.write(key: _accessTokenKey, value: token);
@@ -56,6 +58,25 @@ class SecureStorageService {
 
   Future<String?> getActiveCongressId() async {
     return await _storage.read(key: _activeCongressIdKey);
+  }
+
+  // Beacon takibi icin gereken UUID, kongreye gore degisir - `/mobile/bootstrap`
+  // her basariyla cagrildiginda buraya hangi kongre icin oldugu bilgisiyle
+  // birlikte yazilir. Amac, ag olmadan acilan bir oturumda (bkz. Faz 6.1
+  // talimati "cevrimdisi dayaniklilik") son bilinen UUID ile takibe devam
+  // edebilmek - ama yalnizca AYNI kongre icin, farkli bir kongrenin eski
+  // UUID'siyle YANLIS salonlar takip edilmesin diye.
+  Future<void> saveBeaconUuid(String congressId, String beaconUuid) async {
+    await _storage.write(key: _beaconUuidCongressIdKey, value: congressId);
+    await _storage.write(key: _beaconUuidKey, value: beaconUuid);
+  }
+
+  /// `congressId` kaydedilen degerle eslesmiyorsa `null` doner - bayat
+  /// (farkli kongreye ait) bir UUID asla sessizce kullanilmasin diye.
+  Future<String?> getBeaconUuidForCongress(String congressId) async {
+    final savedCongressId = await _storage.read(key: _beaconUuidCongressIdKey);
+    if (savedCongressId != congressId) return null;
+    return _storage.read(key: _beaconUuidKey);
   }
 
   Future<void> savePermissionOnboardingComplete() async {
