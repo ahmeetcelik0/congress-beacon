@@ -381,6 +381,11 @@ export type DataQualityReport = {
   matchedObservations: number;
   unmatchedObservations: number;
   matchedRatio: number | null;
+  // Faz 6.2: "veri geliyor ama hiçbir beacon'a bağlanmıyor" durumunun
+  // sebebini doğrudan gösterir (bkz. backend `reports.service.ts`).
+  topUnmatchedBeacons: { uuid: string; major: number; minor: number; count: number }[];
+  mismatchedBeaconCount: number;
+  consistencyWarning: string | null;
 };
 
 export type BeaconHealthItem = {
@@ -809,9 +814,19 @@ export const api = {
         websiteUrl: string;
         contactEmail: string;
         contactPhone: string;
+        // Faz 6.2: beaconUuid değişikliği, kongrede zaten beacon varsa
+        // onaysız 409 döner (bkz. backend `congress.service.ts`).
+        // migrateExistingBeacons: true, bu beacon'ların hepsinin uuid'sini
+        // de tek transaction'da yeni değerle günceller.
+        beaconUuid: string;
+        migrateExistingBeacons: boolean;
       }
     >,
-  ) => request<Congress>(`/congresses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  ) =>
+    request<Congress & { beaconsUpdated?: number }>(`/congresses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
   listHalls: (congressId: string) =>
@@ -834,7 +849,13 @@ export const api = {
     major: number;
     minor: number;
     label?: string;
-  }) => request<Beacon>('/beacons', { method: 'POST', body: JSON.stringify(data) }),
+  }) =>
+    // Faz 6.2: kongrenin beaconUuid'i bu istekle otomatik benimsendiyse
+    // (yalnızca o kongreye eklenen İLK beacon için) yanıt bunu belirtir.
+    request<Beacon & { congressBeaconUuidAutoSet: boolean }>('/beacons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   deleteBeacon: (id: string) => request<void>(`/beacons/${id}`, { method: 'DELETE' }),
 
   listActiveHallBeacons: (hallId: string) =>

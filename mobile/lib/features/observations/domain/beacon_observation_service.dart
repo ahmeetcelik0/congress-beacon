@@ -10,7 +10,19 @@ import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../models/observation_models.dart';
 
-enum ObservationServiceStatus { initializing, active, error, unauthorized }
+enum ObservationServiceStatus {
+  initializing,
+  active,
+  error,
+  unauthorized,
+  // Faz 6.2: backend, gonderilen deviceId'nin bu kullaniciya ait
+  // OLMADIGINI (403 - kayit hic yok VEYA baska kullaniciya ait) soylerse
+  // buraya gecilir. `unauthorized` (401, token gecersiz) ile KARISTIRILMAZ -
+  // ikisinin kurtarma yolu farkli: 401 oturumu dusurur, bu ise yalnizca
+  // cihaz kaydini yeniler (bkz. ObservationLifecycleNotifier, bu servisin
+  // KENDISI bir kurtarma eylemi YAPMAZ, yalnizca durumu bildirir).
+  deviceInvalid,
+}
 
 class ObservationServiceState {
   const ObservationServiceState({
@@ -36,11 +48,19 @@ class BeaconObservationService with WidgetsBindingObserver {
     required String beaconUuid,
     ApiClient? apiClient,
     String appVersion = '1.0.0',
+    // Faz 6.2: cihaz kaydi gecersizlesip yeniden kaydolunca (bkz.
+    // ObservationServiceStatus.deviceInvalid), cagiran taraf ESKI servisin
+    // henuz gonderilmemis kuyrugunu BURADAN yeni servise tasiyabilsin diye -
+    // aksi halde kurtarma sirasinda o gozlemler sessizce kaybolurdu. Karar
+    // mantigina (hangi observation ne zaman kuyruga girer/gonderilir)
+    // dokunmaz, yalnizca BASLANGIC kuyrugunu doldurur.
+    List<ObservationSnapshot> initialQueue = const [],
   }) : _apiClient = apiClient ?? ApiClient(),
        // ignore: prefer_initializing_formals
        _appVersion = appVersion,
        // ignore: prefer_initializing_formals
-       _beaconUuid = beaconUuid;
+       _beaconUuid = beaconUuid,
+       _queue = List.of(initialQueue);
 
   final String deviceId;
   final ApiClient _apiClient;
@@ -77,7 +97,7 @@ class BeaconObservationService with WidgetsBindingObserver {
   static const int _maxIntervalSeconds = 300;
   Duration _batchInterval = _defaultBatchInterval;
 
-  final List<ObservationSnapshot> _queue = [];
+  final List<ObservationSnapshot> _queue;
   bool _isBatching = false;
   bool _isForeground = true;
 
@@ -117,6 +137,12 @@ class BeaconObservationService with WidgetsBindingObserver {
   );
 
   Stream<ObservationServiceState> get stateStream => _stateController.stream;
+
+  // Faz 6.2: cihaz kurtarma sirasinda (bkz. yukaridaki initialQueue) bu
+  // servis `stop()` edilip atilmadan once kuyrugu okuyup yeni servise
+  // aktarabilmek icin salt-okunur bir govde - degistirilemez bir kopya
+  // doner, cagiran taraf ic kuyruga MUDAHALE edemez.
+  List<ObservationSnapshot> get pendingSnapshots => List.unmodifiable(_queue);
 
   void _emitState(ObservationServiceState state) {
     _currentState = state;
@@ -474,6 +500,21 @@ class BeaconObservationService with WidgetsBindingObserver {
             status: ObservationServiceStatus.unauthorized,
             pendingSnapshotCount: _queue.length,
             lastBatchResult: 'Hata: Yetkisiz (401)',
+            errorMessage: e.message,
+          ),
+        );
+      } else if (e is ApiException && e.statusCode == 403) {
+        // /observations/batch'te 403'un TEK kaynagi backend'deki cihaz
+        // sahiplik kontrolu (bkz. observation-ingestion.service.ts,
+        // "Bu cihaz bu kullaniciya ait degil") - Faz 6.1'de sahada 6+
+        // dakika sessizce yakalanamayan tam olarak bu hataydi. Kuyruk
+        // BILEREK bosaltilmaz - cagiran taraf cihazi yeniden kaydedip
+        // servisi yeniden basalatinca ayni kuyruk tekrar gonderilebilsin.
+        _emitState(
+          ObservationServiceState(
+            status: ObservationServiceStatus.deviceInvalid,
+            pendingSnapshotCount: _queue.length,
+            lastBatchResult: 'Hata: Cihaz kaydi gecersiz (403)',
             errorMessage: e.message,
           ),
         );

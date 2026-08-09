@@ -68,13 +68,18 @@ export class ObservationIngestionService {
 
       const resolvedBeacons = await Promise.all(
         snapshot.beacons.map(async (reading) => {
+          // uuid buyuk harfe normalize edilir - Beacon.uuid artik hep
+          // buyuk harfle yaziliyor (bkz. beacon.service.ts), istemciden
+          // gelen deger (CoreLocation/CoreBluetooth farkli case dondurebilir)
+          // MySQL collation'ina (utf8mb4_unicode_ci, zaten case-insensitive)
+          // guvenmeden burada da acikca eslenir - bkz. Faz 6.2 talimati §1.
           const beacon = await this.prisma.beacon.findUnique({
             where: {
               congressId_uuid_major_minor: {
                 // ActiveCongressGuard bu uc noktada congressId'nin dolu
                 // olmasini garanti eder.
                 congressId: user.congressId as string,
-                uuid: reading.uuid,
+                uuid: reading.uuid.toUpperCase(),
                 major: reading.major,
                 minor: reading.minor,
               },

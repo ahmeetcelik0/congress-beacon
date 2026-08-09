@@ -50,15 +50,24 @@ export async function createCongressAction(
   return { error: null, success: true };
 }
 
-export type MetaFormState = { error: string | null; saved: boolean };
+export type MetaFormState = {
+  error: string | null;
+  saved: boolean;
+  // Faz 6.2: beaconUuid değiştirilmek istendi VE kongrede zaten beacon
+  // kayıtlıydı (backend 409 döndü) — ham backend mesajı (kaç beacon
+  // etkileneceğini zaten anlatır) burada taşınır, panel bunu bir onay
+  // bandında gösterip `migrateExistingBeacons: true` ile yeniden gönderir.
+  beaconUuidConflict: string | null;
+};
 
 // Kongre kartı üzerindeki "tanıtım" alanları (mobil ana ekranda gösterilecek
-// kapak görseli, açıklama, iletişim bilgileri vb.) — kongrenin KİMLİK
-// alanlarından (isim/kod/erişim kodu/beacon UUID, yalnızca oluşturmada
-// girilir) AYRI bir düzenleme formu, aynı `/congresses` sayfasında kart
-// üzerinde açılır/kapanır (bkz. `congress-edit-form.tsx`). Tüm alanlar
-// opsiyonel PATCH alanları - `updateRegistration` ile aynı kural: form HER
-// ZAMAN tüm alanları gönderir, boş string o alanı temizler.
+// kapak görseli, açıklama, iletişim bilgileri vb.) + beaconUuid (KİMLİK
+// alanı, ama artık burada da düzenlenebilir - bkz. Faz 6.2, değişiklik
+// mevcut beacon'lar varsa `migrateExistingBeacons` onayı gerektirir, aşağıya
+// bkz.). Aynı `/congresses` sayfasında kart üzerinde açılır/kapanır (bkz.
+// `congress-card-footer.tsx`). Tüm alanlar opsiyonel PATCH alanları -
+// `updateRegistration` ile aynı kural: form HER ZAMAN tüm alanları
+// gönderir, boş string o alanı temizler (beaconUuid hariç - o zorunlu).
 export async function updateCongressMetaAction(
   congressId: string,
   _prevState: MetaFormState,
@@ -70,6 +79,12 @@ export async function updateCongressMetaAction(
   const websiteUrl = String(formData.get('websiteUrl') ?? '').trim();
   const contactEmail = String(formData.get('contactEmail') ?? '').trim();
   const contactPhone = String(formData.get('contactPhone') ?? '').trim();
+  const beaconUuid = String(formData.get('beaconUuid') ?? '').trim();
+  const migrateExistingBeacons = formData.get('migrateExistingBeacons') === 'true';
+
+  if (!beaconUuid) {
+    return { error: 'Beacon UUID boş bırakılamaz.', saved: false, beaconUuidConflict: null };
+  }
 
   try {
     await api.updateCongress(congressId, {
@@ -79,16 +94,22 @@ export async function updateCongressMetaAction(
       websiteUrl,
       contactEmail,
       contactPhone,
+      beaconUuid,
+      migrateExistingBeacons,
     });
   } catch (error) {
+    if (error instanceof ApiError && error.status === 409) {
+      return { error: null, saved: false, beaconUuidConflict: error.message };
+    }
     return {
       error: error instanceof ApiError ? error.message : 'Kongre bilgileri güncellenemedi.',
       saved: false,
+      beaconUuidConflict: null,
     };
   }
 
   revalidatePath('/congresses');
-  return { error: null, saved: true };
+  return { error: null, saved: true, beaconUuidConflict: null };
 }
 
 export type DeleteCongressResult = { error: string | null };

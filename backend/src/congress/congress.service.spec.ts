@@ -102,24 +102,36 @@ describe('Kongre tarih dogrulamasi - UpdateCongressDto (iki alan birlikte)', () 
 // dogrudan CongressService.update() cagirarak, hafif bir sahte
 // PrismaService ile test ediyoruz (ayni desen:
 // attendance-processing.service.spec.ts'teki fonksiyonel sahte nesne).
-function createFakePrismaForUpdate(current: {
-  startDate: Date | null;
-  endDate: Date | null;
-  entryProbabilityThreshold: number;
-  exitProbabilityThreshold: number;
-}) {
+function createFakePrismaForUpdate(
+  current: {
+    startDate: Date | null;
+    endDate: Date | null;
+    entryProbabilityThreshold: number;
+    exitProbabilityThreshold: number;
+    beaconUuid?: string;
+  },
+  beaconCount = 0,
+) {
+  const congressModel = {
+    findUnique: jest.fn().mockResolvedValue({ id: 'congress-1', ...current }),
+    update: jest.fn().mockImplementation(({ data }: { data: unknown }) =>
+      Promise.resolve({
+        id: 'congress-1',
+        ...current,
+        ...(data as object),
+      }),
+    ),
+    delete: jest.fn(),
+  };
+  const beaconModel = {
+    count: jest.fn().mockResolvedValue(beaconCount),
+    updateMany: jest.fn().mockResolvedValue({ count: beaconCount }),
+  };
+  const tx = { congress: congressModel, beacon: beaconModel };
   return {
-    congress: {
-      findUnique: jest.fn().mockResolvedValue({ id: 'congress-1', ...current }),
-      update: jest.fn().mockImplementation(({ data }: { data: unknown }) =>
-        Promise.resolve({
-          id: 'congress-1',
-          ...current,
-          ...(data as object),
-        }),
-      ),
-      delete: jest.fn(),
-    },
+    congress: congressModel,
+    beacon: beaconModel,
+    $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
   };
 }
 
@@ -247,6 +259,110 @@ describe('CongressService.update() - kapak gorseli degistirilince eski dosya sil
     });
 
     expect(deleteFile).not.toHaveBeenCalled();
+  });
+});
+
+// Faz 6.2: beaconUuid degistirilirken, kongrede zaten beacon varsa sessizce
+// yarim kalan bir durum (bazi beacon'lar eski/bazilari yeni UUID'de)
+// olusmasin diye acik onay zorunlu kilindi (bkz. docs/decisions.md).
+describe('CongressService.update() - beaconUuid degisikligi ve migrateExistingBeacons', () => {
+  const baseCurrentWithUuid = {
+    startDate: null,
+    endDate: null,
+    entryProbabilityThreshold: 60,
+    exitProbabilityThreshold: 40,
+    beaconUuid: 'E2C56DB5-DFFB-48D2-B060-D0F5A71096E0',
+  };
+
+  it('beaconUuid AYNI (farkli case) gonderilirse degisiklik sayilmaz, beacon.count cagrilmaz', async () => {
+    const fakePrisma = createFakePrismaForUpdate(baseCurrentWithUuid, 3);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
+
+    await service.update('congress-1', {
+      beaconUuid: 'e2c56db5-dffb-48d2-b060-d0f5a71096e0',
+    });
+
+    expect(fakePrisma.beacon.count).not.toHaveBeenCalled();
+  });
+
+  it('beaconUuid degisiyor VE kongrede beacon YOKSA onaysiz da basarili olur', async () => {
+    const fakePrisma = createFakePrismaForUpdate(baseCurrentWithUuid, 0);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
+
+    const result = await service.update('congress-1', {
+      beaconUuid: '11111111-1111-1111-1111-111111111111',
+    });
+
+    expect(result).toMatchObject({
+      beaconUuid: '11111111-1111-1111-1111-111111111111',
+    });
+    expect(fakePrisma.beacon.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('beaconUuid degisiyor VE kongrede beacon VARSA, onay olmadan 409 verir', async () => {
+    const fakePrisma = createFakePrismaForUpdate(baseCurrentWithUuid, 5);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
+
+    await expect(
+      service.update('congress-1', {
+        beaconUuid: '11111111-1111-1111-1111-111111111111',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(fakePrisma.congress.update).not.toHaveBeenCalled();
+  });
+
+  it("migrateExistingBeacons: true ile TUM beacon'lar da yeni UUID'ye guncellenir", async () => {
+    const fakePrisma = createFakePrismaForUpdate(baseCurrentWithUuid, 5);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
+
+    const result = await service.update('congress-1', {
+      beaconUuid: '11111111-1111-1111-1111-111111111111',
+      migrateExistingBeacons: true,
+    });
+
+    expect(fakePrisma.beacon.updateMany).toHaveBeenCalledWith({
+      where: { congressId: 'congress-1' },
+      data: { uuid: '11111111-1111-1111-1111-111111111111' },
+    });
+    // congressModel.update sahtesi `data`yi sonuca aynen yayiyor (bkz.
+    // createFakePrismaForUpdate) - donen degerde dogru beaconUuid'nin
+    // gorunmesi, Prisma'ya GERCEKTEN yeni deger gonderildigini kanitlar.
+    expect(result).toMatchObject({
+      beaconUuid: '11111111-1111-1111-1111-111111111111',
+      beaconsUpdated: 5,
+    });
+  });
+
+  it("'migrateExistingBeacons' alani Prisma'nin update data'sina SIZMAZ", async () => {
+    const fakePrisma = createFakePrismaForUpdate(baseCurrentWithUuid, 0);
+    const service = new CongressService(
+      fakePrisma as never,
+      { deleteFile: jest.fn() } as never,
+    );
+
+    // congressModel.update sahtesi `data`yi sonuca aynen yayiyor - eger
+    // `migrateExistingBeacons` Prisma'nin `data` nesnesine sizmis olsaydi,
+    // donen sonucta da bir alan olarak gorunurdu (Prisma gercekte boyle bir
+    // durumda bilinmeyen alan hatasi firlatirdi, ama bu sahte icin en
+    // guvenilir/en az kirilgan dogrulama SONUCTA gorunmemesidir).
+    const result = await service.update('congress-1', {
+      beaconUuid: '11111111-1111-1111-1111-111111111111',
+      migrateExistingBeacons: false,
+    });
+
+    expect(result).not.toHaveProperty('migrateExistingBeacons');
   });
 });
 

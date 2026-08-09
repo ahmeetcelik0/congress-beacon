@@ -2239,13 +2239,25 @@ paths:
               $ref: '#/components/schemas/CongressUpdate'
       responses:
         '200':
-          description: Kongre guncellendi.
+          description: >-
+            Kongre guncellendi. `beaconUuid` degistiyse ve kongrede zaten
+            beacon kayitliysa (bkz. asagidaki 409), yanit `beaconsUpdated`
+            alanini da icerir (kac beacon'in uuid'si de birlikte guncellendi).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Congress'
+                $ref: '#/components/schemas/CongressUpdateResponse'
+        '400':
+          description: Giris/cikis esigi veya tarih tutarsizligi.
         '404':
           description: Kongre bulunamadi.
+        '409':
+          description: >-
+            (Faz 6.2) `beaconUuid` degistirilmek isteniyor ama kongrede
+            zaten beacon kayitli ve `migrateExistingBeacons: true`
+            gonderilmedi. Devam etmek icin ayni istegi `migrateExistingBeacons:
+            true` ile tekrarlayin - bu, kongrenin TUM beacon'larinin
+            uuid'sini de yeni degerle birlikte gunceller (tek transaction).
     delete:
       summary: Kongreyi sil
       operationId: deleteCongress
@@ -2374,9 +2386,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beacon'
+                $ref: '#/components/schemas/BeaconCreateResponse'
         '400':
-          description: Gecersiz istek govdesi.
+          description: >-
+            Gecersiz istek govdesi VEYA (Faz 6.2) `uuid`, kongrenin kendi
+            `beaconUuid`'i ile eslesmiyor (kongre zaten bos olmayan bir
+            beaconUuid'e sahipse). Karsilastirma buyuk/kucuk harf duyarsizdir.
         '404':
           description: congressId ile eslesen kongre bulunamadi.
         '409':
@@ -2440,6 +2455,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Beacon'
+        '400':
+          description: >-
+            (Faz 6.2) `uuid` gonderildi ve kongrenin kendi `beaconUuid`'i ile
+            eslesmiyor. Karsilastirma buyuk/kucuk harf duyarsizdir.
         '404':
           description: Beacon bulunamadi.
         '409':
@@ -3857,6 +3876,9 @@ components:
         - matchedObservations
         - unmatchedObservations
         - matchedRatio
+        - topUnmatchedBeacons
+        - mismatchedBeaconCount
+        - consistencyWarning
       properties:
         totalObservations:
           type: integer
@@ -3867,6 +3889,39 @@ components:
         matchedRatio:
           type: number
           nullable: true
+        topUnmatchedBeacons:
+          type: array
+          description: >-
+            (Faz 6.2) Hicbir Beacon'a eslenemeyen gozlemlerin en cok
+            gorulen 10 UUID/major/minor uclusu, azalan sirada. "Veri geliyor
+            ama hicbir beacon'a baglanmiyor" durumunun sebebini dogrudan
+            gosterir.
+          items:
+            type: object
+            required: [uuid, major, minor, count]
+            properties:
+              uuid:
+                type: string
+                format: uuid
+              major:
+                type: integer
+              minor:
+                type: integer
+              count:
+                type: integer
+        mismatchedBeaconCount:
+          type: integer
+          description: >-
+            (Faz 6.2) Bu kongrenin kendi beaconUuid'i ile eslesmeyen Beacon
+            kaydi sayisi (normalde 0 - beacon.service.ts artik yeni kayitlarda
+            bunu engelliyor, ama elle yazilmis eski veri hala boyle olabilir).
+        consistencyWarning:
+          type: string
+          nullable: true
+          description: >-
+            (Faz 6.2) `mismatchedBeaconCount > 0` ise veya eslesmeyen gozlem
+            orani yuksekse (>= %20, en az 20 gozlemlik ornekte) Turkce, panelde
+            dogrudan gosterilebilir bir uyari metni. Her sey tutarliysa null.
 
     BeaconHealthItem:
       type: object
@@ -5067,6 +5122,26 @@ components:
           type: number
           minimum: 0
           maximum: 60
+        migrateExistingBeacons:
+          type: boolean
+          description: >-
+            (Faz 6.2) Yalnizca `beaconUuid` GERCEKTEN degisiyorsa VE kongrede
+            zaten beacon kayitliysa anlamli. `true` gonderilmezse ve beacon
+            varsa istek 409 doner (bkz. /congresses/{id} PATCH). `true` ise
+            kongrenin TUM beacon'larinin uuid'si de yeni degerle birlikte,
+            tek transaction'da guncellenir.
+
+    CongressUpdateResponse:
+      description: '`Congress` + (yalnizca beacon migrasyonu tetiklendiyse) `beaconsUpdated`.'
+      allOf:
+        - $ref: '#/components/schemas/Congress'
+        - type: object
+          properties:
+            beaconsUpdated:
+              type: integer
+              description: >-
+                migrateExistingBeacons:true ile kac beacon'in uuid'si de
+                birlikte guncellendi. Migrasyon tetiklenmediyse alan yoktur.
 
     Hall:
       type: object
@@ -5170,7 +5245,11 @@ components:
         uuid:
           type: string
           format: uuid
-          description: Fiziksel beacon cihazinin iBeacon UUID'i.
+          description: >-
+            Fiziksel beacon cihazinin iBeacon UUID'i - HER ZAMAN buyuk harfle
+            depolanir (Faz 6.2), ve kongrenin kendi `beaconUuid`'i ile ayni
+            olmak ZORUNDADIR (bkz. docs/decisions.md "Beacon Standardi" -
+            "ayni kongredeki tum beacon cihazlari ortak UUID kullanir").
         major:
           type: integer
           minimum: 0
@@ -5188,6 +5267,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    BeaconCreateResponse:
+      description: >-
+        `Beacon` + kongrenin beaconUuid'inin bu istekle otomatik
+        benimsenip benimsenmedigi (yalnizca kongreye eklenen ILK beacon icin,
+        kongrenin beaconUuid'i o ana kadar bos oldugunda gerceklesir).
+      allOf:
+        - $ref: '#/components/schemas/Beacon'
+        - type: object
+          required:
+            - congressBeaconUuidAutoSet
+          properties:
+            congressBeaconUuidAutoSet:
+              type: boolean
 
     BeaconCreate:
       type: object

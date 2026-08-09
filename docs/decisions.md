@@ -743,3 +743,104 @@ bir origin'den (production'da `https://beacon.photofocustr.com/api`)
 calisacagi icin bu donusum TEK bir yerde (`common/absolute-url.ts`,
 `APP_PUBLIC_URL` env degiskeni) yapilir - her mobil endpoint kendi
 gorsel alanini bu fonksiyondan gecirir, elle prefix eklemez.
+
+## Faz 6.2 — Beacon UUID Tutarlılığı ve Cihaz Kaydı Dayanıklılığı
+
+Faz 6.1'in gerçek cihazda yapılan testinde iki yapısal boşluk ortaya çıktı.
+Birincisi: "Beacon Standardı"ndaki "aynı kongredeki tüm beacon cihazları
+ortak UUID kullanır" kuralı kod tarafında hiçbir yerde **zorlanmıyordu** -
+panelden yanlış/farklı UUID'li bir beacon eklenirse, o beacon'ın gözlemleri
+sonsuza kadar `beaconId: null` ile (hiçbir salona bağlanamadan) kaydediliyordu,
+hiçbir hata/uyarı üretmeden. İkincisi: mobil taraf, cihazının backend'den
+silindiği/başka bir kullanıcıya taşındığı durumdan (`403 Bu cihaz bu
+kullaniciya ait degil`) **hiçbir şekilde kurtulamıyordu** - aynı geçersiz
+`deviceId` ile sonsuza dek deniyor, hiç veri göndermiyordu. İkinci senaryo
+Faz 6.1'in kendisinde canlı olarak yaşanmış ve teşhisi 6 dakikadan uzun
+sürmüştü.
+
+### Neden UUID tutarlılığı TEK bir kaynaktan (Congress.beaconUuid) zorlanıyor
+
+Doğrulamayı her beacon'ın kendi UUID'sine değil, `Congress.beaconUuid`ye
+göre yapmak (ve bunu HEM `create` HEM `update`de tutarlı uygulamak)
+kasıtlı: "doğru UUID" kavramının kongre başına TEK bir yerde tanımlı
+olması gerekiyor, aksi halde iki beacon farklı ama "geçerli görünen"
+UUID'lerle eklenip ikisi de birbirinden habersiz kalabilirdi. Kongrenin
+`beaconUuid`si boşsa (henüz hiç beacon eklenmemiş yeni kongre) ilk
+beacon'ın UUID'si otomatik benimsenir - kullanıcıdan kongre oluştururken
+UUID'yi tahmin etmesini istemek yerine, saha ekibi ilk beacon'ı kurup
+kaydettiğinde standart kendiliğinden oluşur. Karşılaştırma ve yazma HER
+YERDE büyük harfe normalize edilir (`normalizeUuid()`, hem
+`beacon.service.ts` hem `congress.service.ts`de aynı fonksiyon) - MySQL
+kolon collation'ı (`utf8mb4_unicode_ci`, `SHOW FULL COLUMNS` ile
+doğrulandı) SQL sorgularında zaten büyük/küçük harf duyarsız, ama JS
+tarafındaki karşılaştırmalar (DTO doğrulama, servis içi eşitlik
+kontrolleri) bundan **yararlanamaz** - açık normalize olmadan JS'te
+`"e2c5..."` ile `"E2C5..."` farklı string'lerdir.
+
+### Neden mevcut veri tutarsızlığı için bir SQL denetimi çalıştırıldı ama otomatik düzeltme YAZILMADI
+
+Bu kural geriye dönük olarak eklendiğinden, halihazırda `Beacon.uuid !=
+Congress.beaconUuid` olan kayıtlar olabilirdi. Tek seferlik bir SQL
+sorgusuyla bu denetlendi (sonuç: tutarsızlık bulunmadı) ve kod içine bir
+otomatik-düzeltme migration'ı YAZILMADI - bir üretim veritabanındaki
+kayıtları sessizce değiştiren kod, veri denetiminin sonucu "bulgu yok"
+olsa bile riskli bir kalıp kurar (ileride biri bu kodu farklı bir
+veritabanına karşı çalıştırırsa ne olacağını kontrol edemez). Böyle bir
+tutarsızlık gerçekten bulunsaydı, düzeltme panelden (artık `update()`
+doğrulaması + `migrateExistingBeacons` akışıyla) elle yapılırdı.
+
+### Neden `migrateExistingBeacons` ayrı bir onay adımı, sessiz otomatik migrasyon değil
+
+`Congress.beaconUuid` değişip kongrede zaten beacon'lar kayıtlıyken varsayılan
+davranış **409** döndürmektir (kaç beacon etkileneceğini söyleyen bir
+mesajla) - sessizce ya sadece kongreyi güncelleyip beacon'ları eski
+UUID'de bırakmak (BÜTÜN mevcut gözlem eşleşmesini kırar, Faz 6.1'in canlı
+yaşadığı sorunun ta kendisi) ya da sessizce hepsini birden taşımak
+(yetkilinin fark etmediği, saha ekibinin fiziksel cihazlarını da
+GÜNCELLEMESİ gereken bir değişikliği gizler) ikisi de kabul edilemez.
+Açık `migrateExistingBeacons: true` bayrağı onayı görünür kılar; kabul
+edildiğinde kongre + TÜM beacon satırları TEK bir `$transaction` içinde
+güncellenir - yarısı eski/yarısı yeni UUID'de kalan tutarsız bir ara durum
+yapısal olarak imkansız hale gelir (biri başarısız olursa ikisi de geri
+alınır).
+
+### Neden cihaz kurtarma `BeaconObservationService` İÇİNDE değil, çağıran katmanda (`ObservationLifecycleNotifier`)
+
+`BeaconObservationService`in ranging/duty-cycle/yaşam döngüsü mantığı Faz
+6.1'de gerçek cihazda saatlerce doğrulanmış, dokunulmaması gereken kırılgan
+bir yüzey. Bu servise eklenen TEK şey, 403 durumunda mevcut
+`ObservationServiceState` akışına yeni bir `deviceInvalid` durumu
+yaymaktan ibaret - bir **çıkış noktası**, karar mantığı değil. Cihazı
+silme, yeniden `POST /devices/register` çağırma, bekleyen gözlem kuyruğunu
+yeni servis örneğine taşıma ve başarısız kurtarma denemelerinde
+geri-basınç (backoff) uygulama gibi TÜM karar mantığı, servisin kendi
+akışını dinleyen orkestratör katmanında (`ObservationLifecycleNotifier`)
+yaşıyor. Bunun nedeni hem kapsam disiplini (Faz 6.2'nin talimatı ranging
+mantığına dokunmayı açıkça yasaklıyordu) hem de sorumluluk ayrımı:
+`BeaconObservationService`in işi "gözlemle ve gönder", kimin/ne zaman
+yeniden kaydolacağına karar vermek uygulama-seviyesi bir orkestrasyon
+kararı - servisin kendisi bunu bilmek zorunda değil, sadece
+gerçekleştiğinde haber vermek zorunda. Kurtarma sırasında ESKİ servis
+örneğinin bekleyen kuyruğu (`pendingSnapshots`) yeni örneğin
+`initialQueue`sine aktarılır - böylece bir cihaz geçersizleşmesi, henüz
+gönderilmemiş gözlemlerin sessizce kaybolmasına yol açmaz. Ardışık 3
+başarısız kurtarma denemesinden sonra 60 saniyelik bir soğuma uygulanır -
+backend tamamen erişilemez durumdayken kurtarmanın saniyede bir deneyerek
+hem pili hem sunucuyu yormaması için.
+
+### Faz 6.2 sırasında gerçek cihazda doğrulanan senaryo
+
+Backend'deki bir `Device` satırının `userId`si başka bir kullanıcıya
+taşınarak (gerçek bir "cihaz artık geçersiz" durumunu üretmenin en temiz
+yolu - doğrudan silmek `ObservationBatch_deviceId_fkey` (`ON DELETE
+RESTRICT`) yüzünden mümkün değildi, ama backend kodu açısından iki durum
+(`!device` ve `device.userId !== user.id`) AYNI 403'e çıkıyor) uçtan uca
+kurtarma iki kez bağımsız olarak tetiklendi ve ikisinde de: 403 yakalandı
+→ `deviceInvalid` durumu yayıldı → eski `deviceId` silinip yeniden kayıt
+yapıldı → bekleyen gözlemler yeni servise taşındı → veri akışı KESİNTİSİZ
+devam etti (yüzlerce yeni `BeaconObservation` satırı, doğru kullanıcı
+altında, gerçek DB sorgularıyla doğrulandı). İkinci tetiklenme, isteğe
+bağlı olarak değil, izleme sırasında backend'in geçici olarak
+kapatılmasıyla kendiliğinden oluştu - bu da kurtarma mekanizmasının hem
+"cihaz geçersiz" hem "backend tamamen erişilemez" senaryolarında sağlam
+çalıştığını gösterdi.

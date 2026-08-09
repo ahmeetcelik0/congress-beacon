@@ -53,6 +53,10 @@ export class CongressService {
 
   async update(id: string, dto: UpdateCongressDto) {
     const current = await this.findOne(id);
+    // `migrateExistingBeacons` bir Congress alani DEGIL - Prisma'nin
+    // `data` nesnesine bilinmeyen alan olarak sizmasin diye ayristirilir
+    // (bkz. asagidaki beaconUuid mantigi, Faz 6.2 talimati §1).
+    const { migrateExistingBeacons, ...updateFields } = dto;
 
     // DTO seviyesindeki kural yalnizca iki alan da ayni istekte gonderilirse
     // calisabilir. Kismi bir PATCH kurali atlamasin diye, kayitli degerlerle
@@ -96,13 +100,58 @@ export class CongressService {
       await this.uploads.deleteFile(current.coverImageUrl);
     }
 
+    // beaconUuid GERCEKTEN degisiyorsa (normalize edilmis karsilastirma -
+    // bkz. beacon.service.ts normalizeUuid) ve kongrede zaten beacon
+    // kayitliysa, sessizce yarisi eski/yarisi yeni UUID'de kalmasin diye
+    // acik onay istenir (bkz. Faz 6.2 talimati §1).
+    const normalizedNewUuid = dto.beaconUuid?.toUpperCase();
+    const beaconUuidChanging =
+      normalizedNewUuid !== undefined &&
+      normalizedNewUuid !== current.beaconUuid.toUpperCase();
+
+    let affectedBeaconCount = 0;
+    if (beaconUuidChanging) {
+      affectedBeaconCount = await this.prisma.beacon.count({
+        where: { congressId: id },
+      });
+      if (affectedBeaconCount > 0 && !migrateExistingBeacons) {
+        throw new ConflictException(
+          `Bu kongrede ${affectedBeaconCount} beacon kayitli olusu icin ` +
+            `beaconUuid degistirilemiyor. Devam etmek icin ` +
+            `migrateExistingBeacons: true gonderin - bu, kongrenin ` +
+            `TUM beacon'larinin uuid'sini de yeni degerle birlikte gunceller.`,
+        );
+      }
+    }
+
+    const updateData = {
+      ...updateFields,
+      beaconUuid: normalizedNewUuid,
+      startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+      endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+    };
+
+    // Beacon migrasyonu gerekiyorsa Congress + tum Beacon satirlari TEK
+    // transaction'da guncellenir - biri basarisiz olursa digeri de geri
+    // alinir, tutarsiz bir ara durum (bazi beacon'lar eski, bazilari yeni
+    // UUID'de) asla olusmaz.
+    if (beaconUuidChanging && affectedBeaconCount > 0) {
+      return this.prisma.$transaction(async (tx) => {
+        await tx.beacon.updateMany({
+          where: { congressId: id },
+          data: { uuid: normalizedNewUuid },
+        });
+        const updated = await tx.congress.update({
+          where: { id },
+          data: updateData,
+        });
+        return { ...updated, beaconsUpdated: affectedBeaconCount };
+      });
+    }
+
     return this.prisma.congress.update({
       where: { id },
-      data: {
-        ...dto,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-      },
+      data: updateData,
     });
   }
 

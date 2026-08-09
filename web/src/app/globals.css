@@ -546,6 +546,26 @@ body::after {
   font-size: 0.85rem;
 }
 
+.panel-warning {
+  color: var(--status-warning);
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.beacon-uuid-mismatch-badge {
+  margin-left: 0.5rem;
+}
+
+.reports-consistency-warning {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-dim);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
 /* ===== Tablo ===== */
 .panel-table {
   width: 100%;

@@ -392,3 +392,160 @@ kod değişikliği, bu oturumun kapsamı dışında bilerek bırakıldı.
 - `flutter_beacon: ^0.5.1` paketi 4 yıldır güncellenmiyor (iOS 17/18'den
   önce) - bu oturumda bir soruna yol açtığı KANITLANMADI (asıl sorun
   deviceId'ydi), ama uzun vadede izlenmesi gereken bir risk faktörü.
+
+---
+
+## 2026-08-09 (devam 2) — Faz 6.2: Beacon UUID Tutarlılığı ve Cihaz Kaydı Dayanıklılığı
+
+### Bağlam
+
+Faz 6.1'in kapanışında iki takip görevi bırakılmıştı: (1) "panelden beacon
+eklendiğinde kongrenin `beaconUuid`'sinin otomatik güncellenmesi/doğrulanması"
+(yukarıdaki "Panel/veri gözlemi" bölümü) ve (2) "`_trySendBatch`'in 403
+'cihaz sahiplik' hatasını da özel olarak ele alıp cihazı yeniden kaydetmeyi
+tetiklemesi" önerisi. Bu tur ikisini de birden ele aldı; branch:
+`fix/beacon-tutarlilik` (taban: Faz 6.1'in branch'i).
+
+### Backend değişiklikleri
+
+- `beacon.service.ts` `create()`/`update()`: `dto.uuid` artık kongrenin
+  `beaconUuid`siyle (büyük/küçük harf duyarsız) karşılaştırılıyor; uyuşmuyorsa
+  `400` ("Beacon UUID'si kongrenin UUID'siyle eşleşmiyor"). Kongrenin
+  `beaconUuid`si boşsa (yeni kongrenin ilk beacon'ı) otomatik benimseniyor,
+  yanıtta `congressBeaconUuidAutoSet: true` olarak işaretleniyor.
+- `congress.service.ts` `update()`: `beaconUuid` değişip kongrede zaten
+  beacon varsa varsayılan `409`; `migrateExistingBeacons: true` ile açıkça
+  onaylanırsa kongre + TÜM beacon'lar tek transaction'da güncelleniyor.
+- `observation-ingestion.service.ts`: beacon eşleştirme sorgusu artık UUID'yi
+  büyük harfe normalize ediyor (savunma amaçlı - MySQL collation zaten
+  büyük/küçük harf duyarsız olduğu doğrulandı, ama JS tarafı normalize
+  olmadan buna güvenemez).
+- `reports.service.ts` `getDataQuality()`: en çok görülen 10 eşleşmeyen
+  UUID/major/minor kırılımı + kongre-seviyesi tutarlılık uyarısı eklendi.
+- Mevcut veride `Beacon.uuid != Congress.beaconUuid` taraması yapıldı:
+  **tutarsızlık bulunmadı** (otomatik düzeltme kodu yazılmadı, bkz.
+  `docs/decisions.md` "Faz 6.2" bölümü).
+- Test: 320/320 geçti (34 suite, 3 yeni spec dosyası), `npm run build`/
+  `npm run lint` temiz. `shared/openapi.yaml` güncellendi.
+
+### Mobil değişiklikleri
+
+- `beacon_observation_service.dart` (yalnızca izin verilen "çıkış noktası"
+  kapsamında dokunuldu, ranging/duty-cycle mantığı DEĞİŞMEDİ):
+  `ObservationServiceStatus`e `deviceInvalid` eklendi, 403 durumunda bu
+  durum yayılıyor. Kurtarma sırasında bekleyen kuyruğun taşınabilmesi için
+  constructor'a `initialQueue` parametresi ve salt-okunur `pendingSnapshots`
+  getter'ı eklendi (ikisi de additive, karar mantığına dokunmuyor).
+- `observation_lifecycle_provider.dart` (orkestratör katmanı, korumalı
+  dosya DEĞİL): `deviceInvalid` durumunu dinleyip kendini onaran akış
+  eklendi - eski `deviceId` silinir, `POST /devices/register` ile yeniden
+  kaydolunur, bekleyen kuyruk yeni servis örneğine aktarılır, servis yeni
+  `deviceId` ile yeniden başlatılır. Ardışık 3 başarısız denemeden sonra
+  60 saniyelik soğuma (backoff) uygulanıyor - mutex (`_isRecoveringDevice`)
+  ile aynı anda birden fazla kurtarma denemesi başlamıyor.
+- `flutter analyze`: "No issues found!", `dart format`: temiz,
+  `flutter test`: 17/17 geçti.
+
+### Gerçek cihazda doğrulanan (bu oturumun en kritik testi)
+
+Backend'deki bir `Device` satırının `userId`si elle başka bir kullanıcıya
+taşınarak ("cihaz artık geçersiz" durumu üretmenin en temiz yolu -
+doğrudan `DELETE` `ObservationBatch_deviceId_fkey` (`ON DELETE RESTRICT`)
+yüzünden mümkün değildi, ama backend kodu açısından `!device` ile
+`device.userId !== user.id` AYNI 403'e çıkıyor, yani aynı kod yolunu test
+ediyor) uygulama ÇALIŞIRKEN 403 tetiklendi. Log kanıtı:
+
+```
+[BeaconObservationService] batch gonderim hatasi statusCode=403 ...
+[BeaconObservationService] state=deviceInvalid ... lastBatch=Hata: Cihaz kaydi gecersiz (403)
+[ObservationLifecycle] KURTARMA basliyor (deneme 1/3), 3 bekleyen gozlemle
+[ObservationLifecycle] eski deviceId silindi, yeniden kayit yapiliyor...
+[ObservationLifecycle] yeni deviceId ile servis yeniden baslatildi
+[BeaconObservationService] state=active pending=0 lastBatch=Accepted: 3, Dup: 0, Rej: 0 error=null
+```
+
+Veritabanı doğrulaması: yeni `Device` satırı (`0bffcbfc-...`) doğru
+kullanıcı (`faz1-test`) altında oluştu, kurtarma sonrası **388 yeni
+`BeaconObservation`** bu cihaz altında kesintisiz kaydedildi. Bekleyen 3
+gözlem (kurtarma anında kuyrukta olan) **kaybolmadı** - kurtarma sonrası
+ilk batch'te `Accepted: 3` olarak dahil edildi.
+
+**İkinci, bağımsız bir kurtarma daha kendiliğinden oluştu:** izleme
+sırasında izole test backend'i (port 3002) yaklaşık 2 dakika kapatılıp
+tekrar açıldığında, aynı mekanizma tekrar tetiklendi - eski `deviceId` ile
+yapılan ilk denemede backend'in artık 403 vermesi üzerine (araya
+reassignment de girmişti) YENİ bir cihaz (`5bb9527a-...`) otomatik
+kaydoldu ve veri akışı kesintisiz devam etti (bu ikinci cihaz altında da
+655 gözlem doğrulandı). Bu, mekanizmanın hem "cihaz geçersiz" hem "backend
+tamamen erişilemez ve sonra geri gelir" senaryolarında sağlam çalıştığını
+gösteriyor - ikinci senaryoda ayrıca uygulamanın backend tamamen
+erişilemezken (403 değil, bağlantı hatası) çökmediği/sonsuz döngüye
+girmediği de gözlemlendi.
+
+Ardışık 3 başarısız kurtarma denemesi sonrası soğuma davranışı CANLI cihazda
+AYRICA tetiklenmedi (her iki gerçek senaryoda da backend erişilebilir hale
+gelir gelmez İLK denemede kurtarma başarılı oldu) - bu spesifik dal
+(`_maxConsecutiveDeviceRecoveryFailures`/`_deviceRecoveryBackoff`) yalnızca
+kod incelemesiyle doğrulandı: sayaç/zaman damgası karşılaştırması, harici
+bir bağımlılığı olmayan saf/deterministik Dart mantığı. Canlı olarak
+yalnızca `POST /devices/register`i defalarca başarısız yapacak izole bir
+arıza enjeksiyonu (backend'i tamamen kapatmak yeterli değil - o zaman 403
+hiç alınamıyor, `deviceInvalid`e hiç girilmiyor) ile test edilebilirdi; bu,
+mevcut araçlarla orantısız bir mühendislik çabası gerektirdiği için
+bilinçli olarak atlandı.
+
+### Panel değişiklikleri
+
+- Beacon oluşturma formu artık kongrenin `beaconUuid`sinden ön dolduruluyor,
+  uyuşmazlıkta anlık istemci-taraflı uyarı gösteriyor.
+- Beacon listesinde UUID uyuşmayan satırlar kırmızı rozetle işaretleniyor.
+- Kongre kartı düzenleme panelinde `beaconUuid` artık düzenlenebilir; kongrede
+  beacon varsa 409 → onay bandı → "Onayla ve taşı" ile
+  `migrateExistingBeacons: true` akışı uygulandı.
+- Raporlar sayfasında tutarlılık uyarısı + eşleşmeyen gözlem kırılımı tablosu
+  eklendi.
+- `npm run lint`/`npm run build` temiz.
+
+### `frontend-ui-reviewer` denetimi ve gerçek tarayıcıda bulunan kritik hata
+
+`frontend-ui-reviewer` ajanı kimlik doğrulama gerektiren sayfalara giremedi
+(ortamın güvenlik sınıflandırıcısı admin girişini engelledi) ama kod
+incelemesiyle 3 P1 bulgu tespit edip düzeltti: (1) `beacons/page.tsx`da
+`BeaconForm`a `key={congressId}` eksikti - kongre değiştirildiğinde UUID
+ön-dolgusu eski kongrede takılı kalıyordu; (2) `congress-card-footer.tsx`de
+yeni "Beacon UUID" alanı 2 sütunlu grid'de boş bir hücre bırakıyordu, tam
+genişliğe alındı; (3) yeni zorunlu alan (*) ipucu metninde açıklanmıyordu.
+
+Ardından gerçek admin oturumuyla (tarayıcıda zaten kayıtlı bir session
+vardı, kimlik bilgisi girilmedi/üretilmedi) uçtan uca tarayıcı testi
+yapıldı - yeni kongre oluşturma, beacon UUID ön-dolgusu, istemci-taraflı
+uyumsuzluk uyarısı, backend 400'ü, ve raporlar sayfasındaki eşleşmeyen
+gözlem kırılımı (gerçek "Test" kongresi verisiyle: major=0/minor=4 ve
+minor=5 için panelde kayıtlı olmayan 1955/1959 gözlem tespit edildi -
+gerçek, faydalı bir veri kalitesi bulgusu) hepsi doğru çalıştı.
+
+**409 → migrate akışının canlı testinde gerçek bir hata bulundu ve
+düzeltildi:** React'ın `<form action={sunucuEylemi}>` mekanizması, HER
+gönderimden sonra (başarılı VEYA başarısız fark etmez) uncontrolled form
+alanlarını `defaultValue`sine sıfırlıyor. `beaconUuid` alanı uncontrolled
+olduğu için, ilk (mismatch) gönderim 409 döndükten hemen sonra alan
+SESSİZCE kongrenin ESKİ UUID'sine geri dönüyordu - kullanıcı "Onayla ve
+taşı"ya bassa bile, `requestSubmit()` DOM'daki (artık eski) değeri
+gönderiyor, `beaconUuidChanging` `false` çıkıyor ve migrasyon SESSİZCE
+no-op oluyordu (ne kongre ne beacon güncelleniyordu, kullanıcıya "Kaydedildi"
+diye YANLIŞ bir başarı mesajı gösteriliyordu). Canlı DB sorgusuyla
+doğrulandı: ilk denemede congress/beacon UUID'si değişmemiş çıktı. Düzeltme:
+alan controlled yapıldı (`useState` + `value`/`onChange`) - React state
+form-reset'ten etkilenmiyor. Düzeltme sonrası aynı senaryo tekrar canlı
+test edildi: DB'de hem `Congress.beaconUuid` hem `Beacon.uuid` doğru
+şekilde yeni değere güncellendi. Bu, "kod incelemesi + statik test yeterli"
+sanılan bir akışın gerçek bir React davranışı yüzünden sessizce bozuk
+olduğu, yalnızca uçtan uca canlı testle yakalanabilecek bir hataydı.
+
+1440×900/1024×768/390×844 genişliklerinde görsel kontrol yapıldı, konsolda
+hata/uyarı bulunmadı. Test için oluşturulan geçici kongre ("Faz62 Test")
+ve beacon'ı doğrulama sonunda panelden silindi.
+
+### Sonuçları nereye bildir
+
+Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek.

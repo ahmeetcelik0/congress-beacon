@@ -36,6 +36,7 @@ final bootstrapRepositoryProvider = Provider<BootstrapRepository>((ref) {
 ///   yalnızca uygulama kökünde (`main.dart`) bir kez izlenir ve kalıcı kalır.
 class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
   String? _startedForCongressId;
+  String? _beaconUuid;
 
   // `state` (Riverpod'un izlenebilir alani) ile AYNI degeri tasiyan duz bir
   // Dart alani - `onDispose` icinde `state`i OKUYAMAYIZ (Riverpod 3.x, yasam
@@ -44,6 +45,15 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
   // widget testinde TAM OLARAK bu sekilde yakalandi - bkz. test/widget_test.dart.
   BeaconObservationService? _service;
 
+  // Faz 6.2: servisin `deviceInvalid` durumuna gectigini yakalamak icin
+  // (bkz. asagidaki _onServiceState / _recoverFromInvalidDevice).
+  StreamSubscription<ObservationServiceState>? _serviceStateSubscription;
+  bool _isRecoveringDevice = false;
+  int _consecutiveDeviceRecoveryFailures = 0;
+  DateTime? _deviceRecoveryBackoffUntil;
+  static const int _maxConsecutiveDeviceRecoveryFailures = 3;
+  static const Duration _deviceRecoveryBackoff = Duration(seconds: 60);
+
   @override
   BeaconObservationService? build() {
     ref.listen<AsyncValue<MeResponse?>>(authSessionProvider, (previous, next) {
@@ -51,6 +61,7 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     }, fireImmediately: true);
 
     ref.onDispose(() {
+      unawaited(_serviceStateSubscription?.cancel());
       final current = _service;
       if (current != null) {
         unawaited(current.stop());
@@ -123,8 +134,11 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
       appVersion: packageInfo.version,
     );
     _startedForCongressId = activeCongressId;
+    _beaconUuid = beaconUuid;
     _service = service;
     state = service;
+    _serviceStateSubscription?.cancel();
+    _serviceStateSubscription = service.stateStream.listen(_onServiceState);
     if (kDebugMode) {
       debugPrint(
         '[ObservationLifecycle] START congressId=$activeCongressId '
@@ -133,6 +147,109 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
       );
     }
     await service.start();
+  }
+
+  // Faz 6.2: backend'in "bu cihaz bu kullaniciya ait degil" (403) hatasini
+  // servis KENDI KARAR VERMEDEN dogrudan bildirir (bkz.
+  // beacon_observation_service.dart ObservationServiceStatus.deviceInvalid)
+  // - kurtarma eylemi (yeniden kayit) BURADA, cagiran katmanda yapilir.
+  void _onServiceState(ObservationServiceState serviceState) {
+    if (serviceState.status != ObservationServiceStatus.deviceInvalid) return;
+    unawaited(_recoverFromInvalidDevice());
+  }
+
+  Future<void> _recoverFromInvalidDevice() async {
+    // Ayni anda birden fazla kurtarma denemesi calismasin (deviceInvalid
+    // durumu, cozulene kadar HER basarisiz batch denemesinde tekrar
+    // yayinlanir - bkz. _trySendBatch).
+    if (_isRecoveringDevice) return;
+
+    final backoffUntil = _deviceRecoveryBackoffUntil;
+    if (backoffUntil != null && DateTime.now().isBefore(backoffUntil)) {
+      return; // hala bekleme suresinde - saniyede bir deneme YAPILMAZ.
+    }
+
+    final failingService = _service;
+    final congressId = _startedForCongressId;
+    final beaconUuid = _beaconUuid;
+    if (failingService == null || congressId == null || beaconUuid == null) {
+      return;
+    }
+
+    _isRecoveringDevice = true;
+    try {
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationLifecycle] KURTARMA - cihaz kaydi gecersiz (403), '
+          'yeniden kaydolunuyor (deneme '
+          '${_consecutiveDeviceRecoveryFailures + 1}/'
+          '$_maxConsecutiveDeviceRecoveryFailures)',
+        );
+      }
+
+      // Henuz gonderilmemis kuyruk, ESKI servis atilmadan once alinir -
+      // aksi halde bu gozlemler sessizce kaybolurdu.
+      final pendingSnapshots = failingService.pendingSnapshots;
+
+      await ref.read(secureStorageProvider).deleteDeviceId();
+      final newDeviceId = await _registerDevice();
+
+      if (newDeviceId == null) {
+        _consecutiveDeviceRecoveryFailures++;
+        if (_consecutiveDeviceRecoveryFailures >=
+            _maxConsecutiveDeviceRecoveryFailures) {
+          _deviceRecoveryBackoffUntil = DateTime.now().add(
+            _deviceRecoveryBackoff,
+          );
+          if (kDebugMode) {
+            debugPrint(
+              '[ObservationLifecycle] KURTARMA DURDURULDU - '
+              '$_consecutiveDeviceRecoveryFailures ardisik basarisiz '
+              'deneme, $_deviceRecoveryBackoff sonra tekrar denenecek.',
+            );
+          }
+        } else if (kDebugMode) {
+          debugPrint(
+            '[ObservationLifecycle] KURTARMA BASARISIZ - cihaz yeniden '
+            'kaydedilemedi (ag hatasi olabilir), bir sonraki basarisiz '
+            'gonderimde tekrar denenecek.',
+          );
+        }
+        return;
+      }
+
+      await _stopService();
+
+      final packageInfo = await ref.read(packageInfoProvider.future);
+      final newService = BeaconObservationService(
+        deviceId: newDeviceId,
+        beaconUuid: beaconUuid,
+        apiClient: ref.read(apiClientProvider),
+        appVersion: packageInfo.version,
+        initialQueue: pendingSnapshots,
+      );
+      _startedForCongressId = congressId;
+      _beaconUuid = beaconUuid;
+      _service = newService;
+      state = newService;
+      _serviceStateSubscription?.cancel();
+      _serviceStateSubscription = newService.stateStream.listen(
+        _onServiceState,
+      );
+      _consecutiveDeviceRecoveryFailures = 0;
+      _deviceRecoveryBackoffUntil = null;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationLifecycle] KURTARMA BASARILI - yeni '
+          'deviceId=$newDeviceId ile ${pendingSnapshots.length} bekleyen '
+          'gozlemle yeniden baslatildi.',
+        );
+      }
+      await newService.start();
+    } finally {
+      _isRecoveringDevice = false;
+    }
   }
 
   /// Kongrenin beacon UUID'sini `/mobile/bootstrap`'tan alir. Basarili
@@ -185,8 +302,11 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     final current = _service;
     if (current == null) return;
     final previousCongressId = _startedForCongressId;
+    await _serviceStateSubscription?.cancel();
+    _serviceStateSubscription = null;
     _service = null;
     _startedForCongressId = null;
+    _beaconUuid = null;
     state = null;
     if (kDebugMode) {
       debugPrint(

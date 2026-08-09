@@ -66,12 +66,47 @@ export default async function ReportsPage({
       {congressId && dataQuality && (
         <>
           <h2>Veri Kalitesi</h2>
+          {dataQuality.consistencyWarning && (
+            <p className="reports-consistency-warning" role="alert">
+              {dataQuality.consistencyWarning}
+            </p>
+          )}
           <div className="ui-metric-grid">
             <MetricCard label="Toplam gözlem" value={dataQuality.totalObservations} />
             <MetricCard label="Eşleşen" value={dataQuality.matchedObservations} />
             <MetricCard label="Eşleşmeyen" value={dataQuality.unmatchedObservations} />
             <MetricCard label="Eşleşme oranı" value={formatPercent(dataQuality.matchedRatio)} />
+            <MetricCard
+              label="Kongre UUID'siyle uyuşmayan beacon"
+              value={dataQuality.mismatchedBeaconCount}
+            />
           </div>
+
+          {dataQuality.topUnmatchedBeacons.length > 0 && (
+            <>
+              <h2>Eşleşmeyen Gözlemler (en çok görülen 10)</h2>
+              <table className="panel-table">
+                <thead>
+                  <tr>
+                    <th>UUID</th>
+                    <th>Major</th>
+                    <th>Minor</th>
+                    <th>Gözlem Sayısı</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dataQuality.topUnmatchedBeacons.map((item) => (
+                    <tr key={`${item.uuid}-${item.major}-${item.minor}`}>
+                      <td>{item.uuid}</td>
+                      <td>{item.major}</td>
+                      <td>{item.minor}</td>
+                      <td>{item.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
 
           <h2>Beacon Sağlığı</h2>
           <table className="panel-table">
