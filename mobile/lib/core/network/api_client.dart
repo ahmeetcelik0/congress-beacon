@@ -36,6 +36,16 @@ class ApiGetResult {
   final bool notModified;
 }
 
+/// `_getHeaders`in ic sonucu - `usedToken`, isteğe eklenen (varsa) token
+/// degeridir; 401 geldiginde bu token'in HALA guncel olup olmadigini
+/// kontrol edebilmek icin `_processResponse`e tasinir (bkz. asagisi).
+class _PreparedHeaders {
+  const _PreparedHeaders(this.headers, this.usedToken);
+
+  final Map<String, String> headers;
+  final String? usedToken;
+}
+
 class ApiClient {
   ApiClient({http.Client? httpClient, SecureStorageService? storageService})
     : _client = httpClient ?? http.Client(),
@@ -52,7 +62,7 @@ class ApiClient {
   /// talimati §2).
   void Function()? onUnauthorized;
 
-  Future<Map<String, String>> _getHeaders({
+  Future<_PreparedHeaders> _getHeaders({
     bool requiresAuth = false,
     String? etag,
   }) async {
@@ -61,10 +71,11 @@ class ApiClient {
       'Accept': 'application/json',
     };
 
+    String? usedToken;
     if (requiresAuth) {
-      final token = await _storage.getAccessToken();
-      if (token != null) {
-        headers['Authorization'] = 'Bearer $token';
+      usedToken = await _storage.getAccessToken();
+      if (usedToken != null) {
+        headers['Authorization'] = 'Bearer $usedToken';
       }
     }
 
@@ -72,7 +83,7 @@ class ApiClient {
       headers['If-None-Match'] = etag;
     }
 
-    return headers;
+    return _PreparedHeaders(headers, usedToken);
   }
 
   Future<ApiGetResult> get(
@@ -84,11 +95,11 @@ class ApiClient {
     final uri = Uri.parse(
       '${AppConfig.apiBaseUrl}$endpoint',
     ).replace(queryParameters: queryParameters);
-    final headers = await _getHeaders(requiresAuth: requiresAuth, etag: etag);
+    final prepared = await _getHeaders(requiresAuth: requiresAuth, etag: etag);
 
     try {
       final response = await _client
-          .get(uri, headers: headers)
+          .get(uri, headers: prepared.headers)
           .timeout(_timeout);
 
       // 304 govdesiz doner ve bir HATA DEGILDIR - _processResponse'un
@@ -98,7 +109,7 @@ class ApiClient {
         return const ApiGetResult(data: null, etag: null, notModified: true);
       }
 
-      final data = _processResponse(response);
+      final data = await _processResponse(response, prepared.usedToken);
       return ApiGetResult(
         data: data,
         etag: response.headers['etag'],
@@ -124,18 +135,18 @@ class ApiClient {
     bool requiresAuth = false,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}$endpoint');
-    final headers = await _getHeaders(requiresAuth: requiresAuth);
+    final prepared = await _getHeaders(requiresAuth: requiresAuth);
 
     try {
       final response = await _client
           .post(
             uri,
-            headers: headers,
+            headers: prepared.headers,
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(_timeout);
 
-      return _processResponse(response);
+      return await _processResponse(response, prepared.usedToken);
     } on SocketException {
       throw ApiException(
         'Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.',
@@ -156,18 +167,18 @@ class ApiClient {
     bool requiresAuth = false,
   }) async {
     final uri = Uri.parse('${AppConfig.apiBaseUrl}$endpoint');
-    final headers = await _getHeaders(requiresAuth: requiresAuth);
+    final prepared = await _getHeaders(requiresAuth: requiresAuth);
 
     try {
       final response = await _client
           .put(
             uri,
-            headers: headers,
+            headers: prepared.headers,
             body: body != null ? jsonEncode(body) : null,
           )
           .timeout(_timeout);
 
-      return _processResponse(response);
+      return await _processResponse(response, prepared.usedToken);
     } on SocketException {
       throw ApiException(
         'Sunucuya ulaşılamıyor. İnternet bağlantınızı kontrol edip tekrar deneyin.',
@@ -182,7 +193,10 @@ class ApiClient {
     }
   }
 
-  dynamic _processResponse(http.Response response) {
+  Future<dynamic> _processResponse(
+    http.Response response, [
+    String? usedToken,
+  ]) async {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (response.body.isEmpty) {
         return null;
@@ -193,8 +207,24 @@ class ApiClient {
       // onUnauthorized yorumu). Cagiran taraf ayrica 401'e ozel bir sey
       // yapmak ZORUNDA degil - ApiException yine de firlatilir ki o an
       // bekleyen istek de basarisiz oldugunu bilsin.
+      //
+      // ONEMLI - gercek cihazda yakalanan bir yaris durumu: arka planda
+      // calisan BeaconObservationService, kendi duty-cycle'inda bagimsiz
+      // istekler gonderir. Sifre degisikligi gibi tokenVersion'i artiran
+      // bir islemden HEMEN SONRA, o an ucuşta olan ESKI token'li bir
+      // observation istegi de 401 donebilir - ama bu, kullanicinin YENI
+      // basariyla kaydettigi oturumun GECERSIZ oldugu anlamina gelmez,
+      // yalnizca BU istegin ESKI token'la atildigi anlamina gelir. Bu
+      // yuzden 401'i sadece, isteği gonderirken kullanilan token HALA
+      // depoda saklanan (guncel) token ile ayniysa gercek kabul edip
+      // global cikisi tetikleriz; token o sirada zaten degismisse (daha
+      // yeni bir token depoya yazilmis) bu 401 BAYAT sayilir ve global
+      // oturum sessizce dokunulmadan birakilir.
       if (response.statusCode == 401) {
-        onUnauthorized?.call();
+        final currentToken = await _storage.getAccessToken();
+        if (usedToken == null || usedToken == currentToken) {
+          onUnauthorized?.call();
+        }
       }
 
       String errorMessage = 'Bir hata oluştu (${response.statusCode})';

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_beacon/flutter_beacon.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -36,14 +38,19 @@ class PermissionGateNotifier extends Notifier<PermissionGateStatus> {
         status == AuthorizationStatus.allowed;
   }
 
-  Future<void> _check() async {
+  /// Ham [AuthorizationStatus]'u dondurur (basarisizlikta null) - `state`i
+  /// de yan etki olarak gunceller. `requestPermission`'in notDetermined'i
+  /// denied'dan ayirt edebilmesi icin ham durum gerekli (bkz. asagisi).
+  Future<AuthorizationStatus?> _check() async {
     try {
       final status = await flutterBeacon.authorizationStatus;
       state = _isSufficient(status)
           ? PermissionGateStatus.sufficient
           : PermissionGateStatus.insufficient;
+      return status;
     } catch (_) {
       state = PermissionGateStatus.insufficient;
+      return null;
     }
   }
 
@@ -53,7 +60,29 @@ class PermissionGateNotifier extends Notifier<PermissionGateStatus> {
   Future<void> refresh() => _check();
 
   /// "Izin Ver" butonuna basilinca cagrilir - OS izin dialogunu tetikler.
+  ///
+  /// Gercek cihazda gozlemlenen bir CoreBluetooth sorunu icin bir defalik
+  /// otomatik yeniden deneme icerir: `flutter_beacon`, konum iznini
+  /// istemeden once native tarafta CBCentralManager'in "poweredOn" durumuna
+  /// gelmesini bekliyor (beacon taramasi ikisine de ihtiyac duydugu icin,
+  /// bkz. FlutterBeaconPlugin.m). Uygulamanin SOGUK acilisinda bu callback
+  /// bazen gec/gelmiyor - Bluetooth zaten acik olsa bile - ve sonuc olarak
+  /// OS'un konum izni penceresi HIC CIKMIYOR, durum notDetermined'de
+  /// kaliyor. Bu, sahada "Bluetooth'u kapatip acinca duzeliyor" olarak
+  /// gozlemlendi - ama kullanicidan bunu istemek kabul edilemez. Durum hala
+  /// notDetermined ise (kullanici gercekten "Izin Verme" DEMEDI, sadece
+  /// pencere hic gelmedi) kisa bir bekleme sonrasi BIR KEZ tekrar denenir;
+  /// bu, CBCentralManager'in gercek durumuna kavusmasi icin yeterli oluyor.
   Future<bool> requestPermission() async {
+    final firstAttempt = await _requestOnce();
+    if (firstAttempt == AuthorizationStatus.notDetermined) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await _requestOnce();
+    }
+    return state == PermissionGateStatus.sufficient;
+  }
+
+  Future<AuthorizationStatus?> _requestOnce() async {
     try {
       await flutterBeacon.initializeAndCheckScanning;
     } catch (_) {
@@ -61,8 +90,7 @@ class PermissionGateNotifier extends Notifier<PermissionGateStatus> {
       // asagida gercek yetkilendirme durumunu soruyoruz, orada dogru
       // sonucu aliriz.
     }
-    await _check();
-    return state == PermissionGateStatus.sufficient;
+    return _check();
   }
 }
 

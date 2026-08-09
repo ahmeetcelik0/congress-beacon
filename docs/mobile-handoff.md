@@ -168,3 +168,107 @@ Aşağıdakilerin HEPSİ geçmeli, yalnızca biri değil:
 
 Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek —
 özellikle madde 1'in (sürekli arka plan testi) sonucunu.
+
+---
+
+## 2026-08-09 — Faz 6 gerçek cihaz doğrulaması (Claude Code, Berke'nin iPhone 16 Pro'su "Baş")
+
+### Bağlam
+
+Faz 6 (mobil iskelet: kimlik, izin, kabuk) Simulator'da doğrulanmıştı; bu tur
+gerçek cihazda tamamlayıcı doğrulama içindi. Kullanıcı: `faz1-test@example.com`,
+kongre: "Test" (gerçek Minew beacon'ları tanımlı, UUID
+`E2C56DB5-DFFB-48D2-B060-D0F5A71096E0`). Backend: izole, yalnızca bu tur için
+port 3002'de ayrı bir instance (kullanıcının asıl geliştirme sunucusuna
+dokunulmadı), aynı yerel MySQL/Redis'i kullandı.
+
+### Bulunan ve düzeltilen 3 gerçek hata (Faz 6 kapsamında, kod değişikliği yapıldı)
+
+1. **`route_redirect.dart` — izin kapısı oturum hatası tarafından atlanıyordu.**
+   `authHasError`, `permissionLoading` ile aynı üst-seviye koşuldaydı; ağa
+   ulaşılamadığında (oturum kontrolü hata verince) izin durumu ne olursa olsun
+   `/permission` atlanıp `/splash`'e düşülüyordu. Simulator'da `simctl privacy
+   revoke location` ile yakalandı. Düzeltme: izin, oturum kontrolünden kesin
+   olarak önce değerlendiriliyor. Regresyon testi eklendi.
+2. **`api_client.dart` — arka plan isteği yarış durumu global çıkışı tetikliyordu.**
+   Şifre değiştirme gibi `tokenVersion`'ı artıran bir işlemden hemen sonra,
+   arka planda çalışan beacon servisinin ESKİ token'la attığı bir istek 401
+   dönüyor ve bu, YENİ başarıyla kurulan oturumu da düşürüyordu (gerçek cihazda
+   "şifre değiştirince otomatik çıkış yapıyor" olarak yakalandı, backend
+   curl ile birebir aynı akış test edilip backend'in doğru çalıştığı
+   doğrulandıktan sonra istemci tarafı izole edildi). Düzeltme: 401 alan
+   isteğin kullandığı token, depodaki GÜNCEL token ile karşılaştırılıyor;
+   eşleşmiyorsa (yani token o sırada zaten yenilenmiş) bu 401 bayat sayılıp
+   global çıkış tetiklenmiyor.
+3. **`permission_gate_provider.dart` — soğuk açılışta konum izni penceresi hiç çıkmıyordu.**
+   `flutter_beacon`, konum izni istemeden önce native tarafta
+   `CBCentralManager`'ın "poweredOn" durumuna gelmesini bekliyor. Uygulamanın
+   soğuk açılışında bu callback bazen gecikiyor/gelmiyor — Bluetooth zaten
+   açık olsa bile — ve sonuç olarak izin penceresi hiç çıkmadan durum
+   `notDetermined`'de kalıyor (kullanıcı "İzin Ver"e bassa bile). Sahada
+   "Bluetooth'u kapatıp açınca düzeliyor" olarak gözlemlendi ama kullanıcıdan
+   bunu istemek kabul edilemez. Düzeltme: durum hâlâ `notDetermined` ise
+   (gerçekten reddedilmedi, pencere gelmedi) 700ms sonra bir kez otomatik
+   yeniden denenir. Gerçek cihazda doğrulandı: düzeltmeden önce Bluetooth
+   kapat-aç gerekiyordu, düzeltmeden sonra hiç dokunmadan çalıştı.
+
+Ayrıca kozmetik bir Flutter framework uyarısı düzeltildi: `profile_page.dart`
+içindeki `ListTile`'lar renkli bir `DecoratedBox`'a doğrudan sarılıydı (ink
+splash/dokunma geri bildirimi görünmez oluyordu) — araya şeffaf bir `Material`
+eklendi.
+
+### Gerçek cihazda tam doğrulanan (log kanıtıyla)
+
+- Temiz kurulum → zorunlu izin ekranı → izin ver → giriş ekranı (izin gerçekten
+  reddedildiğinde de doğru davranış, yukarıdaki #1 düzeltmesiyle).
+- Kayıt Ol → e-postaya kod → zorunlu şifre değiştirme (kilitli, geri
+  dönülemiyor) → kongre seçimi (2 kongre listelendi) → kabuk.
+- **Sekmeler arası geçiş (Ana Sayfa/Program/Profil, 5-6 kez) boyunca beacon
+  servisi HİÇ durmadı** — log'da tek `START`, sıfır `STOP`, bu fazın en kritik
+  iddiası. Kanıt: `[ObservationLifecycle] START congressId=... deviceId=...`
+  bir kez, ardından yalnızca `NO-OP` satırları.
+- Kongre değiştirme: `STOP` (eski kongre) → `START` (yeni kongre) sırasıyla,
+  doğru congressId'lerle.
+- Gönüllü şifre değiştirme: düzeltmeden ÖNCE oturumu düşürüyordu (#2), düzeltmeden
+  SONRA `NO-OP` ile sorunsuz devam etti.
+- Çıkış yap → `STOP`, log ekranı → tekrar giriş → `START`, izin ekranı BİR DAHA
+  ÇIKMADI, aynı `deviceId` yeniden kullanıldı (yeni cihaz kaydı oluşmadı).
+- Metin ölçeklendirme (Erişilebilirlik > Daha Büyük Metin, en büyük) → taşma/
+  kesilme yok.
+
+### Doğrulanamayan — beacon veri akışı (AÇIK BULGU, kök nedeni bulunamadı)
+
+Servis 6+ dakika boyunca kesintisiz, tasarlandığı gibi (foreground'da her 10
+saniyede bir yeniden başlayan ranging penceresi — native `NSLog` ile
+`devicectl device process launch --console` üzerinden doğrudan doğrulandı:
+`START: CLBeaconRegion (...)` satırı dakikada bir düzenli aralıklarla
+tekrarladı) çalıştı, ama **backend'e tek bir `BeaconObservation` bile
+ulaşmadı**. Sırayla ekarte edilenler: konum izni (Her Zaman, doğrulandı),
+Bluetooth izni (uygulama ayarlarında açık), UUID eşleşmesi (kullanıcı
+BeaconSET Plus'tan teyit etti), iBeacon yayın modu (etkin, teyit edildi),
+fiziksel mesafe (3-5cm), Düşük Güç Modu (kapalı — bu dosyanın 2026-07-17
+notundaki bilinen tuzak), backend erişilebilirliği (test ortasında Mac'in
+Wi-Fi IP'si değişmişti — `192.168.1.108` → `192.168.6.114` — bu ayrı, gerçek
+bir bulgu olarak düzeltildi ve yeniden test edildi, ama beacon sorununu TEK
+BAŞINA açıklamadı: IP düzeltmesinden sonra da 80 saniye boyunca hâlâ sıfır
+gözlem geldi).
+
+`beacon_observation_service.dart`'ın iç mantığına dokunma yetkisi olmadığı
+için (Faz 6 talimatının mutlak kısıtı) buradan öteye debug logu ekleyip kök
+nedeni izole edemedim. **Ahmet'in/Berke'nin yapması gerekenler:**
+1. Xcode'u doğrudan cihaza bağlayıp (Window > Devices and Simulators > Open
+   Console, veya bir breakpoint) `_onRangingResult`'ın gerçekten çağrılıp
+   çağrılmadığını, çağrılıyorsa `result.beacons`'ın boş gelip gelmediğini
+   kontrol et — bu, sorunun native ranging'de mi yoksa
+   Dart↔native EventChannel köprüsünde mi olduğunu ayırt eder.
+2. Aynı beacon'ı, bu projeden bağımsız üçüncü parti bir iBeacon tarayıcı
+   uygulamasıyla (BeaconSET Plus'ın kendi "tara" özelliği değil, jenerik bir
+   iBeacon scanner) test ederek gerçekten iBeacon paketleri yayınlandığını
+   doğrula.
+3. `flutter_beacon` 0.5.1'in bilinen sorunlarına (GitHub issues) bakılabilir —
+   bu paket aktif bakımlı değil gibi görünüyor.
+
+### Sonuçları nereye bildir
+
+Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek —
+özellikle beacon veri akışı bulgusunun ilerleyişini.

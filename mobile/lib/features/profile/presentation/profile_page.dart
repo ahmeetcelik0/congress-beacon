@@ -177,7 +177,15 @@ class _SectionCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
-      child: Column(children: children),
+      // ListTile arka planini/ink splash'ini en yakin Material'a cizer -
+      // disaridaki Container'in kendi arka plan rengi (DecoratedBox) araya
+      // girdiginde bu efektler GORUNMEZ oluyordu (gercek cihazda yakalanan
+      // bir Flutter framework uyarisi). Seffaf bir Material araya eklenerek
+      // dokunma geri bildirimi (ink splash) tekrar gorunur kilinir.
+      child: Material(
+        color: Colors.transparent,
+        child: Column(children: children),
+      ),
     );
   }
 }
