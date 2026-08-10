@@ -54,4 +54,7 @@ class WidgetKeys {
   static const profileChangeCongress = Key('profile_change_congress');
   static const profileChangePassword = Key('profile_change_password');
   static const profileLogout = Key('profile_logout');
+
+  // --- Faz 7.1: cevrimdisi soguk baslangic (bkz. features/auth/presentation/offline_banner.dart) ---
+  static const offlineBanner = Key('offline_banner');
 }

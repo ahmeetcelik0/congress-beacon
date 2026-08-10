@@ -964,3 +964,94 @@ oturum doğrulama kapısı (`AuthSessionNotifier`, yerel `MeResponse`
 ulaşılmasına izin vermiyor. Tam detay ve düzeltme önerisi için bkz.
 `docs/mobile-handoff.md` "2026-08-10 — XCUITest'ten integration_test'e
 geçiş: sonuçlar" bölümü.
+
+## Faz 7.1 — Çevrimdışı soğuk başlangıç (2026-08-10)
+
+### İki fazın çelişkisi
+
+Faz 6, "oturum her zaman canlı doğrulanır" kuralını koydu:
+`AuthSessionNotifier.build()` yerel token'a KÖRÜ KÖRÜNE güvenmez, her
+açılışta gerçekten `GET /auth/me` çağırır. Faz 7, "kalıcı program
+önbelleği çevrimdışı çalışsın" hedefini koydu. Bu ikisi hiç
+karşılaştırılmadı: ağ yoksa `/auth/me` `AsyncError`'a düşüyor,
+`route_redirect.dart` kullanıcıyı Splash'in "Sunucuya bağlanılamadı"
+ekranında tutuyordu - uygulama **tamamen kapatılıp ağsız açıldığında
+içeri hiç girilemiyordu**, Program ekranının özenle inşa edilmiş kalıcı
+önbelleğine bu senaryoda hiç ulaşılamıyordu (yani tam olarak ihtiyaç
+duyulacağı anda - kongre salonunda ağ koptuğunda - işe yaramıyordu).
+`integration_test/cevrimdisi_test.dart` gerçek cihazda bunu kanıtladı:
+30 saniyede 19 "Tekrar Dene" denemesi, hiçbiri işe yaramadı.
+
+### Alınan karar: JWT süresini yerelde doğrula + çevrimdışı salt-okunur mod
+
+`/auth/me` AĞ HATASIYLA (401 DEĞİL - sunucu hiç cevap vermedi/ulaşılamadı)
+başarısız olursa:
+
+- Saklanan token'ın `exp`i **yerelde** kontrol edilir (`core/auth/
+  jwt_expiry.dart`, `checkJwtExpiry`). **Geçerliyse** ve onbellekte daha
+  önce başarılı bir `/auth/me` yanıtı (`SecureStorageService.
+  saveLastKnownSession`) varsa, uygulama **son bilinen oturum bilgisiyle**
+  açılır ve kabukta kalıcı bir **"Çevrimdışı"** şeridi durur
+  (`OfflineBanner`).
+- **Süresi dolmuşsa** oturum silinir, kullanıcı giriş ekranını görür -
+  ağsızken sonsuz "tekrar dene" döngüsüne sokmak yerine.
+- `mustChangePassword: true` olan kullanıcı VEYA aktif kongre
+  seçilmemiş bir onbellek kaydı çevrimdışı içeri ALINMAZ (ikisi de sunucu
+  gerektirir) - Splash'te özel, anlaşılır bir mesajla kalır
+  (`OfflineBlockReason`).
+- Ağ VARKEN davranış hiç değişmez: her zaman `GET /auth/me` ile canlı
+  doğrulama yapılır - yerel kontrol YALNIZCA ağ hatası dalında devreye
+  girer.
+- Ağ döndüğünde (uygulama arka plandan öne gelince, `AppLifecycleListener`
+  ile - bkz. `auth_lifecycle_refresh_provider.dart`) oturum otomatik
+  yeniden doğrulanır, çevrimdışı şeridi kalkar.
+
+**Güvenlik gerekçesi:** yerel `exp` kontrolü imzayı doğrulamaz ve
+doğrulamayı AMAÇLAMAZ - token'ı zaten biz sakladık, burada bir saldırgan
+modeli yok. Çevrimdışı görülen veri, kullanıcının daha önce meşru şekilde
+gördüğü KENDİ verisidir; yeni veri çekilemez, hiçbir yazma işlemi
+yapılamaz. Sunucu tarafı iptal (`tokenVersion` artışı - ör. şifre
+değişikliği) ağ döndüğü an zaten `/auth/me` ile uygulanır - yerel `exp`
+kontrolü bu güvenliği GEVŞETMEZ, yalnızca "ağ yokken bu önbelleği
+göstermek/oturumu düşürmek makul mu" sorusuna cevap verir.
+
+### Gerçek cihazda bulunan ve düzeltilen 2 gerçek hata
+
+1. **Riverpod re-entrancy (üretim kodu, gerçek hata).**
+   `AuthSessionNotifier.build()`in EN BAŞINDA (ilk `await`den ÖNCE)
+   `ref.read(offlineBlockReasonProvider.notifier).set(null)` çağrısı
+   vardı. Taze bir süreçte bu, `offlineBlockReasonProvider`ın İLK
+   okunuşu olabiliyordu - Riverpod'un o provider'ı SENKRON olarak inşa
+   etmesini gerektirip, `AuthSessionNotifier` HALA inşa EDİLİRKEN
+   `_debugCurrentlyBuildingElement` güvenlik denetimini tetikliyordu
+   (gerçek cihazda `cevrimdisi_test.dart` "süresi dolmuş token"
+   senaryosuyla yakalandı - hata bir `ApiException` OLMADIĞI için
+   `on ApiException catch` bloğu hiç çalışmıyor, Splash'in genel
+   "Sunucuya bağlanılamadı" mesajı gösteriliyordu). Düzeltme: bu satır
+   fonksiyonun İLK `await`inden SONRAYA taşındı.
+2. **Test-altyapısı: `loginAndReachHome`in yanlış "vardık" işareti.**
+   `homeContentButtonProgram` (Ana Sayfa'nın KENDİ içerik ızgarası)
+   işaretçi olarak kullanılıyordu - ama `/mobile/home` yalnızca
+   BELLEK-İÇİ önbellekleniyor (Program'ın aksine KALICI değil), yani taze
+   bir süreçte (soğuk başlangıç + ağsız) Ana Sayfa'nın KENDİ içeriği boş
+   önbellek + başarısız ağ yüzünden hata ekranı gösterebiliyordu - oturum
+   AÇILMIŞ olsa bile. Düzeltme: işaretçi `shellTabHome`e (kabuğun
+   KENDİSİ, sekme içeriğinin durumundan bağımsız her zaman render edilir)
+   çevrildi.
+
+### Faz 8 notu: bellek-içi observation kuyruğu çevrimdışı nasıl davrandı
+
+`BeaconObservationService`in İÇ mantığına hiç dokunulmadı - ve
+dokunmaya gerek KALMADI, çünkü `ObservationLifecycleNotifier` yalnızca
+`authSessionProvider`ın DEĞERİNE bakıyor (`me != null && !mustChangePassword
+&& activeCongressId != null`), NASIL elde edildiğine değil. Çevrimdışı
+düşüşten dönen `MeResponse` bu koşulu SAĞLADIĞI için beacon servisi
+kesintisiz ÇALIŞMAYA DEVAM ETTİ - gerçek cihazda doğrulandı:
+`ag donunce` testinde uygulama ~25 saniye çevrimdışıyken servis
+gözlemleri BELLEKTEKİ kuyrukta biriktirdi (10 gözlem), ağ döndüğünde tek
+seferde başarıyla gönderdi (`Accepted: 10, Dup: 0, Rej: 0`). SQLite'a
+geçerken (Faz 8) bu davranış AYNEN korunmalı: kuyruk KALICI hale
+geldiğinde de, kuyruğun DOLMASI/BOŞALMASI oturumun çevrimiçi mi
+çevrimdışı mı olduğundan TAMAMEN bağımsız kalmalı - servisin kendi
+retry/backoff mantığı zaten bunu ele alıyor, `AuthSessionNotifier`in
+çevrimdışı moduyla hiçbir ENTEGRASYONA ihtiyacı yok.

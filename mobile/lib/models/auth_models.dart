@@ -61,6 +61,16 @@ class AuthUserSummary {
       phone: json['phone'] as String?,
     );
   }
+
+  // Faz 7.1: cevrimdisi soguk baslangicta gosterilecek son oturumu yerelde
+  // saklamak icin (bkz. `SecureStorageService.saveLastKnownSession`).
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'firstName': firstName,
+    'lastName': lastName,
+    'email': email,
+    'phone': phone,
+  };
 }
 
 class AuthCongressSummary {
@@ -91,6 +101,15 @@ class AuthCongressSummary {
           : null,
     );
   }
+
+  // Faz 7.1: bkz. AuthUserSummary.toJson yorumu.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'code': code,
+    'startDate': startDate?.toIso8601String(),
+    'endDate': endDate?.toIso8601String(),
+  };
 }
 
 class LoginResponse {
@@ -154,6 +173,14 @@ class MeResponse {
     }
     return null;
   }
+
+  // Faz 7.1: bkz. AuthUserSummary.toJson yorumu.
+  Map<String, dynamic> toJson() => {
+    'user': user.toJson(),
+    'activeCongressId': activeCongressId,
+    'mustChangePassword': mustChangePassword,
+    'congresses': congresses.map((c) => c.toJson()).toList(),
+  };
 }
 
 class ChangePasswordRequest {

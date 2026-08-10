@@ -45,6 +45,10 @@ class ProfilePage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final me = ref.watch(authSessionProvider).value;
+    // Faz 7.1: Kongre Degistir/Sifre Degistir ikisi de sunucu gerektirir -
+    // cevrimdisiyken SESSIZCE basarisiz olmak yerine (bkz. talimat §4)
+    // dokununca anlasilir bir mesaj gosterip devre disi GORUNURLER.
+    final isOffline = ref.watch(isOfflineSessionProvider);
 
     if (me == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -110,6 +114,7 @@ class ProfilePage extends ConsumerWidget {
                 title: 'Aktif Kongre',
                 subtitle: activeCongress?.name ?? 'Seçilmedi',
                 trailingLabel: 'Kongre Değiştir',
+                enabled: !isOffline,
                 onTap: () => context.push('/select-congress'),
               ),
               const Divider(height: 1),
@@ -119,6 +124,7 @@ class ProfilePage extends ConsumerWidget {
                 title: 'Şifre',
                 subtitle: '••••••••',
                 trailingLabel: 'Şifre Değiştir',
+                enabled: !isOffline,
                 onTap: () => context.push('/change-password'),
               ),
             ],
@@ -214,6 +220,7 @@ class _ActionTile extends StatelessWidget {
     required this.subtitle,
     required this.trailingLabel,
     required this.onTap,
+    this.enabled = true,
   });
 
   final IconData icon;
@@ -221,35 +228,51 @@ class _ActionTile extends StatelessWidget {
   final String subtitle;
   final String trailingLabel;
   final VoidCallback onTap;
+  // Faz 7.1: cevrimdisiyken bu eylem SUNUCU gerektiriyorsa false verilir -
+  // SESSIZCE basarisiz olmak yerine dokununca anlasilir bir mesaj gosterir.
+  final bool enabled;
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.xs,
-      ),
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: const BoxDecoration(
-          color: AppColors.accentSoft,
-          shape: BoxShape.circle,
+    return Opacity(
+      opacity: enabled ? 1 : 0.55,
+      child: ListTile(
+        onTap: enabled ? onTap : () => _showOfflineMessage(context),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.xs,
         ),
-        child: Icon(icon, color: AppColors.accent, size: 20),
+        leading: Container(
+          width: 40,
+          height: 40,
+          decoration: const BoxDecoration(
+            color: AppColors.accentSoft,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: AppColors.accent, size: 20),
+        ),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: AppColors.textSecondary),
+        ),
+        trailing: Text(
+          trailingLabel,
+          style: const TextStyle(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w700,
+            fontSize: 12.5,
+          ),
+        ),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(
-        subtitle,
-        style: const TextStyle(color: AppColors.textSecondary),
-      ),
-      trailing: Text(
-        trailingLabel,
-        style: const TextStyle(
-          color: AppColors.primary,
-          fontWeight: FontWeight.w700,
-          fontSize: 12.5,
+    );
+  }
+
+  void _showOfflineMessage(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Bu işlem için internet bağlantısı gerekir - çevrimiçi olunca tekrar deneyin.',
         ),
       ),
     );

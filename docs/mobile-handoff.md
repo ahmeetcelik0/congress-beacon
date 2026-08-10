@@ -698,7 +698,13 @@ satıra saran başlık metni sığmıyordu. Düzeltme: başlık `Text`i
   doğrudan sıfırlandı (panel/API üzerinden DEĞİL, geçici bir script'le -
   script silindi).
 
-### KRİTİK, DÜZELTİLMEMİŞ mimari bulgu: çevrimdışı soğuk başlangıç
+### ✅ KAPANDI (Faz 7.1, 2026-08-10) — eski KRİTİK, DÜZELTİLMEMİŞ mimari bulgu: çevrimdışı soğuk başlangıç
+
+**Bu bulgu Faz 7.1'de düzeltildi** - bkz. bu dosyanın altındaki
+"2026-08-10 — Faz 7.1: Çevrimdışı soğuk başlangıç" bölümü ve
+`docs/decisions.md` "Faz 7.1" başlığı. Aşağıdaki metin, bulgunun
+ORİJİNAL (henüz düzeltilmemiş) haliyle TARİHSEL bir kayıt olarak
+bırakılmıştır.
 
 `cevrimdisi_test.dart` FAZ 2 (backend gerçekten durdurulmuş, taze bir
 süreç) **başarısız oldu - bu bir test hatası DEĞİL.** `AuthSessionNotifier`
@@ -742,3 +748,101 @@ Beacon veri akışı (`BeaconObservationService`) tüm koşular boyunca
 kesintisiz çalıştı - hiçbir test dosyası onun iç mantığına dokunmadı.
 `flutter analyze` temiz, `dart format` uygulandı, `flutter test`
 (birim/widget) 17/17 geçiyor.
+
+---
+
+## 2026-08-10 — Faz 7.1: Çevrimdışı soğuk başlangıç
+
+### Ne değişti
+
+Yukarıdaki kritik bulgu düzeltildi. Özet (tam gerekçe için
+`docs/decisions.md` "Faz 7.1"):
+
+- **`core/auth/jwt_expiry.dart`** (yeni) - `checkJwtExpiry`/
+  `extractJwtSubject`, ek paket gerektirmeden (`dart:convert`) JWT
+  payload'ını çözüp `exp`/`sub` okur. 12 birim testi
+  (`test/jwt_expiry_test.dart`): geçerli, süresi dolmuş, bozuk, dolgusuz
+  payload, `exp`/`sub` eksik, saat kayması toleransı.
+- **`SecureStorageService`**e `saveLastKnownSession`/`getLastKnownSession`/
+  `getLastKnownSessionUserId`/`getLastKnownSessionCachedAt`/
+  `clearLastKnownSession` eklendi - son başarılı `/auth/me` yanıtı
+  kullanıcı ID'siyle birlikte saklanır, çıkışta temizlenir.
+- **`AuthSessionNotifier`** ağ hatasında (401 DEĞİL) yerel `exp`e göre
+  ya onbellekten devam eder (`isOfflineSessionProvider`), ya oturumu
+  düşürüp giriş ekranına yönlendirir (süresi dolmuşsa), ya da mevcut
+  Splash hata ekranını gösterir (çözümlenemedi/onbellek yok).
+  `OfflineBlockReason` (mustChangePassword/aktif kongre yok
+  durumlarında) Splash'e özel bir mesaj taşır.
+- **`AuthLifecycleRefreshNotifier`** (yeni,
+  `auth_lifecycle_refresh_provider.dart`) - `AppLifecycleListener` ile
+  uygulama öne gelince çevrimdışıysa otomatik `refresh()` tetikler.
+  `ObservationLifecycleProvider` ile AYNI desen, `main.dart`da bir kez
+  izlenir.
+- **`OfflineBanner`** (yeni, `features/auth/presentation/
+  offline_banner.dart`) - kabukta `AlwaysPermissionBanner`in hemen
+  altında, ikisi AYNI ANDA görünebilir. "Çevrimdışı · Son bağlantı: ..."
+  gösterir.
+- **`profile_page.dart`** - Kongre Değiştir/Şifre Değiştir çevrimdışıyken
+  soluk görünür, dokununca anlaşılır bir SnackBar mesajı verir,
+  `/select-congress`/`/change-password`'a GEÇMEZ.
+- Testler: `route_redirect_test.dart`a 2 yeni durum (izin önceliği
+  regresyonu KORUNDU), `cevrimdisi_test.dart`a 2 yeni senaryo (süresi
+  dolmuş token, ağ dönünce otomatik tazelenme) - dosya artık 4 test
+  içeriyor, hepsi geçiyor.
+
+### Ne kırılabilir
+
+- `AuthSessionNotifier`in dış davranışı (dönen `MeResponse?` tipi)
+  DEĞİŞMEDİ - `route_redirect.dart`a HİÇ dokunulmadı, izin→oturum→
+  zorunlu şifre→kongre→kabuk sırası aynen korundu (regresyon testiyle
+  kilitli).
+- `BeaconObservationService`in iç mantığına dokunulmadı - servis
+  yalnızca `authSessionProvider`ın DEĞERİNE bakıyor, kaynağına
+  (ağ/onbellek) değil, bu yüzden çevrimdışı modda kesintisiz çalışmaya
+  devam etti (gerçek cihazda 10 gözlemlik bir kuyruğun ağ dönünce tek
+  seferde başarıyla gönderildiği doğrulandı).
+- `home_page.dart`/diğer ekranlardaki `StalenessLabel.hasStaleError`
+  (Faz 7'den kalma) hâlâ pratikte hiç `true` olmuyor
+  (`CachedContentNotifier._load()` ağ hatasında onbelleğe SESSİZCE
+  düşüyor, hatayı tekrar fırlatmıyor) - bu Faz 7.1 kapsamında
+  DEĞİŞTİRİLMEDİ, `cevrimdisi_test.dart` bu yüzden çevrimdışı durumun
+  TEK göstergesi olarak `OfflineBanner`ı kullanıyor, per-ekran
+  `StalenessLabel`ı DEĞİL.
+
+### Gerçek cihazda test etmeniz gerekenler (zaten yapıldı, ama tekrar
+### doğrulamak isterseniz)
+
+9 adımlık protokol tam olarak yürütüldü (bkz. talimatın kendi listesi):
+yükle→kapat→backend durdur→aç (KRİTİK: içeri girmeli, önbellekten
+program, çevrimdışı şeridi görünür)→gez (çökme yok)→Kongre Değiştir
+engellenir→backend başlat+öne getir (şerit kalkar, veri tazelenir)→
+çıkış/giriş normal→beacon kesintisiz. Log kanıtları yukarıdaki
+`integration_test/cevrimdisi_test.dart` çalıştırmalarında ve bu oturumun
+kendi geçmişinde mevcut.
+
+**Gerçek cihazda bulunup düzeltilen 2 hata** (ikisi de bu fazda,
+detaylar `docs/decisions.md`da):
+1. Riverpod re-entrancy - `AuthSessionNotifier.build()`in başında,
+   ilk `await`den önce başka bir provider'a `ref.read` ile yazmak,
+   taze bir süreçte "provider inşa edilirken başka provider inşa
+   edilemez" güvenlik denetimini tetikliyordu.
+2. `integration_test/test_helpers.dart` `loginAndReachHome`in "vardık"
+   işareti (`homeContentButtonProgram`) yanlıştı - Ana Sayfa'nın KENDİ
+   içeriği (bellek-içi önbellek) çevrimdışı soğuk başlangıçta hata
+   ekranı gösterebiliyordu, oturum başarıyla açılmış olsa bile.
+   `shellTabHome`e çevrildi.
+
+### Faz 8 için not
+
+`BeaconObservationService`in bellek-içi kuyruğu, kongre salonunda ağ
+koptuğunda TAM OLARAK beklendiği gibi davrandı: gözlemler biriktirdi,
+ağ döndüğünde tek toplu istekte gönderdi, hiçbir veri kaybı olmadı - ve
+bunu başarmak için `AuthSessionNotifier`in çevrimdışı moduyla HİÇBİR
+entegrasyona ihtiyaç duymadı (yalnızca `me != null &&
+!mustChangePassword && activeCongressId != null` koşuluna bakıyor).
+SQLite'a geçerken bu ayrım (kuyruk mantığı oturum kaynağından TAMAMEN
+bağımsız) korunmalı - servisin kendi retry/backoff'u zaten yeterli, ek
+bir "çevrimdışı farkındalığı" eklemeye gerek yok.
+
+`flutter analyze` temiz, `flutter test` (birim/widget) 31/31 geçiyor,
+tüm 4 `integration_test` dosyası gerçek cihazda geçti.

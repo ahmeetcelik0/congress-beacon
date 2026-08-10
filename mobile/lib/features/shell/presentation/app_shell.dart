@@ -3,11 +3,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/testing/widget_keys.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../auth/presentation/offline_banner.dart';
 import '../../permission/presentation/always_permission_banner.dart';
 
 /// 3 sekmeli kabuk: Ana Sayfa · Bilimsel Program · Profilim. Hamburger
-/// menü BİLEREK yok (bkz. Faz 6 talimatı §6). Kalıcı izin şeridi kabuğun
-/// üstünde, tüm sekmelerde görünür kalır.
+/// menü BİLEREK yok (bkz. Faz 6 talimatı §6). Kalıcı izin şeridi VE
+/// (varsa) çevrimdışı şeridi kabuğun üstünde, tüm sekmelerde görünür
+/// kalır - ikisi AYNI ANDA görünebilir (bkz. Faz 7.1 talimatı §4).
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.child});
 
@@ -30,6 +32,7 @@ class AppShell extends StatelessWidget {
       body: Column(
         children: [
           const AlwaysPermissionBanner(),
+          const OfflineBanner(),
           Expanded(child: child),
         ],
       ),

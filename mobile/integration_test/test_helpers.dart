@@ -98,11 +98,19 @@ Future<void> loginAndReachHome(WidgetTester tester) async {
   // tetikler) basilarak GERCEK bir kullanicinin yapacagi sey yapilir.
   await tester.pumpWidget(const ProviderScope(child: CongressBeaconApp()));
 
-  // AppBar basligi 'Ana Sayfa' isaretci OLARAK KULLANILAMAZ: alt sekme
-  // cubugundaki 'Ana Sayfa' etiketi TUM sekmelerde (hangisi secili olursa
-  // olsun) ekranda kalir - ayni metinle CAKISIR. Home sekmesine OZGU,
-  // yalnizca o sekmenin icerigi yuklendiginde var olan bir Key kullanilir.
-  final homeMarker = find.byKey(WidgetKeys.homeContentButtonProgram);
+  // `homeContentButtonProgram` (Ana Sayfa'nin KENDI icerik izgarasi) BURADA
+  // isaretci OLARAK KULLANILMAZ: `/mobile/home` yaniti BELLEK-ICI
+  // onbelleklenir (Program'in aksine KALICI DEGIL, bkz. Faz 7 talimati §1),
+  // yani taze bir surecte (soguk baslangic + agsiz) Ana Sayfa'nin KENDI
+  // icerigi bos onbellek + basarisiz ag yuzunden HATA EKRANI gosterebilir -
+  // bu durumda `homeContentButtonProgram` HICBIR ZAMAN belirmez, oturum
+  // ZATEN basariyla acilmis olsa bile (gercek cihazda yakalandi: Faz 7.1
+  // cevrimdisi dususu BASARILI oldugu halde bu yuzden "Ana Sayfa
+  // bulunamadi" ile YANLIS basarisiz oluyordu). `shellTabHome` ise kabugun
+  // KENDISI (alt sekme cubugu) her zaman render edildigi icin - o sekmenin
+  // ICERIGI ne durumda olursa olsun - "kabuga ULASTIK mi" sorusuna daha
+  // guvenilir cevap verir.
+  final homeMarker = find.byKey(WidgetKeys.shellTabHome);
   final loginButton = find.widgetWithText(FilledButton, 'Giriş Yap');
   final retryButton = find.widgetWithText(FilledButton, 'Tekrar Dene');
   var loginSubmitted = false;
@@ -114,7 +122,17 @@ Future<void> loginAndReachHome(WidgetTester tester) async {
   while (DateTime.now().isBefore(deadline)) {
     await tester.pump(const Duration(milliseconds: 300));
 
-    if (homeMarker.evaluate().isNotEmpty) return;
+    if (homeMarker.evaluate().isNotEmpty) {
+      // Kabuk goruldu ama Ana Sayfa'nin KENDI icerigi (`/mobile/home`,
+      // bellek-ici onbellek) HALA yukleniyor olabilir - cagiran testler
+      // genelde HEMEN o icerige dokunmaya calisir (ör. icerik butonlari).
+      // Basarili/basarisiz FARK ETMEKSIZIN o istegin SONUCLANMASI icin
+      // kisa bir tampon birakilir (cevrimdisiyse zaten hata durumuna
+      // duser, bu bekleme onu DEGISTIRMEZ, yalnizca yarim kalmis bir
+      // ara kareyi atlar).
+      await tester.pump(const Duration(milliseconds: 800));
+      return;
+    }
 
     // Konum izni bu cihazda GERCEKTEN "Her Zaman Izin Ver" ile verilmemis
     // (veya `--uninstall` [varsayilan] ile bir onceki calistirmada silinip

@@ -1,4 +1,8 @@
+import 'dart:convert';
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
+import '../../models/auth_models.dart';
 
 /// Cihazda saklanan TEK dogruluk kaynagi minimaldir - katilimci adi/kongre
 /// adi gibi GORUNTULEME verisi artik burada TUTULMAZ (Faz 6 talimati §2):
@@ -22,6 +26,12 @@ class SecureStorageService {
   static const String _beaconUuidKey = 'beacon_uuid';
   static const String _beaconUuidCongressIdKey = 'beacon_uuid_congress_id';
   static const String _announcementsLastSeenPrefix = 'announcements_last_seen_';
+  // Faz 7.1 - cevrimdisi soguk baslangic icin son basarili `/auth/me`
+  // yanitinin yerel kopyasi (bkz. asagidaki `saveLastKnownSession` yorumu).
+  static const String _lastKnownSessionKey = 'last_known_session';
+  static const String _lastKnownSessionUserIdKey = 'last_known_session_user_id';
+  static const String _lastKnownSessionCachedAtKey =
+      'last_known_session_cached_at';
 
   Future<void> saveAccessToken(String token) async {
     await _storage.write(key: _accessTokenKey, value: token);
@@ -121,5 +131,60 @@ class SecureStorageService {
   Future<void> clearSession() async {
     await _storage.delete(key: _accessTokenKey);
     await _storage.delete(key: _activeCongressIdKey);
+    await clearLastKnownSession();
+  }
+
+  // --- Faz 7.1: cevrimdisi soguk baslangic ---
+  //
+  // `AuthSessionNotifier`, agdan basarili her `/auth/me` yanitini buraya
+  // yazar. Ag hatasinda (cihaz TAMAMEN kapatilip agsiz acildiginda vb.)
+  // token'in `exp`i hala gecerliyse bu kayit gosterilir - kullanici DAHA
+  // ONCE mesru sekilde gordugu KENDI verisini gorur, yeni veri CEKILMEZ,
+  // hicbir yazma islemi YAPILMAZ (bkz. docs/decisions.md "Faz 7.1" guvenlik
+  // gerekcesi).
+
+  /// [me] ile birlikte HANGI kullaniciya ait oldugu da saklanir - farkli
+  /// bir hesapla giris yapildiginda eski kaydin YANLISLIKLA kullanilmasini
+  /// onlemek `AuthSessionNotifier`in sorumlulugundadir (token'daki `sub` ile
+  /// burada saklanan `userId`i karsilastirir), ama savunma amacli ikinci
+  /// bir katman olarak burada da tutulur.
+  Future<void> saveLastKnownSession(MeResponse me) async {
+    await _storage.write(key: _lastKnownSessionUserIdKey, value: me.user.id);
+    await _storage.write(
+      key: _lastKnownSessionKey,
+      value: jsonEncode(me.toJson()),
+    );
+    await _storage.write(
+      key: _lastKnownSessionCachedAtKey,
+      value: DateTime.now().toIso8601String(),
+    );
+  }
+
+  /// Kayit bozuksa/eksikse SESSIZCE `null` doner (bkz. `ContentCacheService`
+  /// ile ayni desen - bozuk bir onbellek kalici bir hataya DONUSMEMELI).
+  Future<MeResponse?> getLastKnownSession() async {
+    final raw = await _storage.read(key: _lastKnownSessionKey);
+    if (raw == null) return null;
+    try {
+      return MeResponse.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> getLastKnownSessionUserId() async {
+    return _storage.read(key: _lastKnownSessionUserIdKey);
+  }
+
+  Future<DateTime?> getLastKnownSessionCachedAt() async {
+    final raw = await _storage.read(key: _lastKnownSessionCachedAtKey);
+    if (raw == null) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  Future<void> clearLastKnownSession() async {
+    await _storage.delete(key: _lastKnownSessionKey);
+    await _storage.delete(key: _lastKnownSessionUserIdKey);
+    await _storage.delete(key: _lastKnownSessionCachedAtKey);
   }
 }

@@ -14,6 +14,7 @@ class SplashPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authSessionProvider);
+    final blockReason = ref.watch(offlineBlockReasonProvider);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -22,6 +23,7 @@ class SplashPage extends ConsumerWidget {
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: authState.hasError
               ? _ErrorRetry(
+                  blockReason: blockReason,
                   onRetry: () =>
                       ref.read(authSessionProvider.notifier).refresh(),
                 )
@@ -33,12 +35,35 @@ class SplashPage extends ConsumerWidget {
 }
 
 class _ErrorRetry extends StatelessWidget {
-  const _ErrorRetry({required this.onRetry});
+  const _ErrorRetry({required this.onRetry, this.blockReason});
 
   final VoidCallback onRetry;
+  // Faz 7.1: onbellekte gecerli bir oturum VARKEN cevrimdisi giris
+  // ozellikle bu iki sunucu-gerektiren durumdan biri yuzunden
+  // engellendiyse, genel "Sunucuya bağlanılamadı" yerine daha anlasilir
+  // bir mesaj gosterilir (bkz. auth_session_provider.dart
+  // `OfflineBlockReason`).
+  final OfflineBlockReason? blockReason;
 
   @override
   Widget build(BuildContext context) {
+    final (title, subtitle) = switch (blockReason) {
+      OfflineBlockReason.passwordChangeRequired => (
+        'Şifre değişikliği gerekiyor',
+        'Zorunlu şifre değişikliği için internet bağlantısı gerekir. '
+            'Bağlandığınızda otomatik olarak devam edilecek.',
+      ),
+      OfflineBlockReason.noActiveCongress => (
+        'Kongre seçimi gerekiyor',
+        'Aktif kongre seçimi için internet bağlantısı gerekir. '
+            'Bağlandığınızda otomatik olarak devam edilecek.',
+      ),
+      null => (
+        'Sunucuya bağlanılamadı',
+        'İnternet bağlantınızı kontrol edip tekrar deneyin.',
+      ),
+    };
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -48,15 +73,15 @@ class _ErrorRetry extends StatelessWidget {
           color: AppColors.textFaint,
         ),
         const SizedBox(height: AppSpacing.md),
-        const Text(
-          'Sunucuya bağlanılamadı',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
         ),
         const SizedBox(height: AppSpacing.xs),
-        const Text(
-          'İnternet bağlantınızı kontrol edip tekrar deneyin.',
+        Text(
+          subtitle,
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textSecondary),
+          style: const TextStyle(color: AppColors.textSecondary),
         ),
         const SizedBox(height: AppSpacing.lg),
         FilledButton(onPressed: onRetry, child: const Text('Tekrar Dene')),

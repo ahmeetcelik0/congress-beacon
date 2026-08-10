@@ -253,4 +253,50 @@ void main() {
       expect(result, isNull);
     });
   });
+
+  group('computeRedirectPath - Faz 7.1 cevrimdisi soguk baslangic', () {
+    // `computeRedirectPath` KENDISI degismedi - `AuthSessionNotifier`
+    // cevrimdisi onbellekten donen bir `MeResponse`i, agdan gelen biriyle
+    // AYNI sekilde `AsyncData` olarak sunar (authHasError=false,
+    // isAuthenticated=true). Bu test, o TASARIM KARARINI (route_redirect.dart
+    // dokunulmadan kalmasi gerektigini) belgeler - izin -> oturum -> zorunlu
+    // sifre -> kongre -> kabuk sirasi Faz 6'daki GIBI KORUNUR (bkz. Faz 7.1
+    // talimati §2 "Faz 6'nin yonlendirme sirasini bozma").
+    test(
+      'cevrimdisi onbellekten gelen bir oturum, canli bir oturumla '
+      'AYNI sekilde /home a yonlendirilir - authHasError=false oldugu surece '
+      'kaynagin ag mi onbellek mi oldugu computeRedirectPath icin ONEMSIZ',
+      () {
+        final result = computeRedirectPath(
+          location: '/login',
+          permissionLoading: false,
+          permissionSufficient: true,
+          authLoading: false,
+          authHasError: false,
+          isAuthenticated: true,
+          mustChangePassword: false,
+          activeCongressId: 'congress-1',
+        );
+        expect(result, '/home');
+      },
+    );
+
+    test('izin yetersizKEN cevrimdisi soguk baslangic senaryosunda bile '
+        '/permission ONCE gelir - Faz 6 sirasi cevrimdisi dususten SONRA '
+        'devreye girer', () {
+      // AuthSessionNotifier henuz hic calismamis olabilir (authLoading)
+      // - izin kontrolu bunu BEKLEMEDEN once degerlendirilir.
+      final result = computeRedirectPath(
+        location: '/splash',
+        permissionLoading: false,
+        permissionSufficient: false,
+        authLoading: true,
+        authHasError: false,
+        isAuthenticated: false,
+        mustChangePassword: false,
+        activeCongressId: null,
+      );
+      expect(result, '/permission');
+    });
+  });
 }
