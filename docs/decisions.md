@@ -844,3 +844,123 @@ bağlı olarak değil, izleme sırasında backend'in geçici olarak
 kapatılmasıyla kendiliğinden oluştu - bu da kurtarma mekanizmasının hem
 "cihaz geçersiz" hem "backend tamamen erişilemez" senaryolarında sağlam
 çalıştığını gösterdi.
+
+## Faz 7 — Mobil Ekranlar (Ana Sayfa, Bilimsel Program, İçerik)
+
+Faz 6'da yalnızca yer tutucu (`ComingSoonView`) olan Ana Sayfa ve Bilimsel
+Program sekmeleri gerçek ekranlarla dolduruldu, artı 5 içerik alt ekranı
+(Duyurular/Sponsorlar/Ana Konuşmacılar/Mekanlar/Genel Bilgi) ve Profilim'e
+"Benim Programım" bölümü eklendi. Kongre salonunda ağın kötü/yok olacağı
+varsayımıyla, TÜM ekranlar önbellek-önce/ağ-sonra deseniyle çalışır.
+
+### Neden TEK bir `CachedContentNotifier<T>` taban sınıfı, her ekran kendi onbellek mantığını yazmaz
+
+9 farklı `/mobile/*` ucunun (home/program/my-program/announcements/
+sponsors/speakers/venues/info-sections) hepsi AYNI deseni izliyor: önce
+onbellekten göster, arkadan ETag'li/ETag'siz agdan dogrula, ag basarisiz
+olursa onbellekteki degere SESSIZCE dus (hata degil, "bayat ama gorunur"
+veri + `generatedAt`e dayali tazelik etiketi). Bu deseni 9 kez elle
+tekrarlamak yerine `CachedContentNotifier<T extends HasGeneratedAt>`
+(`core/network/cached_content_notifier.dart`) tek bir yerde uygular; alt
+siniflar yalnizca UC/model/kalicilik-turu bildirir. Riverpod 3'un
+`AsyncValue.hasValue`inin (framework'un kendi `copyWithPrevious`
+mekanizmasi sayesinde) hem `AsyncLoading` hem `AsyncError` durumunda da
+TRUE kalabilmesi, ekran tarafinin (`AsyncContentView`) "veri VARSA onu
+goster, YOKSA yukleniyor/hata ekranini goster" seklinde tek bir kontrolle
+calismasini sagliyor - ayri bir "stale" bayragi elle tasimaya gerek yok.
+
+### Neden `/mobile/program` KALICI (dosya) onbellekli, digerleri yalnizca bellek-ici
+
+Program buyuk ve nadiren degisir - kongre boyunca defalarca acilip
+kapatilacak bir ekran, uygulama YENIDEN KURULSA/kapatilip acilsa bile son
+bilinen programi GOSTEREBILMELI (bkz. Faz 7 talimati §7 adim 8, bu fazin
+en kritik testi). Diger 8 uc kucuk ve degisken (ozellikle `/mobile/home`,
+"su an devam ediyor"a saniyeler icinde donebilir) - bunlari da dosyaya
+yazmak orantisiz bir karmasiklik olurdu, bellek-ici onbellek zaten AYNI
+ziyaret icinde (ekranlar arasi gecis, sekme degisimi) agi gereksiz
+yormamak icin yeterli.
+
+### Gercek cihazda yakalanan hata: gun sekmelerinin AYRI, bellek-ici bir onbellege baglanmasi
+
+İlk tasarımda gün etiketleri (`/mobile/program/days`) de KENDİ notifier'ına
+sahipti (bellek-ici, "küçük uç" kategorisinde). Gerçek cihazda çevrimdışı
+test sırasında yakalandı: uygulama yeniden kurulup (bellek sıfırlanmış)
+Wi-Fi kapalıyken açıldığında, `/mobile/program`ın KALICI önbelleği doğru
+şekilde yükleniyordu (TÜM oturumlar gerçekten oradaydı) ama gün listesi
+BOŞ dönüyordu (kendi bellek-ici önbelleği boş, ağ da yok) - bu da "seçili
+gün"ün `null` kalmasına, dolayısıyla `sessions.where((s) => s.dayLabel ==
+null)`in HİÇBİR oturumla eşleşmemesine yol açtı. Sonuç: program verisi
+gerçekte önbellekte ve eksiksiz olduğu hâlde ekran "Bu günde henüz oturum
+yok" gösteriyordu - **veri kaybı yok ama görünür bir işlevsel hataydı**,
+tam olarak bu fazın kritik testinin yakalaması gereken türden.
+
+Düzeltme: gün listesi için ayrı bir uç/önbellek KALDIRILDI. Gün etiketleri
+artık `/mobile/program`ın zaten KALICI önbelleklenmiş `sessions[]`
+listesinden türetiliyor (`_deriveDayOrder`, her günün ilk oturumunun
+`startTime`ına göre kronolojik sıralama - backend'in kendi algoritmasıyla
+BİREBİR aynı sonucu üretir). Aynı gerekçeyle `/mobile/program/sessions/
+{id}` (oturum detayı) için de AYRI bir çağrı yapılmıyor - o veri de zaten
+`sessions[]` içinde tam olarak (roller+sunumlarla) mevcut. **Genel ders:**
+bir ekranın KRİTİK yolu (burada: gün filtresi, tüm programı gizleyebiliyor)
+başka, daha KISA ömürlü bir önbelleğe bağımlı olmamalı - mümkünse tek bir
+kalıcı kaynaktan türetilmeli.
+
+### Neden `flutter_markdown_plus` / `extended_image` (ve neden `flutter_markdown`/`cached_network_image` değil)
+
+Resmi `flutter_markdown` paketi Flutter ekibi tarafından DURDURULDU
+("discontinued") - `flutter_markdown_plus` yayıncısının kendisinin
+gösterdiği resmi devam projesi, API'si (`MarkdownBody`/`MarkdownStyleSheet`)
+neredeyse birebir aynı. En bilinen ağ-görseli-önbellekleme paketi
+(`cached_network_image`) pub.dev'de hâlâ yüksek puanlı görünse de GitHub
+deposu ~2 yıldır commit almıyor (331 açık issue, doğrulandı) - fiilen
+bakımsız. `extended_image` (fluttercandies, doğrulanmış yayıncı) bu
+oturumdan ~1 ay önce yayınlanmış, azami pub points, ağ görseli önbellekleme
+(`cache: true`) dahil - tercih edildi. **Ders:** pub.dev'in "likes/pub
+points" skoru bakım durumunun güvenilir bir göstergesi DEĞİL - son yayın
+tarihi ve (şüphe varsa) GitHub'daki gerçek commit/issue aktivitesi kontrol
+edilmeli (bkz. Faz 7 talimatının kendi isteği: "bakımı süren, güncel bir
+paket seç, gerekçesiyle yaz").
+
+### Gerçek cihazda yakalanan, kodla İLGİSİZ bir ortam kısıtı: geliştirici güveni + debug build yeniden başlatma
+
+İki ayrı, kod dışı sorun çevrimdışı testi karmaşıklaştırdı, ikisi de
+gelecekteki cihaz testleri için not edilmeye değer:
+
+1. **Ücretsiz/kişisel Apple Developer hesabıyla imzalanan uygulamalar,
+   HER yeni kurulumdan sonra bir kez internete ihtiyaç duyar** (Ayarlar >
+   Genel > VPN ve Cihaz Yönetimi altında "Doğrulanmadı" durumu) - internet
+   yokken bu doğrulama tamamlanamazsa uygulama SESSİZCE ana ekrana düşer
+   (çökme ekranı değil, hiçbir log yok). "Uygulamayı Doğrula"ya dokunmak
+   bile bazen yetmiyor.
+2. **Flutter DEBUG build'leri (fiziksel cihazda `flutter run` ile kurulan),
+   tamamen sonlandırıldıktan sonra home ekranından ikonla güvenilir şekilde
+   yeniden AÇILAMAYABİLİR** - her zaman `flutter run`ın kendisi tarafından
+   yeniden başlatılmaları gerekir (bu da AYRICA ağ ister: Xcode'un cihaza
+   debug bağlantısı kurması network üzerinden oluyor, salt USB-bağlı olması
+   yetmiyor).
+
+Bu ikisinin BİRLEŞİMİ, "uygulamayı tamamen kapatıp yeniden aç" testini
+gerçek bir "force-quit" ile yapmayı pratik olarak imkânsızlaştırdı. Çözüm:
+Dart-seviyesi soğuk-başlangıç davranışını (onbellek okuma dahil) test etmek
+için uygulamayı KAPATMADAN, `autoDispose` provider'ların ekrandan ÇIKIP
+GERİ DÖNÜLDÜĞÜNDE zaten sıfırdan kurulmasından yararlanıldı - bu, gerçek
+bir işlem sonlandırma/yeniden başlatma kadar Dart tarafında birebir aynı
+kod yolunu (provider `build()`, önbellek okuma, ağ hatası → önbelleğe
+düşme) egzersiz eder, native kurulum/güven zincirine hiç dokunmadan.
+
+### XCUITest'ten `integration_test`e geçiş - sonuçlar (2026-08-10)
+
+Yukarıdaki XCUITest denemesi terk edildi (Flutter'ın tüm arayüzü tek bir
+`FlutterView`e çizmesi yüzünden XCUITest widget ağacını göremiyor) ve
+resmi `integration_test` paketiyle 4 test dosyası yazılıp GERÇEK cihazda
+çalıştırıldı. Süreçte 4 gerçek test-kodu hatası (sayfa geçişi zamanlaması,
+soğuk-başlangıç ağ yarışı, kaydırmadan dokunma, `app_shell.dart`da eksik
+`Key`) ve 1 gerçek ÜRETİM arayüz hatası (`home_page.dart` `_ContentButton`,
+1.3x yazı ölçeğinde `RenderFlex overflow` - `Flexible` ile düzeltildi)
+bulunup düzeltildi. Ayrıca **düzeltilmemiş, bilinçli olarak açık bırakılan
+kritik bir mimari bulgu var**: çevrimdışı soğuk başlangıçta üst seviye
+oturum doğrulama kapısı (`AuthSessionNotifier`, yerel `MeResponse`
+önbelleği yok), Program ekranının kalıcı önbellek okuma yeteneğine hiç
+ulaşılmasına izin vermiyor. Tam detay ve düzeltme önerisi için bkz.
+`docs/mobile-handoff.md` "2026-08-10 — XCUITest'ten integration_test'e
+geçiş: sonuçlar" bölümü.

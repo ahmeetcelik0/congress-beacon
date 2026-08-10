@@ -549,3 +549,196 @@ ve beacon'ı doğrulama sonunda panelden silindi.
 ### Sonuçları nereye bildir
 
 Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek.
+
+---
+
+## 2026-08-10 — Faz 7: Mobil Ekranlar (Ana Sayfa, Bilimsel Program, İçerik)
+
+### Ne değişti
+
+Ana Sayfa ve Bilimsel Program sekmeleri (`ComingSoonView` yer tutucuları)
+gerçek ekranlarla dolduruldu; 5 yeni içerik alt ekranı (Duyurular,
+Sponsorlar, Ana Konuşmacılar, Otel/Mekan Detayları, Genel Bilgi) ve
+Oturum Detayı eklendi; Profilim'e "Benim Programım" bölümü eklendi.
+Yeni paylaşılan katmanlar: `core/network/cached_content_notifier.dart`
+(9 ucun ortak önbellek-önce/ağ-sonra deseni), `core/storage/
+content_cache_service.dart` (kalıcı dosya + bellek-içi önbellek),
+`core/widgets/` altında `AsyncContentView`/`GracefulNetworkImage`/
+`RoleTypeChip`, `core/utils/turkish_date_format.dart` ve
+`external_link_launcher.dart`. Yeni paketler: `flutter_markdown_plus`,
+`extended_image`, `path_provider` (gerekçeleri `docs/decisions.md`
+Faz 7 bölümünde). `BeaconObservationService`'e HİÇ dokunulmadı; hiçbir
+ekranda beacon/Bluetooth/tarama terimi geçmiyor (grep ile doğrulandı).
+
+### Gerçek cihazda bulunan ve düzeltilen gerçek hata
+
+Çevrimdışı testi sırasında (adım 8) Program ekranı **boş** görünüyordu -
+"Bu günde henüz oturum yok" - oysa program verisi aslında kalıcı
+önbellekte tam olarak mevcuttu. Kök neden: gün sekmeleri ayrı, bellek-ici
+bir onbellekten geliyordu; uygulama yeniden kurulunca bu bellek sıfırlanıp
+gün listesi bos donuyor, bu da tum oturumlari (dayLabel eslesmedigi icin)
+gizliyordu. Düzeltme: gün listesi artık `/mobile/program`in zaten kalıcı
+önbelleklenmiş oturum listesinden türetiliyor (ayrı ağ çağrısı/önbellek
+YOK), aynı nedenle oturum detayı da hiç ayrı bir çağrı yapmıyor - ikisi de
+tek kaynaktan (kalıcı program önbelleği) besleniyor. Ayrıntılı gerekçe:
+`docs/decisions.md`, Faz 7 bölümü.
+
+### Gerçek cihazda test sürecini karmaşıklaştıran, kodla İLGİSİZ iki ortam kısıtı
+
+1. Wi-Fi IP'si test sırasında birkaç kez değişti (bilinen bir sorun, bkz.
+   önceki Faz notları) - her seferinde `flutter run`'ı doğru IP ile
+   yeniden başlatmak gerekti.
+2. **Kritik bulgu:** uygulama tamamen sonlandırılıp home ekranından
+   tekrar açılmaya çalışıldığında sessizce ana ekrana düşüyordu. İki
+   sebebi vardı, ikisi de KOD DEĞİL: (a) ücretsiz Apple Developer
+   hesabıyla imzalanan uygulamalar her yeni kurulumdan sonra bir kez
+   internet üzerinden doğrulanmalı; (b) Flutter debug build'leri fiziksel
+   cihazda `flutter run` dışında güvenilir şekilde yeniden başlatılamıyor.
+   Bu ikisi çevrimdışı "kapat-aç" testini native seviyede imkânsız kıldı;
+   test bunun yerine `autoDispose` provider'ların ekrandan çıkıp geri
+   dönüldüğünde sıfırdan kurulmasından yararlanılarak (Dart-seviyesi
+   soğuk-başlangıç, native kurulum katmanına dokunmadan) yapıldı - bu, asıl
+   test edilmek istenen önbellek-okuma kod yolunu birebir aynı şekilde
+   çalıştırır.
+
+### Doğrulanan / doğrulanmakta olan (bu bölüm test tamamlanınca güncellenecek)
+
+Test hâlâ sürüyor - kullanıcı paralel olarak kendi XCUITest otomasyon
+denemesini kuruyor. Şu ana kadar gerçek cihazda TEYİT EDİLENLER: Ana Sayfa
+(kapak/ad/tarih/mekan/6 buton/rozet sayıları/okunmamış duyuru rozeti -
+açılınca kayboluyor VE uygulama yeniden kurulsa bile geri gelmiyor),
+"Sıradaki Sunumum" kartı (doğru oturum/rol/UTC→yerel saat dönüşümü),
+Duyurular (sabitlenmiş ayrışması, taslak gizli, "Devamını oku"), Sponsorlar
+(kademe gruplama, dış bağlantı ikonu), Ana Konuşmacılar (fotoğrafsız
+katılımcı baş harfleriyle, biyografi paneli), Bilimsel Program (gün
+sekmeleri kronolojik sırada, salon filtresi çalışıyor, 2. gün + faz1-test
+kullanıcısının kendi adıyla listelendiği oturum doğru), Oturum Detayı
+(moderatör/sunum/rol/özet, uzun isimler taşmadan sarılıyor), Otel/Mekan
+Detayları (Ana Mekan rozeti, "Haritada Aç" Google Maps'i gerçekten açtı),
+Genel Bilgi (Markdown tam render - başlık/liste/kalın/italik/bağlantı/
+alıntı, ham sözdizimi YOK), Profilim → Benim Programım (doğru oturum/rol/
+tarih/salon). Beacon veri akışı testler boyunca kesintisiz devam etti.
+
+**Bu bölüme, tamamlandığında şu kalan adımların sonucu eklenecek:** gün
+sekmesi düzeltmesinin çevrimdışında yeniden doğrulanması, metin
+ölçeklendirme testi, uzun içerikli kayıt testi, ve son beacon-görünmezliği
+taraması.
+
+### Sonuçları nereye bildir
+
+Berke'ye veya doğrudan bu dosyaya yeni bir "Sonuç" alt başlığı ekleyerek.
+
+---
+
+## 2026-08-10 — XCUITest'ten `integration_test`e geçiş: sonuçlar
+
+### Bağlam
+
+Yukarıdaki manuel/XCUITest denemesi, Flutter'ın tüm arayüzü tek bir
+`FlutterView` içine çizmesi yüzünden XCUITest'in widget ağacını
+GÖREMEMESİ nedeniyle terk edildi. Yerine resmi `integration_test` paketi
+kuruldu (`mobile/integration_test/`): `test_helpers.dart` (paylaşılan
+`loginAndReachHome`/`pumpUntilFound`/`switchToTab`) + 4 test dosyası
+(`navigasyon_test.dart`, `program_test.dart`, `cevrimdisi_test.dart`,
+`olceklendirme_test.dart`). Test edilebilirlik için `core/testing/
+widget_keys.dart` merkezi `Key` sabitleri eklendi (yalnızca test edilen
+öğelere - üretim davranışı DEĞİŞMEDİ). `ios/RunnerUITests/` kalıntısı
+`xcodeproj` gem'i ile `project.pbxproj`/scheme'den temiz şekilde
+kaldırıldı, `flutter build ios --no-codesign` ile doğrulandı.
+
+### Gerçek cihazda (Berke'nin iPhone'u "Baş") bulunan ve düzeltilen 4 hata
+
+1. **Sayfa geçiş animasyonu bitmeden dokunma** - `pumpUntilFound` bir
+   widget'ı BULUR bulmaz hemen ona dokunuyordu; `pageBack()` sonrası geri
+   kayma animasyonu hâlâ sürerken hesaplanan merkez nokta ekran dışına
+   taşıp "did not hit test" hatası veriyordu. Düzeltme: widget bulunduktan
+   sonra ~400ms'lik bir tampon eklendi.
+2. **Soğuk başlangıç ağ yarışı** - taze bir `flutter test` sürecinde
+   `AuthSessionNotifier`in ilk `/auth/me` çağrısı bazen `SocketException:
+   No route to host` ile anında başarısız oluyordu (cihazın ağ
+   katmanının süreç başladıktan hemen sonra henüz hazır olmaması). Sabit
+   bir bekleme yerine, Splash'in kendi "Tekrar Dene" düğmesine gerçek bir
+   kullanıcı gibi birkaç kez basılarak çözüldü.
+3. **Kaydırma olmadan dokunma** - Ana Sayfa'nın 2 sütunlu içerik
+   ızgarasındaki alt sıralı butonlar (Duyurular/Sponsorlar) dış
+   `ListView`de görünür alanın dışında kalabiliyordu; `tester.tap()`
+   kaydırma YAPMAZ. `tester.ensureVisible()` tüm dokunma noktalarına
+   eklendi.
+4. **`app_shell.dart`da eksik `Key` (üretim kodu, gerçek hata)** -
+   `BottomNavigationBarItem.activeIcon`, SEÇİLİ sekme için `icon` yerine
+   kullanılır; `Key` yalnızca `icon`a eklenmişti, bu yüzden hâlihazırda
+   seçili bir sekme (ör. Ana Sayfa'dayken tekrar Ana Sayfa'yı bulmak)
+   `find.byKey` ile bulunamıyordu. Düzeltme: `activeIcon` de aynı `Key`
+   ile sarmalandı (iki hâl asla aynı anda ağaçta olmadığı için güvenli).
+
+### Gerçek arayüz hatası (üretim kodu, düzeltildi)
+
+`olceklendirme_test.dart`, 1.3x yazı ölçeğinde (uygulamanın kendi
+`main.dart` kenedinin izin verdiği GERÇEK üst sınır) Ana Sayfa'nın içerik
+ızgarası butonlarında `RenderFlex overflowed by 9.3 pixels` yakaladı
+(`home_page.dart` `_ContentButton`). Kök neden: `GridView`in
+`childAspectRatio`sinin sabitlediği yükseklik içinde, büyük yazıda 2
+satıra saran başlık metni sığmıyordu. Düzeltme: başlık `Text`i
+`Flexible` ile sarmalandı - artık yalnızca kalan alanı kullanıyor, taşarsa
+`ellipsis` içeride kalıyor.
+
+### Ortamla ilgili (kod DEĞİL) iki önemli bulgu
+
+- **`flutter test` fiziksel iOS cihazlarda VARSAYILAN olarak her
+  çalıştırmadan SONRA uygulamayı cihazdan SİLER** (`flutter test --help
+  --verbose` → `--[no-]uninstall`, varsayılan açık). Bu, HER
+  çalıştırmada Keychain oturumunu VE konum iznini sıfırlıyordu - izin
+  NATIVE bir sistem diyaloğudur, `integration_test` ona dokunamaz, bu
+  yüzden silinen uygulama bir sonraki koşuda `/permission` ekranında
+  TAKILI kalıyordu. **Çözüm: her zaman `--no-uninstall` bayrağıyla
+  çalıştırın**, uygulamayı bir kez kurup konum iznini elle "Her Zaman
+  İzin Ver" yapın - sonraki tüm koşular kalıcı olur.
+- Test kullanıcısının (`faz1-test@example.com`) şifresi hatırlanmıyordu;
+  backend'in kendi `bcryptjs`/Prisma katmanı kullanılarak DB'de
+  doğrudan sıfırlandı (panel/API üzerinden DEĞİL, geçici bir script'le -
+  script silindi).
+
+### KRİTİK, DÜZELTİLMEMİŞ mimari bulgu: çevrimdışı soğuk başlangıç
+
+`cevrimdisi_test.dart` FAZ 2 (backend gerçekten durdurulmuş, taze bir
+süreç) **başarısız oldu - bu bir test hatası DEĞİL.** `AuthSessionNotifier`
+(bkz. `auth_session_provider.dart`) yerel bir `MeResponse` önbelleği
+TUTMAZ; taze bir süreçte `/auth/me`ye ağ erişimi olmadan oturum ASLA
+`AsyncData` olamaz, `route_redirect.dart` kullanıcıyı Splash'in "Sunucuya
+bağlanılamadı" ekranında tutar. Test, "Tekrar Dene"ye 30 saniyede **19
+kez** bastı, hiçbiri işe yaramadı (backend gerçekten kapalıyken
+yaramayacağı da zaten beklenen).
+
+**Sonuç:** `/mobile/program`in özenle inşa edilen KALICI önbelleği
+(Faz 7'nin ana hedefi), kullanıcı UYGULAMAYI TAMAMEN KAPATIP AÇTIĞINDA VE
+O ANDA ÇEVRİMDIŞI OLDUĞUNDA erişilemez durumda - üst seviye oturum
+kapısı, Program ekranının çevrimdışı yeteneğini GÖLGELİYOR. (Uygulama
+arka plandan öne alınırken - process hiç ölmediyse - bu sorun YOK, çünkü
+`authSessionProvider` zaten `AsyncData` durumda kalır.)
+
+Bu, Faz 6'nın "oturum her zaman canlı doğrulanır" güvenlik duruşu ile
+Faz 7'nin "önbellek çevrimdışı çalışsın" hedefi arasındaki BİLİNÇLİ
+olmayan bir çelişki. Düzeltmesi (ör. son başarılı `MeResponse`i yerel
+olarak saklayıp ağ hatasında ona düşmek) gerçek bir mimari karar
+gerektirir - bu oturumun "yalnızca Key ekle" kapsamı DIŞINDA, Faz 8 için
+Berke'ye bırakıldı, test BİLEREK gevşetilmedi.
+
+### Nihai test sonuçları
+
+Tüm 4 dosya `--no-uninstall` ile, önce normal veriyle, sonra çok uzun
+kongre adı/oturum başlığı/sponsor adıyla (`Congress.fullName`, bir
+`Session.title`, bir `Sponsor.name` DB'de doğrudan güncellenerek)
+tekrar çalıştırıldı:
+
+| Dosya | Sonuç |
+|---|---|
+| `navigasyon_test.dart` | 3/3 geçti |
+| `program_test.dart` | 2/3 geçti, 1 BİLİNÇLİ atlandı (test kongresinde seçili günde tek salon var - salon filtresi testi anlamlı fark yaratamıyor) |
+| `olceklendirme_test.dart` | 1/1 geçti (yukarıdaki overflow düzeltmesinden sonra) |
+| `cevrimdisi_test.dart` FAZ 1 | geçti (önbellek dosyası oluştu, tazelik doğru) |
+| `cevrimdisi_test.dart` FAZ 2 | **BAŞARISIZ - yukarıdaki bilinen mimari bulgu, düzeltilmedi** |
+
+Beacon veri akışı (`BeaconObservationService`) tüm koşular boyunca
+kesintisiz çalıştı - hiçbir test dosyası onun iç mantığına dokunmadı.
+`flutter analyze` temiz, `dart format` uygulandı, `flutter test`
+(birim/widget) 17/17 geçiyor.

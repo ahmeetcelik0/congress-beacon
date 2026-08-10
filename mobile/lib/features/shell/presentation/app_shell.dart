@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/testing/widget_keys.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../permission/presentation/always_permission_banner.dart';
 
@@ -38,20 +39,50 @@ class AppShell extends StatelessWidget {
           if (index == currentIndex) return;
           context.go(_tabs[index]);
         },
+        // Her sekmenin HEM `icon` (secili degilken) HEM `activeIcon`
+        // (seciliyken) hali AYNI Key ile sarmalanir - integration_test
+        // sekmeleri metin/simge yerine kararlı bir Key ile bulup dokunabilsin
+        // (bkz. core/testing/widget_keys.dart). Yalnizca `icon`a Key
+        // eklemek YETMEZ: `BottomNavigationBar` secili sekme icin
+        // `activeIcon`i gosterir, bu yuzden o an ZATEN secili olan bir
+        // sekme (ör. Ana Sayfa'dayken tekrar Ana Sayfa'yi bulmak)
+        // Key'siz kalirdi (gercek cihazda yakalanan bir hata - bkz.
+        // `integration_test/olceklendirme_test.dart`). Iki hal ayni anda
+        // agacta OLMADIGI icin ayni Key'in tekrarlanmasi guvenlidir.
+        // `BottomNavigationBarItem`in kendisi bir widget DEGIL, `key`
+        // parametresi almiyor.
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home_rounded),
+            icon: KeyedSubtree(
+              key: WidgetKeys.shellTabHome,
+              child: Icon(Icons.home_outlined),
+            ),
+            activeIcon: KeyedSubtree(
+              key: WidgetKeys.shellTabHome,
+              child: Icon(Icons.home_rounded),
+            ),
             label: 'Ana Sayfa',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month_outlined),
-            activeIcon: Icon(Icons.calendar_month_rounded),
+            icon: KeyedSubtree(
+              key: WidgetKeys.shellTabProgram,
+              child: Icon(Icons.calendar_month_outlined),
+            ),
+            activeIcon: KeyedSubtree(
+              key: WidgetKeys.shellTabProgram,
+              child: Icon(Icons.calendar_month_rounded),
+            ),
             label: 'Program',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline_rounded),
-            activeIcon: Icon(Icons.person_rounded),
+            icon: KeyedSubtree(
+              key: WidgetKeys.shellTabProfile,
+              child: Icon(Icons.person_outline_rounded),
+            ),
+            activeIcon: KeyedSubtree(
+              key: WidgetKeys.shellTabProfile,
+              child: Icon(Icons.person_rounded),
+            ),
             label: 'Profil',
           ),
         ],

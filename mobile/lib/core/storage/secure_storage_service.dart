@@ -21,6 +21,7 @@ class SecureStorageService {
       'permission_onboarding_complete';
   static const String _beaconUuidKey = 'beacon_uuid';
   static const String _beaconUuidCongressIdKey = 'beacon_uuid_congress_id';
+  static const String _announcementsLastSeenPrefix = 'announcements_last_seen_';
 
   Future<void> saveAccessToken(String token) async {
     await _storage.write(key: _accessTokenKey, value: token);
@@ -77,6 +78,28 @@ class SecureStorageService {
     final savedCongressId = await _storage.read(key: _beaconUuidCongressIdKey);
     if (savedCongressId != congressId) return null;
     return _storage.read(key: _beaconUuidKey);
+  }
+
+  // "Okunmamis duyuru" rozeti icin - sunucu bu durumu TUTMAZ (bkz. Faz 7
+  // talimati §2, docs/decisions.md Faz 5). Kongreye gore anahtarlanir
+  // (beaconUuid ile ayni sebep: kongre degistiginde BASKA bir kongrenin
+  // "son gorulen" damgasi yanlislikla kullanilmasin).
+  Future<void> saveAnnouncementsLastSeen(
+    String congressId,
+    DateTime seenAt,
+  ) async {
+    await _storage.write(
+      key: '$_announcementsLastSeenPrefix$congressId',
+      value: seenAt.toIso8601String(),
+    );
+  }
+
+  Future<DateTime?> getAnnouncementsLastSeen(String congressId) async {
+    final value = await _storage.read(
+      key: '$_announcementsLastSeenPrefix$congressId',
+    );
+    if (value == null) return null;
+    return DateTime.tryParse(value);
   }
 
   Future<void> savePermissionOnboardingComplete() async {

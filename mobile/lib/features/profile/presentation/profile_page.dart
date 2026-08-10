@@ -4,9 +4,14 @@ import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../../../core/config/package_info_provider.dart';
+import '../../../core/testing/widget_keys.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/turkish_date_format.dart';
+import '../../../core/widgets/role_type_chip.dart';
+import '../../../models/mobile_content_models.dart';
 import '../../auth/application/auth_session_provider.dart';
+import '../../program/application/program_provider.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -46,6 +51,10 @@ class ProfilePage extends ConsumerWidget {
     }
 
     final activeCongress = me.activeCongress;
+    // Bos/yuklenmemis/hatali TUMU "gosterme" olarak ele alinir - bu bolum
+    // Profilim sayfasinin asli isi degil, destekleyici bir ozet (bkz. Faz
+    // 7 talimati §5 "Hic yoksa bu bolumu gosterme").
+    final myProgramItems = ref.watch(myProgramProvider).value?.items;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -96,6 +105,7 @@ class ProfilePage extends ConsumerWidget {
           _SectionCard(
             children: [
               _ActionTile(
+                key: WidgetKeys.profileChangeCongress,
                 icon: Icons.event_available_outlined,
                 title: 'Aktif Kongre',
                 subtitle: activeCongress?.name ?? 'Seçilmedi',
@@ -104,6 +114,7 @@ class ProfilePage extends ConsumerWidget {
               ),
               const Divider(height: 1),
               _ActionTile(
+                key: WidgetKeys.profileChangePassword,
                 icon: Icons.lock_outline,
                 title: 'Şifre',
                 subtitle: '••••••••',
@@ -112,10 +123,15 @@ class ProfilePage extends ConsumerWidget {
               ),
             ],
           ),
+          if (myProgramItems != null && myProgramItems.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            _MyProgramSection(items: myProgramItems),
+          ],
           const SizedBox(height: AppSpacing.lg),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
+              key: WidgetKeys.profileLogout,
               onPressed: () => _confirmLogout(context, ref),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
@@ -192,6 +208,7 @@ class _SectionCard extends StatelessWidget {
 
 class _ActionTile extends StatelessWidget {
   const _ActionTile({
+    super.key,
     required this.icon,
     required this.title,
     required this.subtitle,
@@ -234,6 +251,90 @@ class _ActionTile extends StatelessWidget {
           fontWeight: FontWeight.w700,
           fontSize: 12.5,
         ),
+      ),
+    );
+  }
+}
+
+/// Katilimcinin kendi konusmaci/moderator/tartismaci oldugu program (bkz.
+/// Faz 7 talimati §5, `GET /mobile/my-program`) - kronolojik sirada,
+/// sunucudan geldigi gibi (tekrar SIRALANMAZ).
+class _MyProgramSection extends StatelessWidget {
+  const _MyProgramSection({required this.items});
+
+  final List<MobileMyProgramItem> items;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.only(bottom: AppSpacing.sm, left: 2),
+          child: Text(
+            'Benim Programım',
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+          ),
+        ),
+        _SectionCard(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const Divider(height: 1),
+              _MyProgramTile(item: items[i]),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MyProgramTile extends StatelessWidget {
+  const _MyProgramTile({required this.item});
+
+  final MobileMyProgramItem item;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.title,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '${formatTurkishDate(item.startTime)} · '
+                  '${formatTimeRange(item.startTime, item.endTime)} · '
+                  '${item.hallName}',
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          RoleTypeChip(roleType: item.roleType),
+        ],
       ),
     );
   }

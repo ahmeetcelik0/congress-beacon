@@ -8,11 +8,17 @@ import '../../features/auth/presentation/forgot_password_page.dart';
 import '../../features/auth/presentation/login_page.dart';
 import '../../features/auth/presentation/register_page.dart';
 import '../../features/congress/presentation/select_congress_page.dart';
+import '../../features/content/presentation/announcements_page.dart';
+import '../../features/content/presentation/info_sections_page.dart';
+import '../../features/content/presentation/sponsors_page.dart';
+import '../../features/content/presentation/speakers_page.dart';
+import '../../features/content/presentation/venues_page.dart';
+import '../../features/home/presentation/home_page.dart';
 import '../../features/permission/application/permission_gate_provider.dart';
 import '../../features/permission/presentation/permission_gate_page.dart';
+import '../../features/program/presentation/program_page.dart';
+import '../../features/program/presentation/session_detail_page.dart';
 import '../../features/shell/presentation/app_shell.dart';
-import '../../features/shell/presentation/home_placeholder_page.dart';
-import '../../features/shell/presentation/program_placeholder_page.dart';
 import '../../features/shell/presentation/splash_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import 'route_redirect.dart';
@@ -75,16 +81,39 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: '/select-congress',
         builder: (context, state) => const SelectCongressPage(),
       ),
+      // Icerik alt ekranlari (Faz 7) - BILEREK ShellRoute DISINDA: tam
+      // ekran + geri tusuyla acilirlar, sekme cubugu/izin seridi
+      // GORUNMEZ (bkz. `/change-password`/`/select-congress`ile AYNI
+      // kurulmus desen).
+      GoRoute(
+        path: '/announcements',
+        builder: (context, state) => const AnnouncementsPage(),
+      ),
+      GoRoute(
+        path: '/sponsors',
+        builder: (context, state) => const SponsorsPage(),
+      ),
+      GoRoute(
+        path: '/speakers',
+        builder: (context, state) => const SpeakersPage(),
+      ),
+      GoRoute(path: '/venues', builder: (context, state) => const VenuesPage()),
+      GoRoute(
+        path: '/info-sections',
+        builder: (context, state) => const InfoSectionsPage(),
+      ),
+      GoRoute(
+        path: '/session/:id',
+        builder: (context, state) =>
+            SessionDetailPage(sessionId: state.pathParameters['id']!),
+      ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
-          GoRoute(
-            path: '/home',
-            builder: (context, state) => const HomePlaceholderPage(),
-          ),
+          GoRoute(path: '/home', builder: (context, state) => const HomePage()),
           GoRoute(
             path: '/program',
-            builder: (context, state) => const ProgramPlaceholderPage(),
+            builder: (context, state) => const ProgramPage(),
           ),
           GoRoute(
             path: '/profile',
