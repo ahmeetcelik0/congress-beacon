@@ -846,3 +846,125 @@ bir "çevrimdışı farkındalığı" eklemeye gerek yok.
 
 `flutter analyze` temiz, `flutter test` (birim/widget) 31/31 geçiyor,
 tüm 4 `integration_test` dosyası gerçek cihazda geçti.
+
+## 2026-08-11 — Faz 8: Kalıcı gözlem kuyruğu (SQLite)
+
+### Ne değişti
+
+Yukarıdaki nottaki bellek-içi kuyruk artık SQLite'a taşındı (tam gerekçe
+`docs/decisions.md` "Faz 8"):
+
+- **`features/observations/domain/observation_queue_store.dart`** (yeni) -
+  `ObservationQueueStore` arayüzü + `QueuedObservation` modeli.
+- **`features/observations/data/sqlite_observation_queue_store.dart`**
+  (yeni) - `sqflite` implementasyonu, tek tablo (`observation_queue`,
+  `observation_id` UNIQUE), `enqueue`/`enqueueAll`/`peekBatch`/
+  `removeSent`/`count`/`pruneOlderThan`/`pruneOverCapacity`/
+  `clearForScopeChange`.
+- **`BeaconObservationService`** - `_onRangingResult` senkron kalmaya
+  devam ediyor (içine `await` konmadı); gözlemler önce küçük bir bellek
+  tamponuna (`_writeBuffer`, 10 kayıt/5sn tetikli) yazılıp oradan kalıcı
+  kuyruğa taşınıyor. `_trySendBatch` artık `peekBatch(limit:50)` ile
+  çalışıyor, kuyruk bitene kadar kademeli boşaltıyor (2sn aralıkla) -
+  **limit önce 500'dü, gerçek cihazda 413 hatası verdiği için 50'ye
+  düşürüldü (aşağıya bkz.)**. `stop()` artık tamponu kalıcı kuyruğa
+  yazmayı BEKLİYOR (`await`). `congressId`/`userId` yeni zorunlu
+  constructor parametreleri. Yaşlanma (72sa) ve tavan (100.000) temizliği
+  otomatik. `_drainQueue` artık her yeni `peekBatch`tan önce bir
+  `_stopped` bayrağını kontrol ediyor (kod incelemesinde bulunan, kapsam
+  değişimi sırasında nadir bir yarış durumunu daraltmak için - aşağıya
+  bkz.).
+- **`ObservationLifecycleNotifier`** - `_startedForUserId` takibi eklendi;
+  kongre/kullanıcı değişiminde veya AÇIKÇA çıkış yapılınca
+  (`explicitLogoutSignalProvider`, yeni - bkz. `auth_session_provider.dart`)
+  kuyruğu tamamen temizliyor. 401/yerel token süresi dolmuş gibi İSTEMSİZ
+  oturum düşüşlerinde kuyruğa DOKUNMUYOR (bilinçli tasarım, gerekçe
+  `decisions.md`da).
+  `initialQueue`/`pendingSnapshots` (Faz 6.2'nin 403-kurtarma taşıma
+  mekanizması) KALDIRILDI - artık gereksiz, çünkü kuyruk servis
+  örneğine değil `congressId+userId`ye bağlı kalıcı bir dosya.
+- Yeni bağımlılıklar: `sqflite ^2.4.3`, `path ^1.9.1` (direkt),
+  `sqflite_common_ffi ^2.4.2` (dev, test için).
+- Testler: `test/sqlite_observation_queue_store_test.dart` (11 test,
+  gerçek SQLite semantiği `sqflite_common_ffi` ile) +
+  `integration_test/kuyruk_test.dart` (4 FAZ). Toplam birim/widget testi
+  31'den 42'ye çıktı.
+
+### Ne kırılabilir
+
+- `BeaconObservationService`in ranging/duty-cycle/monitoring güvenlik
+  ağı/yaşam döngüsü mantığına DOKUNULMADI - değişen TEK şey kuyruğun
+  nerede tutulduğu. `_onRangingResult` hâlâ senkron.
+- `stop()` artık `await _flushWriteBuffer()` yapıyor - bu, 403 cihaz
+  kurtarmasında (Faz 6.2) ve kapsam temizliğinde (Faz 8) sıralamanın
+  DOĞRU olması için KASITLI bir davranış değişikliği (öncesinde
+  fire-and-forget değildi zaten, tampon vardı ama diske yazma kavramı
+  yoktu).
+- Backend/`POST /observations/batch` sözleşmesine DOKUNULMADI.
+- `_drainQueue`in yeni `_stopped` bayrak kontrolü bir DAVRANIŞ
+  değişikliği değil, yalnızca bir race-window daraltma - normal akışta
+  hiç tetiklenmez.
+
+### Gerçek cihazda bulunup düzeltilen gerçek hata: HTTP 413
+
+Uzun süreli offline testinde (~1700 kayıtlık gerçek bir kuyruk) backend
+açılınca ilk 500'lük batch **413 "request entity too large"** ile
+reddedildi - NestJS/Express'in varsayılan ~100KB JSON gövde sınırı, 6
+beacon/gözlem yoğunluğunda 500 gözlemi (~375KB) kaldırmıyor. Bu,
+kuyruğu SONSUZA KADAR tıkayan gerçek bir hataydı (başarısız gönderimde
+kayıtlar silinmiyor, aynı oversize batch hep tekrar deneniyordu).
+Backend'e DOKUNULMADAN (mutlak kısıt) istemci tarafında limit 500'den
+**50**'ye düşürüldü - düzeltme canlı cihazda `flutter run` ile hot
+restart edilip AYNI ~1700 kayıtlık gerçek kuyruğun 35 batch'te (34×50 +
+1×26), sıfır 413 hatasıyla tamamen boşaldığı doğrulandı. Detay/gerekçe
+`docs/decisions.md` "Faz 8 - Batch limiti".
+
+### Gerçek cihazda test edilenler (zaten yapıldı)
+
+`integration_test/kuyruk_test.dart`in 4 FAZ'ı ("Baş" iPhone 16 Pro,
+gerçek beacon donanımı) + canlı `flutter run` oturumuyla manuel adımlar,
+hepsi geçti:
+
+1. **FAZ 0** (backend açık): kuyruk sürekli akıp temiz kaldı (<50 kayıt).
+2. **FAZ 1** (backend kapalı, 90sn): kuyruk 52 kayda çıktı.
+3. **FAZ 2** (YENİ süreç - gerçek kapat-aç, backend HÂLÂ kapalı): widget
+   ağacı kurulmadan ÖNCE diskten okunan sayı da 52'ydi - **Faz 8'in
+   kritik kanıtı**.
+4. **FAZ 3** (backend açılıyor): kuyruk kademeli boşaldı. Yan-kanıt: bir
+   önceki yarıda-kesilen denemede backend'e ULAŞMIŞ ama yerel
+   `removeSent` hiç ÇALIŞMAMIŞ 52 kayıt tekrar gönderilince backend
+   `Dup: 52` ile doğru reddetti - SQLite UNIQUE + backend idempotency'nin
+   gerçek bir yarım-kalmış-gönderim senaryosunda BİRLİKTE çalıştığının
+   kanıtı.
+5. **Backend doğrulaması**: `HallVisit`/`AttendanceEvent` üretimi
+   (algoritma v3) bozulmadı, testler sırasında yeni ENTRY/EXIT çiftleri
+   normal oluşmaya devam etti.
+6. **Uzun süreli test** (25dk backend kapalı, ~1700 kayda çıktı): kuyruk
+   donmadan büyüdü. Backend açılınca **413 hatası bulundu ve düzeltildi**
+   (yukarıya bkz.) - düzeltmeden sonra aynı gerçek kuyruk tamamen,
+   arayüz donmadan boşaldı (kullanıcı ekranlar arası gezindi, akıcıydı).
+7. **Kongre değiştir**: log `STOP ... → 3 kayit SILINDI (kapsam degisimi:
+   kongre degisimi) → START <yeni kongre> ... baslangicta kuyrukta 0
+   kayit`.
+8. **Çıkış yap** (backend KAPALIYKEN, 30+ kayıtlık kuyrukla): log
+   `STOP ... → 43 kayit SILINDI (kapsam degisimi: cikis yapildi)`.
+9. **Arka plan hız karşılaştırması** (10dk, ekran kilitli): 3100 gözlem
+   (~5,0 gözlem/sn) - Faz 6 ölçümünden (2283/11,4dk ≈ 3,34/sn) düşük
+   DEĞİL, kalıcı kuyruk katmanı ranging'i yavaşlatmıyor.
+
+**Küçük bir gözlem (hata değil):** çıkış testinde loglarda arka arkaya
+iki kez `"0/43 kayit SILINDI (kapsam degisimi: cikis yapildi)"` görüldü -
+muhtemelen "Çıkış Yap" onay diyaloğuna çift dokunma. Riverpod aynı
+değere (`AsyncData(null)`) ikinci geçişte dinleyicileri TEKRAR
+TETİKLEMEDİĞİ için `explicitLogoutSignalProvider` bayrağı bir sonraki
+GERÇEK duruma (yeniden giriş) kadar taşındı ve orada tüketildi - veri
+kaybı/yanlış davranış YOK (`clearForScopeChange` zaten boş tablo üzerinde
+idempotent), yalnızca zararsız bir yinelenen log satırı.
+
+`flutter analyze` temiz, `flutter test` 42/42 geçiyor.
+
+### Faz 9 (Push/FCM) için not
+
+Bu fazda dokunulmayanlar: bildirim izinleri, arka plan fetch, FCM token
+kaydı. Faz 8'in kuyruk mimarisiyle hiçbir çakışma beklenmiyor - push,
+gözlem gönderiminden tamamen bağımsız bir kanal.

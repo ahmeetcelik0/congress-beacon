@@ -1055,3 +1055,127 @@ geldiğinde de, kuyruğun DOLMASI/BOŞALMASI oturumun çevrimiçi mi
 çevrimdışı mı olduğundan TAMAMEN bağımsız kalmalı - servisin kendi
 retry/backoff mantığı zaten bunu ele alıyor, `AuthSessionNotifier`in
 çevrimdışı moduyla hiçbir ENTEGRASYONA ihtiyacı yok.
+
+## Faz 8 — Kalıcı gözlem kuyruğu (SQLite, 2026-08-11)
+
+### Sorun
+
+Faz 7.1 notunda anlatıldığı gibi, `BeaconObservationService` gönderilemeyen
+gözlemleri bir Dart `List` içinde (bellekte) biriktiriyordu. Uygulama
+kapansa da servis `stop()` edilmeden önce **tamponu boşaltıyordu** - ama
+uygulama **tamamen kapatılırsa** (kullanıcı kaydırıp kapatırsa veya iOS
+onu bellekten atarsa) o bellek de onunla birlikte yok oluyordu. Kongre
+salonunda ağ koptuğunda ve kullanıcı uygulamayı kapattığında, o sürede
+toplanan katılım verisi geri getirilemez şekilde kayboluyordu.
+
+### Neden SQLite - MySQL'in yerine geçmiyor
+
+**MySQL sunucuda, SQLite telefonda** - ikisi rakip değil, farklı katmanlar.
+MySQL tek gerçek veri kaynağı olarak kalır; backend şeması hiç değişmedi.
+Telefonda üretilen bir gözlem internet varsa doğrudan backend'e gidip
+MySQL'e yazılır; yoksa **telefonda beklemesi** gerekir - bu bekleme Faz
+8'den önce bellekteydi, şimdi diske (SQLite) taşındı. `observation_queue`
+tablosu MySQL şemasının kopyası DEĞİL - yalnızca "gönderilmeyi bekleyen
+gözlem"i tutan birkaç kolon (`observationId`, `beaconsJson`, `congressId`,
+`userId`, `createdAt`). Düz dosya yerine SQLite seçilmesinin sebebi: kuyruk
+on binlerce kayda çıkabilir, gereken işlemler (en eskiden N tane oku,
+gönderilenleri sil, yaş/tavan bazlı toplu sil) düz dosyada ya tüm dosyayı
+yeniden yazmayı ya da elle indeks yönetmeyi gerektirir. SQLite tek bir
+dosya + kütüphanedir - ayrı süreç/port/kullanıcı yönetimi yoktur, iOS'ta
+zaten sistemin parçasıdır.
+
+### `initialQueue`/`pendingSnapshots` mekanizması kaldırıldı
+
+Faz 6.2'de, 403 (cihaz geçersiz) kurtarmasında eski servisin bellekteki
+kuyruğunu yeni servise ELLE taşıyan bir `initialQueue`/`pendingSnapshots`
+çifti vardı - amacı, servis örneği değişirken kuyruğun kaybolmamasıydı.
+Faz 8'de kuyruk artık `congressId`+`userId`'ye göre KALICI olduğu için (bir
+Dart nesnesine değil, diskteki bir dosyaya bağlı), bu elle taşıma mekanizması
+GEREKSİZ hale geldi: yeni servis örneği aynı kongre/kullanıcı için aynı
+kalıcı kuyruğu otomatik olarak görür, değişen tek şey `deviceId`dir.
+Mekanizma kaldırıldı, `BeaconObservationService.stop()` artık tamponu
+kalıcı kuyruğa yazmayı **bekler** (`await`, fire-and-forget DEĞİL) - bu,
+hem 403 kurtarmasında hem kapsam değişiminde (aşağıya bkz.) veri kaybını
+önler.
+
+### Tampon stratejisi: (a) küçük bellek tamponu + periyodik/boyut tetikli boşaltma
+
+`_onRangingResult` senkron bir callback olduğu için içine `await`
+konamaz. Talimatta iki seçenek vardı: (a) küçük tampon (10 kayıt/5sn) +
+toplu yazım, (b) her kayıtta `unawaited` tekil yazım. **(a) seçildi**:
+saniyede ~3.3 gözlemle (Faz 6 ölçümü) (b) uzun bir kongrede yüz binlerce
+disk yazımı demek - pil/performans açısından gereksiz ağır. (a)'nın
+bedeli (uygulama aniden ölürse tampondaki en fazla birkaç saniyelik veri
+kaybı) kabul edilebilir bulundu; ayrıca uygulama arka plana geçerken
+(`didChangeAppLifecycleState` → paused) tampon ayrıca boşaltılmaya
+çalışılır (iOS bu noktadan sonra habersiz sonlandırabileceği için).
+
+### Batch limiti (50, başlangıçta 500 denendi) ve kademeli boşaltma
+
+Kalıcı kuyrukla birlikte "tüm kuyruğu tek istekte gönder" tehlikeli hale
+geldi (8 saat çevrimdışı ~100.000 gözlem demek). `_drainQueue` en fazla
+N kayıtlık gruplar halinde, kuyruk bitene ya da bir gönderim başarısız
+olana kadar art arda (aralarda 2sn'lik kısa bir bekleme ile, sunucuyu
+boğmadan) gönderir. Gönderim sırası her zaman en eskiden yeniye
+(`ORDER BY created_at ASC`).
+
+**Gerçek cihazda bulunan hata:** talimat "başlangıç için 500 öner, ölç ve
+gerekirse ayarla" diyordu - ölçüm tam da bunu gerektirdi. ~1700 kayıtlık
+gerçek bir kuyruk backend'e bağlanınca, 500'lük ilk batch **HTTP 413
+("request entity too large")** ile reddedildi. Kök neden: NestJS/Express
+varsayılan JSON gövde sınırı ~100KB; gerçek cihazda görülen tipik
+yoğunlukla (6 beacon/gözlem) 500 gözlemlik istek ~375KB'a ulaşıyor. Bu,
+kuyruğu SONSUZA KADAR tıkayan bir hataydı - `_handleSendError` başarısız
+göndermede kayıtları SİLMEDİĞİ için (bilinçli tasarım, bkz. yukarı),
+aynı oversize batch tekrar tekrar denenip hep 413 alıyordu. Backend'e
+DOKUNULMADI (mutlak kısıt) - çözüm istemci tarafında: limit **50**'ye
+düşürüldü, 15 beacon/gözlem gibi gerçekçi olandan çok daha yoğun bir
+durumda bile (~84KB) sınırı aşmıyor. Düzeltmeden sonra aynı ~1700
+kayıtlık gerçek kuyruk, 35 batch'te (34×50 + 1×26), sıfır 413 hatasıyla
+tamamen boşaldı.
+
+### Kapsam kuralları - sessiz veri bozulmasını önleme
+
+- **Kongre değişince:** eski kongreye ait kayıtlar backend'e artık
+  yazılamaz (backend token'daki AKTİF kongreye yazar) - `_sync` eski
+  `congressId`yi yeniyle karşılaştırıp farklıysa kuyruğu TAMAMEN temizler.
+- **Farklı kullanıcı girişi:** aynı mantıkla `userId` karşılaştırılır.
+- **Çıkış yapılınca:** kuyruk TAMAMEN temizlenir - ama BİLİNÇLİ bir
+  ayrım var: bu yalnızca `AuthSessionNotifier.logout()` (kullanıcının
+  "Çıkış Yap"a AÇIKÇA basması) ile tetiklenir, YOKSA 401/yerel token
+  süresi dolmuş gibi İSTEMSİZ oturum düşüşleriyle DEĞİL. Sebep: kullanıcı
+  ağsızken token'ı süresi dolup zorla giriş ekranına düşerse ve AYNI
+  hesapla tekrar giriş yaparsa, saatlerdir biriken kuyruğun sessizce
+  silinmesi projenin "katılım verisini eksiksiz toplama" temel amacıyla
+  doğrudan çelişirdi. Bu ayrım yeni bir `explicitLogoutSignalProvider`
+  (bkz. `auth_session_provider.dart`) ile yapılır - yalnızca `logout()`
+  onu `true`ya çeker, `ObservationLifecycleNotifier` bunu okuyup TÜKETİR.
+- **Yaşlanma:** 72 saatten eski kayıtlar silinir - kongre bitmiş, veri
+  anlamını yitirmiştir. Her `start()`ta bir kez çalışır (soğuk başlangıç
+  taze bir uygulamanın gördüğü ilk an).
+- **Üst sınır:** 100.000 kaydı aşan kuyruklarda en eski kayıtlar silinir -
+  disk dolmasın, yeni veri her zaman eskisinden değerlidir. Her başarılı
+  gönderimden sonra kontrol edilir.
+- Sıralama önemli: `_stopService()` ÖNCE servisi durdurur (tampon
+  kalıcı kuyruğa YAZILIR), SONRA kapsam temizliği çalışır - aksi halde
+  henüz diske yazılmamış birkaç kayıt, temizlikten SONRA yazılıp YANLIŞ
+  (yeni) kapsamda kalıcı kuyrukta kalabilirdi.
+
+### Gerçek cihazda doğrulama (özet - tam detay `docs/mobile-handoff.md`)
+
+`integration_test/kuyruk_test.dart` (4 FAZ, ayrı `flutter test`
+çalıştırmaları - her biri gerçek bir "uygulamayı kapat-aç") + canlı
+`flutter run` oturumuyla manuel adımlar. Kritik kanıt: FAZ 1 backend
+kapalıyken kuyruk 52 kayda çıktı; FAZ 2 (YENİ bir süreç - gerçek kapat-aç)
+widget ağacı kurulmadan ÖNCE diskten okunan sayı da 52'ydi - kuyruk
+sürecin ölümüne rağmen hayatta kaldı. FAZ 3'te backend açılınca kuyruk
+kademeli boşaldı; ilginç bir yan-kanıt: önceki (yarıda kesilen) bir
+deneme sırasında backend'e ULAŞMIŞ ama yerel `removeSent` hiç
+ÇALIŞMAMIŞ 52 kayıt, tekrar gönderilince backend tarafından `Dup: 52`
+olarak doğru şekilde reddedildi - SQLite UNIQUE + backend idempotency
+katmanlarının BİRLİKTE, gerçek bir yarım-kalmış-gönderim senaryosunda
+çalıştığının kanıtı. Kongre değiştirme ve çıkış yapma canlı cihazda
+ayrı ayrı doğrulandı (loglarda `... kayit SILINDI (kapsam degisimi: ...)`
+ile). Arka plan veri akış hızı (10 dakika, ekran kilitli): 3100 gözlem
+(~5,0 gözlem/sn) - Faz 6 ölçümünden (2283/11,4dk ≈ 3,34/sn) DÜŞÜK DEĞİL,
+kalıcı kuyruk katmanı ranging'i YAVAŞLATMIYOR.

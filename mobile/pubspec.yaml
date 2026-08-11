@@ -68,9 +68,22 @@ dependencies:
   # olarak vardi, artik dogrudan kullaniliyor.
   path_provider: ^2.1.6
 
+  # Faz 8 - kalici cevrimdisi gozlem kuyrugu. Ikisi de pub.dev'den DOGRULANDI
+  # (2026-08-10): sqflite 2.4.3 (2 ay once yayinlandi), path 1.9.1 (projede
+  # zaten transitive bagimlilik olarak vardi - `path_provider` uzerinden -
+  # artik dogrudan kullaniliyor, sadece pubspec'te ACIKCA belirtiliyor).
+  sqflite: ^2.4.3
+  path: ^1.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # Faz 8 - kuyruk testlerinde gercek SQLite semantigini (UNIQUE kisiti, ORDER
+  # BY, DELETE) fiziksel cihaz/emulator OLMADAN dogrulamak icin - sqflite'in
+  # resmi paketi, masaustunde saf FFI ile calisan bir SQLite motoru saglar.
+  # pub.dev'den DOGRULANDI (2026-08-10): 2.4.2, 60 gun once yayinlandi.
+  sqflite_common_ffi: ^2.4.2
   # Faz 7 - XCUITest'in Flutter icin yanlis arac oldugu (widget agacini
   # gormuyor, yalnizca Semantics ile ACIKCA verilmis identifier'lari
   # gorebiliyor) canli denemeyle dogrulandiktan sonra bunun yerine

@@ -22,6 +22,17 @@ class ObservedBeacon {
       if (txPower != null) 'txPower': txPower,
     };
   }
+
+  // Faz 8 - kalici kuyruktan (SQLite) geri okurken gerekiyor.
+  factory ObservedBeacon.fromJson(Map<String, dynamic> json) {
+    return ObservedBeacon(
+      uuid: json['uuid'] as String,
+      major: json['major'] as int,
+      minor: json['minor'] as int,
+      rssi: json['rssi'] as int,
+      txPower: json['txPower'] as int?,
+    );
+  }
 }
 
 class ObservationSnapshot {
@@ -44,6 +55,18 @@ class ObservationSnapshot {
       'beacons': beacons.map((b) => b.toJson()).toList(),
       if (appVersion != null) 'appVersion': appVersion,
     };
+  }
+
+  // Faz 8 - kalici kuyruktan (SQLite) geri okurken gerekiyor.
+  factory ObservationSnapshot.fromJson(Map<String, dynamic> json) {
+    return ObservationSnapshot(
+      observationId: json['observationId'] as String,
+      observedAt: json['observedAt'] as String,
+      beacons: (json['beacons'] as List<dynamic>)
+          .map((b) => ObservedBeacon.fromJson(b as Map<String, dynamic>))
+          .toList(),
+      appVersion: json['appVersion'] as String?,
+    );
   }
 }
 

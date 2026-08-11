@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../models/observation_models.dart';
+import 'observation_queue_store.dart';
 
 enum ObservationServiceStatus {
   initializing,
@@ -46,24 +47,33 @@ class BeaconObservationService with WidgetsBindingObserver {
   BeaconObservationService({
     required this.deviceId,
     required String beaconUuid,
+    required String congressId,
+    required String userId,
+    required ObservationQueueStore queueStore,
     ApiClient? apiClient,
     String appVersion = '1.0.0',
-    // Faz 6.2: cihaz kaydi gecersizlesip yeniden kaydolunca (bkz.
-    // ObservationServiceStatus.deviceInvalid), cagiran taraf ESKI servisin
-    // henuz gonderilmemis kuyrugunu BURADAN yeni servise tasiyabilsin diye -
-    // aksi halde kurtarma sirasinda o gozlemler sessizce kaybolurdu. Karar
-    // mantigina (hangi observation ne zaman kuyruga girer/gonderilir)
-    // dokunmaz, yalnizca BASLANGIC kuyrugunu doldurur.
-    List<ObservationSnapshot> initialQueue = const [],
   }) : _apiClient = apiClient ?? ApiClient(),
        // ignore: prefer_initializing_formals
        _appVersion = appVersion,
        // ignore: prefer_initializing_formals
        _beaconUuid = beaconUuid,
-       _queue = List.of(initialQueue);
+       // ignore: prefer_initializing_formals
+       _congressId = congressId,
+       // ignore: prefer_initializing_formals
+       _userId = userId,
+       // ignore: prefer_initializing_formals
+       _queueStore = queueStore;
 
   final String deviceId;
   final ApiClient _apiClient;
+  final ObservationQueueStore _queueStore;
+
+  // Faz 8: kalici kuyrukta hangi kongre/kullaniciya ait oldugu bilgisiyle
+  // birlikte saklanir - kongre/kullanici degisince eski kayitlarin YANLIS
+  // kongreye/kullaniciya gonderilmesini onlemek icin sart (bkz.
+  // ObservationQueueStore, ObservationLifecycleNotifier kapsam temizligi).
+  final String _congressId;
+  final String _userId;
   // Faz 6: artik cagiran taraftan (gercek PackageInfo.version) geliyor -
   // yalnizca veri kaynagi degisti, asagidaki hicbir zamanlama/karar mantigi
   // DOKUNULMADI (bkz. docs/decisions.md, Faz 6 kisiti §1).
@@ -97,9 +107,56 @@ class BeaconObservationService with WidgetsBindingObserver {
   static const int _maxIntervalSeconds = 300;
   Duration _batchInterval = _defaultBatchInterval;
 
-  final List<ObservationSnapshot> _queue;
+  // Faz 8: `_onRangingResult` SENKRON bir callback oldugu icin (icine
+  // dogrudan `await` konamaz), gozlemler once bu KUCUK bellek tamponuna
+  // yazilir; tampon 10 kayda ulasinca VEYA 5 saniyede bir (hangisi once
+  // olursa) kalici kuyruga (`_queueStore`) tasinir. Bedeli: uygulama aniden
+  // olurse tampondaki en fazla birkac saniyelik veri kaybolur - (b) secenegi
+  // (her kayitta dogrudan diske yazmak) yerine BUNUN secilme sebebi: saniyede
+  // ~3.3 gozlemle (Faz 6 olcumu) (b) uzun bir kongrede yuz binlerce disk
+  // yazimi demek, pil/performans acisindan gereksiz agir (bkz. Faz 8
+  // talimati §3).
+  static const int _bufferFlushSize = 10;
+  static const Duration _bufferFlushInterval = Duration(seconds: 5);
+  // Tek istekte gonderilecek azami kayit - kalici kuyruk cok buyuyebildigi
+  // icin (ör. 8 saat cevrimdisi ~100.000 gozlem) tum kuyrugu tek seferde
+  // gondermek zaman asimi/bellek riski tasir (bkz. Faz 8 talimati §4).
+  //
+  // 500 DEGIL 50: talimat "baslangic icin 500 oner, olc ve gerekirse
+  // ayarla" diyordu - GERCEK cihazda 500'luk bir batch backend'den 413
+  // ("request entity too large") dondurdu. Kok neden: NestJS/Express'in
+  // VARSAYILAN JSON govde siniri ~100KB - 6 beacon'luk (gercek cihazda
+  // gorulen tipik yogunluk) 500 gozlemlik bir istek ~375KB'a ulasiyor.
+  // Backend'e DOKUNULMADI (mutlak kisit) - sinir yerine BURADA, istemci
+  // tarafinda kucultuldu. 50 kayit, 15 beacon/gozlem gibi GERCEKCI olandan
+  // COK daha yogun bir durumda bile (~84KB) siniri asmaz (bkz. Faz 8
+  // gercek cihaz olcumu, docs/decisions.md).
+  static const int _sendBatchLimit = 50;
+  // Kuyrukta hala kayit varsa bir sonraki batch'i sunucuyu bogmadan
+  // gondermek icin ardisik batch'ler arasindaki kisa bekleme.
+  static const Duration _drainRetryDelay = Duration(seconds: 2);
+  // Kongre bitmis, veri anlamini yitirmis sayilan yas siniri.
+  static const Duration _maxQueueAge = Duration(hours: 72);
+  // Diskin dolmamasi icin kuyruk boyutu tavani - asilirsa en eski kayitlar
+  // silinir (yeni veri her zaman eskisinden degerlidir).
+  static const int _maxQueueRows = 100000;
+
+  final List<ObservationSnapshot> _writeBuffer = [];
+  int _persistedCount = 0;
+  int get _pendingCount => _persistedCount + _writeBuffer.length;
+  Timer? _bufferFlushTimer;
   bool _isBatching = false;
   bool _isForeground = true;
+
+  // Faz 8: `stop()` cagrildiginda `_drainQueue`in devam eden bir dongusu
+  // OLABILIR (ör. yavas bir ag yanitini bekliyor) - `stop()` bunu iptal
+  // ETMEZ, ama bu bayrak dongunun bir SONRAKI `peekBatch` cagrisindan once
+  // kontrol edilip erken cikmasini saglar. Amac: kapsam degisiminde (kongre/
+  // kullanici degisti, `clearForScopeChange` cagrilacak) ESKI servisin
+  // dongusunun, token ARTIK YENI kapsama gecmisken YENI bir gonderim
+  // baslatip veriyi yanlis kapsama fatura etmesi ihtimalini daraltmak (bkz.
+  // Faz 8 talimati §5 "sessiz veri bozulmasini onle").
+  bool _stopped = false;
 
   // iOS'ta arka plan ranging'i, konum izni "Her Zaman" (Always) olmadan
   // guvenilir calismaz - "Uygulamayi Kullanirken" (WhenInUse) izniyle sistem
@@ -138,12 +195,6 @@ class BeaconObservationService with WidgetsBindingObserver {
 
   Stream<ObservationServiceState> get stateStream => _stateController.stream;
 
-  // Faz 6.2: cihaz kurtarma sirasinda (bkz. yukaridaki initialQueue) bu
-  // servis `stop()` edilip atilmadan once kuyrugu okuyup yeni servise
-  // aktarabilmek icin salt-okunur bir govde - degistirilemez bir kopya
-  // doner, cagiran taraf ic kuyruga MUDAHALE edemez.
-  List<ObservationSnapshot> get pendingSnapshots => List.unmodifiable(_queue);
-
   void _emitState(ObservationServiceState state) {
     _currentState = state;
     if (kDebugMode) {
@@ -160,10 +211,29 @@ class BeaconObservationService with WidgetsBindingObserver {
   }
 
   Future<void> start() async {
+    // Faz 8: kalici kuyruk BU servis ornegiyle degil, congressId+userId ile
+    // kapsamli - onceki oturumdan/uygulama kapatilmadan once kalan kayitlar
+    // burada devralinir (bkz. Faz 8 talimati "Bitirdiginde" §3 - kapat-ac
+    // sonrasi kuyrugun korunmasi bu satirla dogrulanir).
+    _persistedCount = await _queueStore.count();
+    if (kDebugMode) {
+      debugPrint(
+        '[ObservationQueue] baslangicta kuyrukta $_persistedCount kayit '
+        '(congressId=$_congressId, userId=$_userId)',
+      );
+    }
+    final prunedAge = await _queueStore.pruneOlderThan(_maxQueueAge);
+    if (prunedAge > 0) _persistedCount -= prunedAge;
+
+    _bufferFlushTimer?.cancel();
+    _bufferFlushTimer = Timer.periodic(_bufferFlushInterval, (_) {
+      unawaited(_flushWriteBuffer());
+    });
+
     _emitState(
       ObservationServiceState(
         status: ObservationServiceStatus.initializing,
-        pendingSnapshotCount: _queue.length,
+        pendingSnapshotCount: _pendingCount,
         lastBatchResult: _currentState.lastBatchResult,
       ),
     );
@@ -181,7 +251,7 @@ class BeaconObservationService with WidgetsBindingObserver {
         _emitState(
           ObservationServiceState(
             status: ObservationServiceStatus.error,
-            pendingSnapshotCount: _queue.length,
+            pendingSnapshotCount: _pendingCount,
             lastBatchResult: _currentState.lastBatchResult,
             errorMessage:
                 'Tarama hazır değil. Bluetooth veya izinler kapalı olabilir.',
@@ -223,7 +293,7 @@ class BeaconObservationService with WidgetsBindingObserver {
               _emitState(
                 ObservationServiceState(
                   status: _currentState.status,
-                  pendingSnapshotCount: _queue.length,
+                  pendingSnapshotCount: _pendingCount,
                   lastBatchResult: _currentState.lastBatchResult,
                   errorMessage: 'Bölge izleme hatası: $error',
                 ),
@@ -234,7 +304,7 @@ class BeaconObservationService with WidgetsBindingObserver {
       _emitState(
         ObservationServiceState(
           status: ObservationServiceStatus.active,
-          pendingSnapshotCount: _queue.length,
+          pendingSnapshotCount: _pendingCount,
           lastBatchResult: _currentState.lastBatchResult,
         ),
       );
@@ -242,7 +312,7 @@ class BeaconObservationService with WidgetsBindingObserver {
       _emitState(
         ObservationServiceState(
           status: ObservationServiceStatus.error,
-          pendingSnapshotCount: _queue.length,
+          pendingSnapshotCount: _pendingCount,
           lastBatchResult: _currentState.lastBatchResult,
           errorMessage: 'Başlatma hatası: $e',
         ),
@@ -311,6 +381,13 @@ class BeaconObservationService with WidgetsBindingObserver {
     _ensureRangingActive();
 
     _restartBatchTimer(_batchInterval);
+
+    // Faz 8: iOS uygulamayi bu noktadan sonra habersiz sonlandirabilir - bu
+    // yuzden tampondaki yazilmamis gozlemler arka plana gecerken MUTLAKA
+    // diske boşaltilmaya calisilir (bkz. Faz 8 talimati §3). `unawaited`:
+    // `_enterBackgroundMode` `WidgetsBindingObserver.didChangeAppLifecycleState`
+    // sozlesmesi geregi senkron (`void`) olmak ZORUNDA, icine `await` konamaz.
+    unawaited(_flushWriteBuffer());
   }
 
   void _ensureRangingActive() {
@@ -366,7 +443,7 @@ class BeaconObservationService with WidgetsBindingObserver {
             _emitState(
               ObservationServiceState(
                 status: ObservationServiceStatus.error,
-                pendingSnapshotCount: _queue.length,
+                pendingSnapshotCount: _pendingCount,
                 lastBatchResult: _currentState.lastBatchResult,
                 errorMessage: 'Tarama hatası: $error',
               ),
@@ -420,127 +497,220 @@ class BeaconObservationService with WidgetsBindingObserver {
       appVersion: _appVersion,
     );
 
-    _queue.add(snapshot);
+    _writeBuffer.add(snapshot);
 
     _emitState(
       ObservationServiceState(
         status: _currentState.status,
-        pendingSnapshotCount: _queue.length,
+        pendingSnapshotCount: _pendingCount,
         lastBatchResult: _currentState.lastBatchResult,
         errorMessage: _currentState.errorMessage,
       ),
     );
 
+    // Faz 8: tampon 10 kayda ulastiginda kalici kuyruga tasi (bkz. yukaridaki
+    // _bufferFlushSize yorumu) - 5 saniyelik zamanlayici (_bufferFlushTimer)
+    // zaten periyodik olarak da tasiyor, bu sadece hizli dolan durumlarda
+    // beklemeden tasimayi saglar.
+    if (_writeBuffer.length >= _bufferFlushSize) {
+      unawaited(_flushWriteBuffer());
+    }
+
     // Arka planda erken gonderim yapmiyoruz: ranging surekli acik oldugu icin
     // kuyruk hizla dolar ve bu yol tetiklenmeye devam ederdi - bu da
     // panelden ayarlanan gonderim sikligini sessizce gecersiz kilardi. Arka
     // planda yalniz _batchTimer'in (_batchInterval) tetiklemesine guveniyoruz.
-    if (_isForeground && _queue.length >= 10) {
+    if (_isForeground && _pendingCount >= _bufferFlushSize) {
       _trySendBatch();
     }
+  }
+
+  /// Tampondaki gozlemleri kalici kuyruga (`_queueStore`) tasir. Yazma
+  /// basarisiz olursa (ör. gecici disk hatasi) tampon TEMIZLENMEZ - bir
+  /// sonraki flush'ta (5sn zamanlayici veya bir sonraki dolma) tekrar
+  /// denenir; boylece basarisiz bir yazimda veri sessizce kaybolmaz.
+  Future<void> _flushWriteBuffer() async {
+    if (_writeBuffer.isEmpty) return;
+    final toFlush = List<ObservationSnapshot>.from(_writeBuffer);
+    final createdAt = DateTime.now().toUtc();
+    try {
+      await _queueStore.enqueueAll(
+        toFlush
+            .map(
+              (s) => QueuedObservation(
+                snapshot: s,
+                congressId: _congressId,
+                userId: _userId,
+                createdAt: createdAt,
+              ),
+            )
+            .toList(),
+      );
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationQueue] tampon diske yazilamadi, tekrar denenecek: $e',
+        );
+      }
+      return;
+    }
+    // `removeRange` (`clear()` DEGIL): await sirasinda `_onRangingResult`
+    // tampona YENI kayit eklemis olabilir - yalnizca BURADA yazilan ilk
+    // `toFlush.length` kaydi cikarmak, o yeni kayitlarin kaybolmamasini saglar.
+    _writeBuffer.removeRange(0, toFlush.length);
+    _persistedCount += toFlush.length;
   }
 
   Future<void> _trySendBatch() async {
     if (kDebugMode) {
       debugPrint(
         '[BeaconObservationService] _trySendBatch cagrildi '
-        'queueLength=${_queue.length} isBatching=$_isBatching',
+        'pending=$_pendingCount isBatching=$_isBatching',
       );
     }
-    if (_isBatching || _queue.isEmpty) return;
+    if (_isBatching || _pendingCount == 0) return;
 
     _isBatching = true;
-
-    // Kuyruktan ayrı bir kopya alıyoruz.
-    // Başarılı olursa sadece bu kopyadaki snapshot'ları sileceğiz.
-    final batchToProcess = List<ObservationSnapshot>.from(_queue);
-
     try {
-      final request = ObservationBatchRequest(
-        clientBatchId: _uuid.v4(),
-        deviceId: deviceId,
-        observations: batchToProcess,
-      );
-
-      final responseJson = await _apiClient.post(
-        ApiEndpoints.observationsBatch,
-        body: request.toJson(),
-        requiresAuth: true,
-      );
-
-      final response = ObservationBatchResponse.fromJson(
-        responseJson as Map<String, dynamic>,
-      );
-
-      _applyServerIntervalIfChanged(response.observationIntervalSeconds);
-
-      // Sadece gönderilenleri temizle.
-      _queue.removeWhere((item) => batchToProcess.contains(item));
-
-      _emitState(
-        ObservationServiceState(
-          status: _currentState.status,
-          pendingSnapshotCount: _queue.length,
-          lastBatchResult:
-              'Accepted: ${response.acceptedCount}, Dup: ${response.duplicateCount}, Rej: ${response.rejectedCount}',
-          errorMessage: _currentState.errorMessage,
-        ),
-      );
-    } catch (e) {
-      if (kDebugMode) {
-        final statusCode = e is ApiException ? e.statusCode : null;
-        debugPrint(
-          '[BeaconObservationService] batch gonderim hatasi '
-          'statusCode=$statusCode error=$e',
-        );
-      }
-      if (e is ApiException && e.statusCode == 401) {
-        _emitState(
-          ObservationServiceState(
-            status: ObservationServiceStatus.unauthorized,
-            pendingSnapshotCount: _queue.length,
-            lastBatchResult: 'Hata: Yetkisiz (401)',
-            errorMessage: e.message,
-          ),
-        );
-      } else if (e is ApiException && e.statusCode == 403) {
-        // /observations/batch'te 403'un TEK kaynagi backend'deki cihaz
-        // sahiplik kontrolu (bkz. observation-ingestion.service.ts,
-        // "Bu cihaz bu kullaniciya ait degil") - Faz 6.1'de sahada 6+
-        // dakika sessizce yakalanamayan tam olarak bu hataydi. Kuyruk
-        // BILEREK bosaltilmaz - cagiran taraf cihazi yeniden kaydedip
-        // servisi yeniden basalatinca ayni kuyruk tekrar gonderilebilsin.
-        _emitState(
-          ObservationServiceState(
-            status: ObservationServiceStatus.deviceInvalid,
-            pendingSnapshotCount: _queue.length,
-            lastBatchResult: 'Hata: Cihaz kaydi gecersiz (403)',
-            errorMessage: e.message,
-          ),
-        );
-      } else {
-        // Hata durumunda kayıtlar silinmez, olduğu gibi kalır.
-        _emitState(
-          ObservationServiceState(
-            status: _currentState.status,
-            pendingSnapshotCount: _queue.length,
-            lastBatchResult: 'Hata: Gönderilemedi', // Veya e.toString() gibi
-            errorMessage: _currentState.errorMessage,
-          ),
-        );
-      }
+      await _flushWriteBuffer();
+      await _drainQueue();
     } finally {
       _isBatching = false;
     }
   }
 
+  /// Kalici kuyruktan en fazla `_sendBatchLimit` kayitlik gruplar halinde,
+  /// kuyruk bosalana ya da bir gonderim basarisiz olana kadar KADEMELI
+  /// gonderir (bkz. Faz 8 talimati §4 - tek istekte tum kuyrugu gondermenin
+  /// tehlikesi: cevrimdisi kalinan uzun surelerde on binlerce kayit birikebilir).
+  Future<void> _drainQueue() async {
+    while (true) {
+      if (_stopped) return;
+      final batch = await _queueStore.peekBatch(limit: _sendBatchLimit);
+      if (batch.isEmpty) return;
+
+      final ObservationBatchResponse response;
+      try {
+        final request = ObservationBatchRequest(
+          clientBatchId: _uuid.v4(),
+          deviceId: deviceId,
+          observations: batch.map((q) => q.snapshot).toList(),
+        );
+
+        final responseJson = await _apiClient.post(
+          ApiEndpoints.observationsBatch,
+          body: request.toJson(),
+          requiresAuth: true,
+        );
+
+        response = ObservationBatchResponse.fromJson(
+          responseJson as Map<String, dynamic>,
+        );
+      } catch (e) {
+        if (kDebugMode) {
+          final statusCode = e is ApiException ? e.statusCode : null;
+          debugPrint(
+            '[BeaconObservationService] batch gonderim hatasi '
+            'statusCode=$statusCode error=$e',
+          );
+        }
+        _handleSendError(e);
+        return; // Hata durumunda kayitlar silinmez, kademeli bosaltma durur.
+      }
+
+      _applyServerIntervalIfChanged(response.observationIntervalSeconds);
+
+      // Sadece gönderilenleri temizle - accepted/dup/rejected FARKETMEKSIZIN
+      // (sunucu 200 dondugunde ucunu de "gordum" sayariz, orijinal davranis
+      // budur, bkz. asagidaki yorum).
+      final sentIds = batch.map((q) => q.snapshot.observationId).toList();
+      await _queueStore.removeSent(sentIds);
+      _persistedCount -= sentIds.length;
+      if (_persistedCount < 0) _persistedCount = 0; // savunma amacli
+
+      final prunedCap = await _queueStore.pruneOverCapacity(_maxQueueRows);
+      if (prunedCap > 0) _persistedCount -= prunedCap;
+
+      if (kDebugMode) {
+        debugPrint(
+          '[ObservationQueue] batch gonderildi: ${sentIds.length} kayit, '
+          'kuyrukta $_persistedCount kayit kaldi',
+        );
+      }
+
+      _emitState(
+        ObservationServiceState(
+          status: _currentState.status,
+          pendingSnapshotCount: _pendingCount,
+          lastBatchResult:
+              'Accepted: ${response.acceptedCount}, Dup: ${response.duplicateCount}, Rej: ${response.rejectedCount}',
+          errorMessage: _currentState.errorMessage,
+        ),
+      );
+
+      if (batch.length < _sendBatchLimit) return; // Kuyruk tukendi.
+      // Kuyrukta hala kayit var - sunucuyu bogmadan kisa bir aralikla devam et.
+      await Future<void>.delayed(_drainRetryDelay);
+    }
+  }
+
+  void _handleSendError(Object e) {
+    if (e is ApiException && e.statusCode == 401) {
+      _emitState(
+        ObservationServiceState(
+          status: ObservationServiceStatus.unauthorized,
+          pendingSnapshotCount: _pendingCount,
+          lastBatchResult: 'Hata: Yetkisiz (401)',
+          errorMessage: e.message,
+        ),
+      );
+    } else if (e is ApiException && e.statusCode == 403) {
+      // /observations/batch'te 403'un TEK kaynagi backend'deki cihaz
+      // sahiplik kontrolu (bkz. observation-ingestion.service.ts,
+      // "Bu cihaz bu kullaniciya ait degil") - Faz 6.1'de sahada 6+
+      // dakika sessizce yakalanamayan tam olarak bu hataydi. Kuyruk
+      // BILEREK bosaltilmaz - cagiran taraf cihazi yeniden kaydedip
+      // servisi yeniden basalatinca ayni kuyruk tekrar gonderilebilir
+      // (kuyruk KALICI oldugu icin artik BASKA bir servis ornegi de
+      // olsa ayni congressId+userId kapsamindaki kayitlari gorur).
+      _emitState(
+        ObservationServiceState(
+          status: ObservationServiceStatus.deviceInvalid,
+          pendingSnapshotCount: _pendingCount,
+          lastBatchResult: 'Hata: Cihaz kaydi gecersiz (403)',
+          errorMessage: e.message,
+        ),
+      );
+    } else {
+      // Hata durumunda kayıtlar silinmez, olduğu gibi kalır.
+      _emitState(
+        ObservationServiceState(
+          status: _currentState.status,
+          pendingSnapshotCount: _pendingCount,
+          lastBatchResult: 'Hata: Gönderilemedi', // Veya e.toString() gibi
+          errorMessage: _currentState.errorMessage,
+        ),
+      );
+    }
+  }
+
   Future<void> stop() async {
+    _stopped = true;
     WidgetsBinding.instance.removeObserver(this);
     _dutyCycleTimer?.cancel();
     _rangingWindowTimer?.cancel();
     _batchTimer?.cancel();
+    _bufferFlushTimer?.cancel();
     await _rangingSubscription?.cancel();
     await _monitoringSubscription?.cancel();
+    // Faz 8: `stop()` donmeden ONCE tampon diske YAZILMIS olmali (`await`,
+    // fire-and-forget DEGIL) - cagiran taraf (ObservationLifecycleNotifier)
+    // kongre/kullanici degisiminde `stop()`un hemen ardindan kuyrugu
+    // TAMAMEN temizleyebilir (`clearForScopeChange`); flush burada
+    // TAMAMLANMADAN o temizlik calisirsa, gec yazilan eski-kapsam kayitlari
+    // YANLIS (yeni) kapsamda kalici kuyrukta kalir - tam da onlemeye
+    // calistigimiz sessiz veri bozulmasi.
+    await _flushWriteBuffer();
     await _stateController.close();
   }
 }

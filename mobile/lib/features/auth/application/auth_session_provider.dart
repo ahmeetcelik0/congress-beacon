@@ -36,6 +36,29 @@ final isOfflineSessionProvider =
       IsOfflineSessionNotifier.new,
     );
 
+/// Faz 8: `AuthSessionNotifier.logout()` kullanici ACIKCA "Cikis Yap"
+/// bastiginda `true`ya cekilir - `ObservationLifecycleNotifier` bunu
+/// KAPSAM DEGISIMI (kalici gozlem kuyrugunu tamamen temizleme) sinyali
+/// olarak okuyup hemen sifirlar (`consume()`). 401 / yerel token suresi
+/// dolmus gibi ISTEMSIZ oturum dususlerinde BILEREK ayarlanmaz - aksi halde
+/// kullanici agsizken token'i suresi dolup zorla giris ekranina dustugunde,
+/// AYNI hesapla tekrar giris yaptiginda saatlerdir biriken kuyruk sessizce
+/// silinirdi (bkz. docs/decisions.md "Faz 8" - bu, projenin "katilim
+/// verisini eksiksiz toplama" temel amaciyla dogrudan celisirdi).
+class ExplicitLogoutSignalNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void markLoggedOut() => state = true;
+
+  void consume() => state = false;
+}
+
+final explicitLogoutSignalProvider =
+    NotifierProvider<ExplicitLogoutSignalNotifier, bool>(
+      ExplicitLogoutSignalNotifier.new,
+    );
+
 /// Cevrimdisi girisin NEDEN engellendigini SplashPage'e tasir - genel
 /// "Sunucuya bağlanılamadı" mesaji yerine, onbellekte gecerli bir oturum
 /// VARKEN ozellikle bu iki durumda (sunucu gerektirdikleri icin cevrimdisi
@@ -223,6 +246,7 @@ class AuthSessionNotifier extends AsyncNotifier<MeResponse?> {
   Future<void> logout() async {
     await ref.read(secureStorageProvider).clearSession();
     ref.read(isOfflineSessionProvider.notifier).setOffline(false);
+    ref.read(explicitLogoutSignalProvider.notifier).markLoggedOut();
     state = const AsyncData(null);
   }
 }

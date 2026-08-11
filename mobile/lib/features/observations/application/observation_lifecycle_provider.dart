@@ -12,7 +12,9 @@ import '../../../models/auth_models.dart';
 import '../../auth/application/auth_session_provider.dart';
 import '../../devices/data/device_repository.dart';
 import '../data/bootstrap_repository.dart';
+import '../data/sqlite_observation_queue_store.dart';
 import '../domain/beacon_observation_service.dart';
+import '../domain/observation_queue_store.dart';
 
 final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
   return DeviceRepository(ref.watch(apiClientProvider));
@@ -20,6 +22,15 @@ final deviceRepositoryProvider = Provider<DeviceRepository>((ref) {
 
 final bootstrapRepositoryProvider = Provider<BootstrapRepository>((ref) {
   return BootstrapRepository(ref.watch(apiClientProvider));
+});
+
+// Faz 8: uygulama omru boyunca TEK bir ornek - hem bu bildirici (kapsam
+// degisiminde temizlik icin) hem de `BeaconObservationService` (yazma/okuma
+// icin) AYNI kalici kuyruga erisir. Depolama SQLite oldugu icin (tek dosya)
+// birden fazla ornek olsa da fiziksel olarak ayni veriye yazardi, ama tek
+// Dart nesnesi paylasmak DB baglantisini bir kez acar.
+final observationQueueStoreProvider = Provider<ObservationQueueStore>((ref) {
+  return SqliteObservationQueueStore();
 });
 
 /// `BeaconObservationService`nin YAŞAM DÖNGÜSÜNÜ uygulama seviyesinde
@@ -36,6 +47,11 @@ final bootstrapRepositoryProvider = Provider<BootstrapRepository>((ref) {
 ///   yalnızca uygulama kökünde (`main.dart`) bir kez izlenir ve kalıcı kalır.
 class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
   String? _startedForCongressId;
+  // Faz 8: kongre AYNI kalsa bile FARKLI bir kullanici giris yaparsa
+  // (ör. ayni cihazda hesap degisimi) kalici kuyrugun eski kullaniciya
+  // ait kalmasini onlemek icin ayrica takip edilir (bkz. _sync ve
+  // _clearQueueForScopeChange).
+  String? _startedForUserId;
   String? _beaconUuid;
 
   // `state` (Riverpod'un izlenebilir alani) ile AYNI degeri tasiyan duz bir
@@ -77,16 +93,31 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
         me != null && !me.mustChangePassword && me.activeCongressId != null;
 
     if (!hasValidSession) {
+      // `stop()` ONCE cagrilir - servisin tamponundaki gonderilmemis birkac
+      // kaydin, olasi bir kapsam temizliginden ONCE kalici kuyruga yazilmis
+      // olmasini garantiler (bkz. BeaconObservationService.stop() yorumu).
       await _stopService();
+
+      // Faz 8: kuyruk YALNIZCA kullanici ACIKCA "Cikis Yap" bastiysa
+      // temizlenir - 401/token suresi yerel olarak dolmus gibi ISTEMSIZ
+      // oturum dususlerinde DOKUNULMAZ (bkz. explicitLogoutSignalProvider
+      // yorumu - ayni kullanici tekrar giris yaparsa kuyruk KAYBOLMASIN).
+      if (ref.read(explicitLogoutSignalProvider)) {
+        ref.read(explicitLogoutSignalProvider.notifier).consume();
+        await _clearQueueForScopeChange('cikis yapildi');
+      }
       return;
     }
 
     final activeCongressId = me.activeCongressId!;
+    final activeUserId = me.user.id;
 
-    // Zaten dogru kongre icin calisiyor - hicbir sey yapma. Bu kontrol,
-    // /auth/me her tazelendiginde (ör. baska bir ekrandan refresh) servisin
-    // gereksiz yere durdurulup yeniden baslatilmasini ONLER.
-    if (_service != null && _startedForCongressId == activeCongressId) {
+    // Zaten dogru kongre VE kullanici icin calisiyor - hicbir sey yapma. Bu
+    // kontrol, /auth/me her tazelendiginde (ör. baska bir ekrandan refresh)
+    // servisin gereksiz yere durdurulup yeniden baslatilmasini ONLER.
+    if (_service != null &&
+        _startedForCongressId == activeCongressId &&
+        _startedForUserId == activeUserId) {
       if (kDebugMode) {
         debugPrint(
           '[ObservationLifecycle] NO-OP - $activeCongressId icin zaten '
@@ -97,7 +128,24 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
       return;
     }
 
+    // Faz 8: kongre veya kullanici GERCEKTEN degistiyse (ilk baslatma
+    // DEGIL - onceki deger null degilse), kalici kuyruktaki eski-kapsamli
+    // kayitlarin YANLIS kongreye/kullaniciya gonderilmesini onlemek icin
+    // temizlenmesi gerekir (bkz. Faz 8 talimati §5). Karar, `_stopService()`
+    // eski degerleri SIFIRLAMADAN ONCE, burada verilir.
+    String? scopeChangeReason;
+    if (_startedForUserId != null && _startedForUserId != activeUserId) {
+      scopeChangeReason = 'farkli kullanici girisi';
+    } else if (_startedForCongressId != null &&
+        _startedForCongressId != activeCongressId) {
+      scopeChangeReason = 'kongre degisimi';
+    }
+
     await _stopService();
+
+    if (scopeChangeReason != null) {
+      await _clearQueueForScopeChange(scopeChangeReason);
+    }
 
     final storage = ref.read(secureStorageProvider);
     var deviceId = await storage.getDeviceId();
@@ -130,10 +178,14 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     final service = BeaconObservationService(
       deviceId: deviceId,
       beaconUuid: beaconUuid,
+      congressId: activeCongressId,
+      userId: activeUserId,
+      queueStore: ref.read(observationQueueStoreProvider),
       apiClient: ref.read(apiClientProvider),
       appVersion: packageInfo.version,
     );
     _startedForCongressId = activeCongressId;
+    _startedForUserId = activeUserId;
     _beaconUuid = beaconUuid;
     _service = service;
     state = service;
@@ -142,11 +194,27 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     if (kDebugMode) {
       debugPrint(
         '[ObservationLifecycle] START congressId=$activeCongressId '
-        'deviceId=$deviceId beaconUuid=$beaconUuid (uygulama kok '
-        'seviyesinde - ekran/sekme gecisleri bunu DURDURMAZ)',
+        'userId=$activeUserId deviceId=$deviceId beaconUuid=$beaconUuid '
+        '(uygulama kok seviyesinde - ekran/sekme gecisleri bunu DURDURMAZ)',
       );
     }
     await service.start();
+  }
+
+  /// Faz 8: kalici kuyrugu TAMAMEN temizler - kongre/kullanici degisimi
+  /// veya acik cikista cagrilir (bkz. `_sync` ve explicitLogoutSignalProvider
+  /// yorumu). Hangi kayitlarin silinecegine karar vermek (yani NE ZAMAN
+  /// cagrilacagini bilmek) CAGIRAN tarafin sorumlulugu - depolama katmani
+  /// (`ObservationQueueStore.clearForScopeChange`) kosulsuz siler.
+  Future<void> _clearQueueForScopeChange(String reason) async {
+    final deleted = await ref
+        .read(observationQueueStoreProvider)
+        .clearForScopeChange();
+    if (kDebugMode) {
+      debugPrint(
+        '[ObservationQueue] $deleted kayit SILINDI (kapsam degisimi: $reason)',
+      );
+    }
   }
 
   // Faz 6.2: backend'in "bu cihaz bu kullaniciya ait degil" (403) hatasini
@@ -171,8 +239,12 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
 
     final failingService = _service;
     final congressId = _startedForCongressId;
+    final userId = _startedForUserId;
     final beaconUuid = _beaconUuid;
-    if (failingService == null || congressId == null || beaconUuid == null) {
+    if (failingService == null ||
+        congressId == null ||
+        userId == null ||
+        beaconUuid == null) {
       return;
     }
 
@@ -186,10 +258,6 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
           '$_maxConsecutiveDeviceRecoveryFailures)',
         );
       }
-
-      // Henuz gonderilmemis kuyruk, ESKI servis atilmadan once alinir -
-      // aksi halde bu gozlemler sessizce kaybolurdu.
-      final pendingSnapshots = failingService.pendingSnapshots;
 
       await ref.read(secureStorageProvider).deleteDeviceId();
       final newDeviceId = await _registerDevice();
@@ -218,17 +286,26 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
         return;
       }
 
+      // `stop()` tampondaki gonderilmemis birkac kaydi kalici kuyruga
+      // yazar (bkz. BeaconObservationService.stop() yorumu) - Faz 8
+      // ONCESINDE burada `pendingSnapshots`/`initialQueue` ile ELLE
+      // tasinan kuyruk artik GEREKSIZ: kuyruk congressId+userId'ye gore
+      // KALICI oldugu icin, YENI servis AYNI kongre/kullanici icin ayni
+      // kalici kuyruga otomatik erisir - degisen tek sey deviceId.
       await _stopService();
 
       final packageInfo = await ref.read(packageInfoProvider.future);
       final newService = BeaconObservationService(
         deviceId: newDeviceId,
         beaconUuid: beaconUuid,
+        congressId: congressId,
+        userId: userId,
+        queueStore: ref.read(observationQueueStoreProvider),
         apiClient: ref.read(apiClientProvider),
         appVersion: packageInfo.version,
-        initialQueue: pendingSnapshots,
       );
       _startedForCongressId = congressId;
+      _startedForUserId = userId;
       _beaconUuid = beaconUuid;
       _service = newService;
       state = newService;
@@ -240,10 +317,13 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
       _deviceRecoveryBackoffUntil = null;
 
       if (kDebugMode) {
+        final pendingCount = await ref
+            .read(observationQueueStoreProvider)
+            .count();
         debugPrint(
           '[ObservationLifecycle] KURTARMA BASARILI - yeni '
-          'deviceId=$newDeviceId ile ${pendingSnapshots.length} bekleyen '
-          'gozlemle yeniden baslatildi.',
+          'deviceId=$newDeviceId ile kalici kuyruktaki $pendingCount '
+          'kayitla yeniden baslatildi.',
         );
       }
       await newService.start();
@@ -302,18 +382,25 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
     final current = _service;
     if (current == null) return;
     final previousCongressId = _startedForCongressId;
+    final previousUserId = _startedForUserId;
     await _serviceStateSubscription?.cancel();
     _serviceStateSubscription = null;
     _service = null;
     _startedForCongressId = null;
+    _startedForUserId = null;
     _beaconUuid = null;
     state = null;
     if (kDebugMode) {
       debugPrint(
         '[ObservationLifecycle] STOP congressId=$previousCongressId '
-        '(oturum dustu / kongre degisti / uygulama kapaniyor)',
+        'userId=$previousUserId (oturum dustu / kongre degisti / '
+        'uygulama kapaniyor)',
       );
     }
+    // Faz 8: `stop()` diskteki tampon yazimini BEKLER (await) - buradaki
+    // `await` kaldirilirsa, olasi bir sonraki kapsam temizligi (bkz. `_sync`)
+    // henuz yazilmamis kayitlari KACIRABILIR (bkz. BeaconObservationService.
+    // stop() yorumu).
     await current.stop();
   }
 }
