@@ -29,6 +29,8 @@ import { UpdateProgramImportPresentationDto } from './dto/update-program-import-
 import { CreateProgramImportPresentationDto } from './dto/create-program-import-presentation.dto';
 import { UpdateProgramImportRoleDto } from './dto/update-program-import-role.dto';
 import { CreateProgramImportRoleDto } from './dto/create-program-import-role.dto';
+import { ExcludeHallToCreateDto } from './dto/exclude-hall-to-create.dto';
+import { CreateJsonProgramImportQueryDto } from './dto/create-json-program-import-query.dto';
 import { ProgramImportMulterExceptionFilter } from './program-import-multer-exception.filter';
 
 // Claude'un PDF istek siniriyla AYNI (bkz. claude-api becerisi "PDF (base64,
@@ -76,6 +78,51 @@ export class ProgramImportsController {
       throw new BadRequestException('Dosya gerekli');
     }
     return this.importsService.createImport(dto.congressId, admin.id, file);
+  }
+
+  // Faz 4c §2: LLM cagrisi YOK, dosya YA DA dogrudan `application/json`
+  // govdesi kabul eder - govde bir multipart dosyaysa dosya icerigi JSON
+  // olarak ayristirilir, degilse `@Body()`in kendisi ExtractionResult
+  // olarak degerlendirilir. Bu yuzden `congressId` govdeye KARISTIRILMAZ,
+  // her iki durumda da sorgu parametresi olarak gelir.
+  @Post('json')
+  @UseFilters(ProgramImportMulterExceptionFilter)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_FILE_SIZE_BYTES },
+    }),
+  )
+  createJsonImport(
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body() body: unknown,
+    @Query() query: CreateJsonProgramImportQueryDto,
+    @CurrentAdmin() admin: AdminUser,
+  ) {
+    let payload: unknown;
+    let fileName: string;
+    if (file) {
+      fileName = file.originalname;
+      try {
+        payload = JSON.parse(file.buffer.toString('utf-8')) as unknown;
+      } catch {
+        throw new BadRequestException('Yüklenen dosya geçerli bir JSON değil');
+      }
+    } else {
+      fileName = 'program.json';
+      payload = body;
+    }
+    return this.importsService.createJsonImport(
+      query.congressId,
+      admin.id,
+      fileName,
+      payload,
+    );
+  }
+
+  @Get('template.json')
+  getTemplateJson() {
+    return this.importsService.getTemplateJson();
   }
 
   @Get()
@@ -158,6 +205,14 @@ export class ProgramImportsController {
   @Post(':id/roles')
   createRole(@Param('id') id: string, @Body() dto: CreateProgramImportRoleDto) {
     return this.importsService.createRoleRow(id, dto);
+  }
+
+  @Post(':id/halls-to-create/exclude')
+  excludeHallToCreate(
+    @Param('id') id: string,
+    @Body() dto: ExcludeHallToCreateDto,
+  ) {
+    return this.importsService.excludeHallToCreate(id, dto.hallName);
   }
 
   @Post(':id/approve')

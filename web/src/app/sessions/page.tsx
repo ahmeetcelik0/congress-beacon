@@ -2,6 +2,7 @@ import { api } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
 import { SessionsBoard } from './sessions-board';
 import { ProgramImportPanel } from './imports/program-import-panel';
+import { JsonProgramImportPanel } from './imports/json-import-panel';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
@@ -60,6 +61,8 @@ export default async function SessionsPage({
           recentImports={programImports?.imports ?? []}
         />
       )}
+
+      {congressId && <JsonProgramImportPanel congressId={congressId} />}
 
       {congressId && <SessionsBoard congressId={congressId} sessions={sessions} halls={halls} />}
     </main>

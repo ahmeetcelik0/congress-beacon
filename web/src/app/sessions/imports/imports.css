@@ -267,6 +267,12 @@
   font-family: var(--font-mono), monospace;
 }
 
+.imports-history-cost {
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-family: var(--font-mono), monospace;
+}
+
 /* ===== Önizleme sayfası (`/sessions/imports/[id]`) ===== */
 .import-meta {
   display: flex;
@@ -692,6 +698,88 @@
 .import-approve-result ul {
   margin: 0.35rem 0 0 1.1rem;
   padding: 0;
+}
+
+/* ===== Beacon atanmamış salon uyarısı (Faz 4c) — bilerek belirgin: bu
+   projede "veri neden gelmiyor" tanılaması beacon'sız salonlar yüzünden
+   iki kez zaman kaybettirdi. ===== */
+.import-beacon-warning {
+  margin-top: 0.6rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-dim);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+
+.import-beacon-warning strong {
+  color: var(--status-warning);
+}
+
+.import-beacon-warning a {
+  display: inline-block;
+  margin-top: 0.35rem;
+  color: var(--status-warning);
+  font-weight: 600;
+}
+
+/* ===== Otomatik oluşturulacak salonlar önizlemesi (Faz 4c §3) ===== */
+.import-halls-to-create {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius);
+  background: var(--status-warning-dim);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.import-halls-to-create-hint {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  margin: 0;
+}
+
+.import-halls-to-create-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.import-halls-to-create-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.4rem 0.4rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+
+.import-halls-to-create-list button {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.import-halls-to-create-list button:hover:not(:disabled) {
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+.import-halls-to-create-list button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ===== Sayfalama (Faz 2'nin `.reg-pagination`iyle AYNI görsel dil) ===== */

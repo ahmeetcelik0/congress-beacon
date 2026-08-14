@@ -1295,3 +1295,101 @@ istenen limitle elle kaydetmenin resmi yolu). Mobil taraf
 Android push, zengin bildirim (görsel/eylem butonu), duyuru bildirimleri,
 kullanıcı bildirim tercihleri - hepsi Faz 9 talimatının kapsam dışı
 listesinde açıkça belirtildi, bu fazda YAPILMADI.
+
+## Faz 4c — JSON ile Program Yükleme ve Otomatik Salon Oluşturma (2026-08-14)
+
+Faz 4b'nin LLM ile PDF/Excel çıkarımı zaten var, ama bazı derneklerde
+program zaten yapılandırılmış (ör. dernek kendi sitesinden JSON export
+edebiliyor) - bu durumda LLM çağrısı hem gereksiz maliyet hem gereksiz
+gecikme. Bu faz LLM adımını ATLAYAN ikinci bir giriş noktası açar; JSON
+Faz 4b'nin kullandığı AYNI `writeExtractionToStaging` fonksiyonuna gider,
+aynı staging tablolarına yazılır, aynı önizleme/düzeltme/onay ekranından
+geçer. Ayrıca bu fazda, elle hazırlanmış programlarda LLM'in ASLA
+üretmediği bir sorun ortaya çıktı - belgede geçen ama kongrede tanımlı
+olmayan salon adları - ve bu, önceden onayı tamamen ENGELLIYORDU.
+
+### Neden yeni bir çıkarım hattı kurulmadı
+
+`ProgramExtractionService` (yalnızca LLM çağrısı) ile
+`writeExtractionToStaging` (LLM'den tamamen bağımsız, saf staging
+yazıcısı) Faz 4b'de zaten net ayrılmıştı - bu ayrım JSON yolunun ucuz
+olmasını sağladı. `ProgramImportsService.createJsonImport` yalnızca (1)
+gövdeyi doğrular, (2) `writeExtractionToStaging`'i doğrudan çağırır, (3)
+`model`/`inputTokens`/`outputTokens`/`estimatedCostUsd` hiç göndermez
+(şemadaki varsayılan null'da kalır - panelde bu "Ücretsiz" olarak
+gösterilir, "hesaplanamadı" ile KARIŞTIRILMAZ). BullMQ kuyruğuna hiç
+girmez - LLM gecikmesi olmadığından senkron, HTTP isteği içinde
+işlenebilir kadar hızlı.
+
+### Ortak şema doğrulayıcı - tek kaynak, iki giriş noktası
+
+Claude API'ye `output_config.format` ile ZORLATILAN şema
+(`extraction-schema.ts`) elle hazırlanan bir JSON için hiçbir güvence
+sağlamaz - `validate-extraction-result.ts` bu güvenceyi burada sağlar.
+Şema ikinci kez elle kopyalanmadı: `daySchema`/`sessionSchema`/
+`presentationSchema` `extraction-schema.ts`'te `export` edilip
+`.required` listeleri doğrudan okunur. Aynı doğrulayıcı LLM çıktısından
+da geçirilir (`program-extraction.service.ts`, `JSON.parse`den hemen
+sonra) - savunma derinliği için, pratikte `output_config.format` zaten
+şemayı garantilediğinden neredeyse hiç tetiklenmez. Hata mesajları
+KASITLI olarak Türkçe ve KONUMLU ("3. oturumda 'startTime' alanı eksik")
+- tek bir "JSON geçersiz" mesajı kullanıcının hangi satırı düzelteceğini
+söylemez. Anahtarın YOK olması hata, değerin `null` olması GEÇERLİ (LLM
+"bu bilgi belgede yoktu" derken de aynı biçimi kullanıyor) - bu ayrım
+`write-extraction-to-staging.ts`'in mevcut null-toleranslı davranışıyla
+(başlıksız oturum → INVALID, upload reddedilmez) tutarlı kalsın diye
+korundu.
+
+### Salon otomatik oluşturma - neden sessizce değil, uyarıyla
+
+Önceden `matchHall` bir salonu eşleştiremediğinde onay TAMAMEN
+ENGELLENIYORDU - elle hazırlanmış bir programda (LLM'in aksine, kongre
+kurulumuyla senkron olmayan bir kaynaktan geldiği için) bu sık
+karşılaşılan bir durum. Artık `matchHall`'ün hallId'yi null bıraktığı
+ama `rawHallName`'i BOŞ OLMAYAN satırlar onayda otomatik bir `Hall`
+oluşturur (`approveImport`, aynı transaction içinde). Farklı yazım
+varyasyonları ("Salon A"/"SALON A"/"Salon-A") `buildHallCreationCandidates`
+ile TEK adaya birleştirilir - `normalizeTurkishName`'in Türkçe karakter
+katlama yaklaşımı yeniden kullanılır ama unvan ayıklama YOK (salon
+adında unvan kavramı anlamsız). Otomatik oluşturma SESSİZ değildir:
+onay sonrası panelde belirgin bir uyarı ("Şu salonlara henüz beacon
+atanmadı: ... — Beacon yönetiminden atama yapın") gösterilir - bu
+projede beacon'sız bir salonun sessiz veri kaybına yol açması ("veri
+neden gelmiyor" tanılaması) daha önce iki kez gerçek zaman
+kaybettirdi, bu yüzden uyarı görmezden gelinemeyecek kadar belirgin
+tutuldu. Admin onaydan ÖNCE bir adayı tek tek kaldırabilir
+(`POST .../halls-to-create/exclude`, `hallAutoCreateExcluded` bayrağı) -
+kaldırılan satırlar hallId null kalmaya devam eder ve mevcut "salon
+seçilmemiş" onay engeline otomatik düşer, elle salon seçimi gerekir.
+
+### Neden program isimlerinden User kaydı oluşturulmadı
+
+Bilimsel programdaki isimlerde e-posta yok - otomatik bir `User`
+oluşturulsa bu kişi giriş yapamaz, kongre kaydı olmaz, ve daha kötüsü
+Faz 2'nin gerçek katılımcı listesiyle ÇAKIŞIP birden fazla aday üretip
+(AMBIGUOUS) mevcut isim eşleştirmesini bozabilir. Bunun yerine onay
+sonrası bir görünürlük raporu (`GET /admin/program-roles/unmatched-names`,
+panelde `/sessions/matches` sayfasına eklendi) - hangi isim, hangi
+oturum/sunumda, hangi rolde eşleşmedi. Katılımcı sonradan panelden elle
+eklenirse Faz 4a'nın `rematch` mekanizması (zaten var, değiştirilmedi)
+bu isimleri otomatik yeniden eşleştirir.
+
+### Test verisi: gerçek dosya, farklı şema
+
+Kullanıcının hazırladığı gerçek test dosyası (33. Ulusal Uygulamalı
+Girişimsel Kardiyoloji Kongresi - Faz 4b'nin de canlı testinde
+kullandığı AYNI program) çok daha zengin bir şema kullanıyordu
+(`schema_version`, iki dilli `{tr, en}` başlıklar, `item_type` ile
+sunum/tartışma ayrımı vb.) - talimatın literal `ExtractionResult`
+şemasıyla UYUŞMUYORDU. Kullanıcıyla netleştirildi: yeni uç nokta
+talimattaki şemayı AYNEN uygular (ikinci, daha zengin bir şema İCAT
+EDİLMEDİ - kapsam bilerek dar tutuldu), kullanıcının dosyası ise
+yalnızca test hazırlığı için tek seferlik bir dönüştürme betiğiyle
+kullanıldı.
+
+### Kapsam dışı bırakılanlar (bilerek)
+
+Mobil uygulama, Faz 9'un gerçek cihaz doğrulaması (hâlâ Apple onayını
+bekliyor), ölü kod/doküman temizliği (Faz 10), program isimlerinden
+`User` kaydı otomatik oluşturma, JSON'dan beacon otomatik atama/oluşturma
+- hiçbiri bu fazın kapsamında değildi, dokunulmadı.

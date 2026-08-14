@@ -214,6 +214,10 @@ export function ProgramImportPanel({
                 <StatusBadge tone={IMPORT_STATUS_TONES[item.status]}>
                   {IMPORT_STATUS_LABELS[item.status]}
                 </StatusBadge>
+                <span className="imports-history-cost">
+                  {item.sourceType} ·{' '}
+                  {item.sourceType === 'JSON' ? 'Ücretsiz' : formatUsd(item.estimatedCostUsd)}
+                </span>
                 <span className="imports-history-date">{formatDateTime(item.createdAt)}</span>
               </li>
             ))}

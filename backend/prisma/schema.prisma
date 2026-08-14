@@ -658,6 +658,10 @@ model ProgramRole {
 enum ProgramSourceType {
   PDF
   EXCEL
+  // Faz 4c: hazir bir ExtractionResult JSON'u dogrudan yukler, LLM cagrisi
+  // YAPILMAZ - model/inputTokens/outputTokens/estimatedCostUsd hep null
+  // kalir (bkz. Faz 4c talimati §2).
+  JSON
 }
 
 enum ProgramImportStatus {
@@ -720,6 +724,12 @@ model ProgramImportSession {
   status       ImportRowStatus
   message      String? // status=INVALID oldugunda neden
   warning      String? // islenebilir ama dikkat gerektiriyor (ornek: tarih kongre baslangicindan turetildi)
+  // Faz 4c: admin onizlemede "olusturulacak salonlar" listesinden bu satirin
+  // rawHallName'ini TEK TEK kaldirdiginda true olur - onayda bu satir icin
+  // salon OTOMATIK olusturulmaz, hallId hala null oldugundan mevcut
+  // "salon secilmemis" onay kontrolu bu satiri yine BLOKE eder (elle salon
+  // secimi gerekir, bkz. Faz 4c talimati §3).
+  hallAutoCreateExcluded Boolean @default(false)
 
   import        ProgramImport               @relation(fields: [importId], references: [id], onDelete: Cascade)
   presentations ProgramImportPresentation[]

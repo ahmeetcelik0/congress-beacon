@@ -10,6 +10,7 @@ import { StatusPoller } from './status-poller';
 import { CancelImportButton } from './cancel-import-button';
 import { ImportPreviewBoard } from './import-preview-board';
 import { ApprovePanel } from './approve-panel';
+import { HallsToCreatePanel } from './halls-to-create-panel';
 // Bu route `/sessions`ten AYRI bir sayfa oldugu icin (kok layout sadece
 // globals.css yukler) - `sessions.css`teki paylasilan kart/rol/sunum
 // siniflarini (sessions-card-toggle, sessions-role-form, sessions-presentation-*
@@ -18,7 +19,7 @@ import { ApprovePanel } from './approve-panel';
 import '../../sessions.css';
 import '../imports.css';
 
-const SOURCE_TYPE_LABELS = { PDF: 'PDF', EXCEL: 'Excel' } as const;
+const SOURCE_TYPE_LABELS = { PDF: 'PDF', EXCEL: 'Excel', JSON: 'JSON' } as const;
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString('tr-TR', {
@@ -122,10 +123,16 @@ export default async function ProgramImportPreviewPage({
             Model: <strong>{importRecord.model}</strong>
           </span>
         )}
-        {importRecord.estimatedCostUsd !== null && (
+        {importRecord.sourceType === 'JSON' ? (
           <span>
-            Maliyet: <strong>{formatUsd(importRecord.estimatedCostUsd)}</strong>
+            Maliyet: <strong>Ücretsiz</strong>
           </span>
+        ) : (
+          importRecord.estimatedCostUsd !== null && (
+            <span>
+              Maliyet: <strong>{formatUsd(importRecord.estimatedCostUsd)}</strong>
+            </span>
+          )
         )}
       </div>
 
@@ -177,6 +184,10 @@ export default async function ProgramImportPreviewPage({
             </Link>
           </div>
         </div>
+      )}
+
+      {importRecord.status === 'DRAFT' && summary.hallsToCreate.length > 0 && (
+        <HallsToCreatePanel importId={id} hallNames={summary.hallsToCreate} />
       )}
 
       {(importRecord.status === 'DRAFT' ||

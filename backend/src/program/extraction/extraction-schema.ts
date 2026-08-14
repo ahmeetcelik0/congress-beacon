@@ -8,7 +8,10 @@
 // boylece "bu alan hic gelmedi mi yoksa bos mu" belirsizligi olusmaz.
 const NULLABLE_STRING = { type: ['string', 'null'] } as const;
 
-const presentationSchema = {
+// Faz 4c: `validate-extraction-result.ts` bu ALT semalari (gerekli alan
+// listeleri) DOGRUDAN buradan okur - ikinci bir yerde elle KOPYALANMAZ,
+// tek kaynak burasi kalir (bkz. Faz 4c talimati §1).
+export const presentationSchema = {
   type: 'object',
   properties: {
     title: NULLABLE_STRING,
@@ -20,7 +23,7 @@ const presentationSchema = {
   additionalProperties: false,
 } as const;
 
-const sessionSchema = {
+export const sessionSchema = {
   type: 'object',
   properties: {
     dayLabel: NULLABLE_STRING,
@@ -49,7 +52,7 @@ const sessionSchema = {
   additionalProperties: false,
 } as const;
 
-const daySchema = {
+export const daySchema = {
   type: 'object',
   properties: {
     label: { type: 'string' },

@@ -18,6 +18,7 @@ import { UpdateProgramRoleDto } from './dto/update-program-role.dto';
 import { LinkProgramRoleDto } from './dto/link-program-role.dto';
 import { RematchDto } from './dto/rematch.dto';
 import { ProgramRolesQueryDto } from './dto/program-roles-query.dto';
+import { UnmatchedNamesQueryDto } from './dto/unmatched-names-query.dto';
 import { AdminJwtGuard } from '../../admin-auth/admin-jwt.guard';
 import { AuditLogInterceptor } from '../../admin-auth/audit-log.interceptor';
 
@@ -40,6 +41,11 @@ export class ProgramRolesController {
   @Get('matches')
   listMatches(@Query() query: ProgramRolesQueryDto) {
     return this.programRolesService.listMatches(query);
+  }
+
+  @Get('unmatched-names')
+  unmatchedNames(@Query() query: UnmatchedNamesQueryDto) {
+    return this.programRolesService.unmatchedNames(query.congressId);
   }
 
   @Get(':id/candidates')

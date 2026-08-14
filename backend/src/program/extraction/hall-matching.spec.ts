@@ -1,4 +1,4 @@
-import { matchHall } from './hall-matching';
+import { matchHall, buildHallCreationCandidates } from './hall-matching';
 
 const HALLS = [
   { id: 'hall-1', name: 'Salon A' },
@@ -53,5 +53,36 @@ describe('matchHall', () => {
       hallId: null,
       warning: 'Salon adı belgede yoktu, panelden seçin',
     });
+  });
+});
+
+describe('buildHallCreationCandidates', () => {
+  it('farkli yazim varyasyonlarini tek adaya birlestirir', () => {
+    expect(
+      buildHallCreationCandidates(['Salon B', 'SALON B', 'Salon-B', 'salon b']),
+    ).toEqual(['Salon B']);
+  });
+
+  it('goruntulenen isim olarak grupta ILK gorulen yazimi tutar', () => {
+    expect(buildHallCreationCandidates(['salon c', 'Salon C'])).toEqual([
+      'salon c',
+    ]);
+  });
+
+  it('birden fazla farkli salon adi ayri adaylar olarak kalir', () => {
+    expect(buildHallCreationCandidates(['Salon B', 'Salon C'])).toEqual([
+      'Salon B',
+      'Salon C',
+    ]);
+  });
+
+  it('bos/null degerleri aday olarak saymaz', () => {
+    expect(buildHallCreationCandidates([null, '', '   ', 'Salon B'])).toEqual([
+      'Salon B',
+    ]);
+  });
+
+  it('bos girdi listesi bos dizi doner', () => {
+    expect(buildHallCreationCandidates([])).toEqual([]);
   });
 });

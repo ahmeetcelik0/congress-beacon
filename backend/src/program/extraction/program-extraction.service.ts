@@ -18,6 +18,7 @@ import {
   PROGRAM_EXTRACTION_JSON_SCHEMA,
   ExtractionResult,
 } from './extraction-schema';
+import { validateExtractionResult } from './validate-extraction-result';
 import { prepareDocumentContent } from './prepare-extraction-input';
 import { ProgramSourceType } from '../../../generated/prisma/client';
 
@@ -166,15 +167,28 @@ export class ProgramExtractionService {
       );
     }
 
-    let parsed: ExtractionResult;
+    let rawParsed: unknown;
     try {
-      parsed = JSON.parse(textBlock.text) as ExtractionResult;
+      rawParsed = JSON.parse(textBlock.text);
     } catch {
       throw new ExtractionUsageError(
         'Model ciktisi gecerli JSON degil.',
         usage,
       );
     }
+
+    // Faz 4c: `output_config.format` modeli sema disina cikmaya zorlasa da
+    // ikinci bir savunma hatti olarak - JSON yukleme yoluyla PAYLASILAN
+    // ayni dogrulayicidan gecirilir (bkz. validate-extraction-result.ts).
+    // Pratikte burasi neredeyse hicbir zaman tetiklenmez.
+    const validation = validateExtractionResult(rawParsed);
+    if (!validation.valid) {
+      throw new ExtractionUsageError(
+        `Model çıktısı beklenen şemaya uymuyor: ${validation.errors.join('; ')}`,
+        usage,
+      );
+    }
+    const parsed: ExtractionResult = validation.result;
 
     this.logger.log(
       `Cikarim tamamlandi: model=${message.model} input=${message.usage.input_tokens} output=${message.usage.output_tokens}`,

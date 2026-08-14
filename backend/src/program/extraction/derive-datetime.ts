@@ -45,6 +45,31 @@ function parseIsoDate(value: string): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function parseTimeOfDay(
+  value: string,
+): { hours: number; minutes: number } | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return null;
+  return { hours, minutes };
+}
+
+// Faz 4c: elle hazirlanan JSON'da saat/tarih biçimi bozuk olabilir (LLM
+// çıktısında bu OLMAZ, `output_config.format` zorunlu kılar) -
+// `validate-extraction-result.ts` bu iki fonksiyonu kullanarak "hatalı saat
+// biçimi" gibi konumlu, Türkçe hatalar üretir. Ayrıştırma mantığı TEK yerde
+// (yukarıdaki `parseIsoDate`/`parseTimeOfDay`) kalır, burada TEKRAR
+// YAZILMAZ.
+export function isValidDateFormat(value: string): boolean {
+  return parseIsoDate(value) !== null;
+}
+
+export function isValidTimeFormat(value: string): boolean {
+  return parseTimeOfDay(value) !== null;
+}
+
 export function resolveDayDate(
   dayLabel: string | null,
   dayDateMap: Map<string, DayDateInfo>,
@@ -59,13 +84,10 @@ export function combineDateAndTime(
   rawTime: string | null,
 ): Date | null {
   if (!date || !rawTime) return null;
-  const match = /^(\d{1,2}):(\d{2})$/.exec(rawTime.trim());
-  if (!match) return null;
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (hours > 23 || minutes > 59) return null;
+  const time = parseTimeOfDay(rawTime);
+  if (!time) return null;
 
   const result = new Date(date);
-  result.setHours(hours, minutes, 0, 0);
+  result.setHours(time.hours, time.minutes, 0, 0);
   return result;
 }

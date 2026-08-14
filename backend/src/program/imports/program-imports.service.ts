@@ -11,9 +11,16 @@ import { ProgramImportQueueService } from '../extraction/program-import-queue.se
 import { ProgramRoleMatchingService } from '../program-role-matching.service';
 import { NotificationSchedulerService } from '../../notifications/notification-scheduler.service';
 import { normalizeTurkishName } from '../../common/normalize-turkish-name';
+import {
+  buildHallCreationCandidates,
+  normalizeHallName,
+} from '../extraction/hall-matching';
 import { getAnthropicMaxOutputTokens } from '../extraction/anthropic-config';
 import { estimateCostUsd } from '../extraction/model-pricing';
 import { countPdfPagesBestEffort } from '../extraction/prepare-extraction-input';
+import { validateExtractionResult } from '../extraction/validate-extraction-result';
+import { writeExtractionToStaging } from '../extraction/write-extraction-to-staging';
+import { PROGRAM_IMPORT_JSON_TEMPLATE } from './program-import-json-template';
 import { UpdateProgramImportSessionDto } from './dto/update-program-import-session.dto';
 import { CreateProgramImportSessionDto } from './dto/create-program-import-session.dto';
 import { UpdateProgramImportPresentationDto } from './dto/update-program-import-presentation.dto';
@@ -139,6 +146,91 @@ export class ProgramImportsService {
     return { importId: importRecord.id, status: importRecord.status };
   }
 
+  // Faz 4c §2: LLM cagrisi hic YAPILMAZ - bu yuzden `requireConfigured` yok
+  // (API anahtari olmasa da bu yol calisir), model/inputTokens/outputTokens/
+  // estimatedCostUsd hep null kalir. Islem TAMAMEN senkron (BullMQ'ya
+  // GEREK yok, LLM gecikmesi olmadigindan HTTP istegi icinde beklenebilir).
+  // Aynı `writeExtractionToStaging`i (Faz 4b'nin LLM yolunun kullandigi
+  // FONKSIYONUN AYNISI) cagirir - ikinci bir staging yazma mantigi
+  // YAZILMAZ (bkz. Faz 4c talimati "Var olanı çoğaltma, yeniden kullan").
+  async createJsonImport(
+    congressId: string,
+    adminId: string,
+    fileName: string,
+    rawBody: unknown,
+  ) {
+    await this.requireCongress(congressId);
+
+    const validation = validateExtractionResult(rawBody);
+    if (!validation.valid) {
+      throw new BadRequestException({
+        message: 'Yüklenen JSON beklenen şemaya uymuyor',
+        errors: validation.errors,
+      });
+    }
+
+    const importRecord = await this.prisma.programImport.create({
+      data: {
+        congressId,
+        adminUserId: adminId,
+        fileName,
+        sourceType: ProgramSourceType.JSON,
+        status: ProgramImportStatus.EXTRACTING,
+      },
+    });
+
+    try {
+      const [halls, congress] = await Promise.all([
+        this.prisma.hall.findMany({
+          where: { congressId },
+          select: { id: true, name: true },
+        }),
+        this.prisma.congress.findUniqueOrThrow({
+          where: { id: congressId },
+          select: { startDate: true },
+        }),
+      ]);
+
+      await writeExtractionToStaging(
+        this.prisma,
+        this.matching,
+        importRecord.id,
+        congressId,
+        validation.result,
+        halls,
+        congress.startDate,
+      );
+
+      await this.prisma.programImport.update({
+        where: { id: importRecord.id },
+        data: { status: ProgramImportStatus.DRAFT },
+      });
+    } catch (error) {
+      // Faz 4b'nin async yolundakiyle (program-import-queue.service.ts)
+      // AYNI kurtarma deseni: yari yazilmis staging satirlari BIRAKILMAZ,
+      // import FAILED'e cekilir. Ama burada senkron bir HTTP istegi
+      // icindeyiz - hata yutulmaz, cagirana (500) YENIDEN FIRLATILIR.
+      const message =
+        error instanceof Error ? error.message : 'Bilinmeyen hata';
+      await this.prisma.programImportSession
+        .deleteMany({ where: { importId: importRecord.id } })
+        .catch(() => {});
+      await this.prisma.programImport
+        .update({
+          where: { id: importRecord.id },
+          data: { status: ProgramImportStatus.FAILED, errorMessage: message },
+        })
+        .catch(() => {});
+      throw error;
+    }
+
+    return { importId: importRecord.id, status: ProgramImportStatus.DRAFT };
+  }
+
+  getTemplateJson() {
+    return PROGRAM_IMPORT_JSON_TEMPLATE;
+  }
+
   async listImports(congressId: string) {
     const [imports, spend] = await Promise.all([
       this.prisma.programImport.findMany({
@@ -172,6 +264,7 @@ export class ProgramImportsService {
       sessionStatusCounts,
       roleMatchCounts,
       presentationCount,
+      autoCreateRows,
     ] = await Promise.all([
       this.prisma.programImportSession.findMany({
         where: { importId },
@@ -199,7 +292,26 @@ export class ProgramImportsService {
       this.prisma.programImportPresentation.count({
         where: { importSession: { importId } },
       }),
+      // Faz 4c §3: onizlemede "olusturulacak salonlar" listesi TUM
+      // (sayfalanmamis) NEW satirlar uzerinden hesaplanir - sayfa 1'de
+      // gorunmeyen bir satirin salon adi da listede eksik KALMAMALI.
+      // Yalnizca hallId'si HALA null olan (yani daha once elle
+      // eslestirilmemis) satirlar dikkate alinir.
+      this.prisma.programImportSession.findMany({
+        where: {
+          importId,
+          status: ImportRowStatus.NEW,
+          hallId: null,
+          hallAutoCreateExcluded: false,
+          NOT: { rawHallName: null },
+        },
+        select: { rawHallName: true },
+      }),
     ]);
+
+    const hallsToCreate = buildHallCreationCandidates(
+      autoCreateRows.map((row) => row.rawHallName),
+    );
 
     return {
       import: importRecord,
@@ -215,8 +327,48 @@ export class ProgramImportsService {
           roleMatchCounts.map((c) => [c.previewMatchStatus, c._count._all]),
         ),
         presentationCount,
+        hallsToCreate,
       },
     };
+  }
+
+  // Faz 4c §3: onizlemedeki "olusturulacak salonlar" listesinden TEK bir
+  // adayin admin tarafindan kaldirilmasi - o adaya `normalizeHallName` ile
+  // birlesen TUM NEW satirlar `hallAutoCreateExcluded: true` isaretlenir.
+  // Bu satirlarin hallId'si hala null kalir; onayda eskisi gibi "salon
+  // secilmemis" olarak BLOKE eder, admin panelden elle bir salon secmek
+  // zorunda kalir (otomatik olusturma iptal edilmis olur, YENIDEN
+  // eslestirme YAPILMAZ).
+  async excludeHallToCreate(importId: string, hallName: string) {
+    await this.requireDraftImport(importId);
+    const targetKey = normalizeHallName(hallName);
+
+    const candidateRows = await this.prisma.programImportSession.findMany({
+      where: {
+        importId,
+        status: ImportRowStatus.NEW,
+        hallId: null,
+        NOT: { rawHallName: null },
+      },
+      select: { id: true, rawHallName: true },
+    });
+    const matchingIds = candidateRows
+      .filter(
+        (row) =>
+          row.rawHallName && normalizeHallName(row.rawHallName) === targetKey,
+      )
+      .map((row) => row.id);
+
+    if (matchingIds.length === 0) {
+      throw new NotFoundException('Bu isimde bir salon adayı bulunamadı');
+    }
+
+    await this.prisma.programImportSession.updateMany({
+      where: { id: { in: matchingIds } },
+      data: { hallAutoCreateExcluded: true },
+    });
+
+    return { excludedSessionCount: matchingIds.length };
   }
 
   // --- Oturum satirlari ---
@@ -476,9 +628,11 @@ export class ProgramImportsService {
   }
 
   // Onaylanacak (INVALID/EXCLUDED disi) her oturum icin hallId ZORUNLU -
-  // Session.hallId sema seviyesinde NOT NULL'dur. Eksik varsa onay
-  // BASLAMADAN 400 ile hangi oturumlarin eksik oldugu listelenir (Faz 4b
-  // talimati).
+  // Session.hallId sema seviyesinde NOT NULL'dur. hallId'si olmayan ama
+  // belgede bir rawHallName'i olan (ve admin panelden aday olarak
+  // KALDIRMAMIS) satirlar Faz 4c §3 geregi burada OTOMATIK bir Hall'a
+  // baglanir - digerleri (salon adi hic yoktu YA DA admin adayi kaldirdi)
+  // eskisi gibi onayi BLOKE eder (bkz. Faz 4b talimati).
   async approveImport(importId: string) {
     const importRecord = await this.findImportOrThrow(importId);
     if (importRecord.status !== ProgramImportStatus.DRAFT) {
@@ -491,7 +645,12 @@ export class ProgramImportsService {
       include: SESSION_TREE_INCLUDE,
     });
 
-    const missingHall = eligibleSessions.filter((s) => !s.hallId);
+    const autoCreateRows = eligibleSessions.filter(
+      (s) => !s.hallId && s.rawHallName?.trim() && !s.hallAutoCreateExcluded,
+    );
+    const missingHall = eligibleSessions.filter(
+      (s) => !s.hallId && !(s.rawHallName?.trim() && !s.hallAutoCreateExcluded),
+    );
     if (missingHall.length > 0) {
       throw new BadRequestException({
         message:
@@ -503,6 +662,10 @@ export class ProgramImportsService {
         })),
       });
     }
+
+    const hallNamesToCreate = buildHallCreationCandidates(
+      autoCreateRows.map((s) => s.rawHallName),
+    );
 
     // Bildirim planlamasi (BullMQ/Redis) transaction'in DISINDA yapilir -
     // `tx.session.create` bir hata ile GERI ALINIRSA (ör. sonraki bir
@@ -518,17 +681,42 @@ export class ProgramImportsService {
     }[] = [];
 
     const summary = await this.prisma.$transaction(async (tx) => {
+      // Faz 4c §3: eslesmeyen salon adlari (adminin onizlemede TEK TEK
+      // kaldirabildigi adaylar) burada, canli tablolara gecmeden HEMEN
+      // once olusturulur - boylece hem otomatik olusturma hem oturum
+      // yazma AYNI transaction icinde kalir (ya hepsi ya hicbiri).
+      // Varsayilan rssiThreshold/capacity Hall semasindaki degerlerden
+      // gelir (bkz. schema.prisma) - burada elle tekrar YAZILMAZ.
+      const createdHalls: { id: string; name: string }[] = [];
+      const hallIdByNormalizedName = new Map<string, string>();
+      for (const name of hallNamesToCreate) {
+        const hall = await tx.hall.create({
+          data: { congressId: importRecord.congressId, name },
+        });
+        hallIdByNormalizedName.set(normalizeHallName(name), hall.id);
+        createdHalls.push({ id: hall.id, name: hall.name });
+      }
+
       let createdSessions = 0;
       let createdPresentations = 0;
       let createdRoles = 0;
       let skippedPresentations = 0;
 
       for (const sessionRow of eligibleSessions) {
+        // Ya satirda zaten bir hallId vardi (eslesti ya da elle secildi),
+        // ya da yukarida bu satirin rawHallName'i icin bir Hall YENI
+        // olusturuldu - `missingHall` kontrolu ucuncu bir ihtimali
+        // ELEMISTI, bu yuzden asagidaki `as string` guvenlidir.
+        const resolvedHallId =
+          sessionRow.hallId ??
+          hallIdByNormalizedName.get(
+            normalizeHallName(sessionRow.rawHallName as string),
+          );
+
         const session = await tx.session.create({
           data: {
             congressId: importRecord.congressId,
-            // hallId yukarida NOT NULL olarak dogrulandi.
-            hallId: sessionRow.hallId as string,
+            hallId: resolvedHallId as string,
             title: sessionRow.title as string,
             startTime: sessionRow.startTime as Date,
             endTime: sessionRow.endTime as Date,
@@ -598,6 +786,7 @@ export class ProgramImportsService {
         createdPresentations,
         createdRoles,
         skippedPresentations,
+        createdHalls,
       };
     });
 

@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
 import { loadCongresses } from '@/lib/load-congresses';
 import { MatchesTable } from './matches-table';
+import { UnmatchedNamesPanel } from './unmatched-names-panel';
 
 /**
  * Konuşmacı Eşleşmeleri — bilimsel programdaki moderatör/konuşmacı/tartışmacı
@@ -48,6 +49,8 @@ export default async function ProgramRoleMatchesPage({
       />
 
       {!congressId && <EmptyState title="Eşleşmeleri görmek için bir kongre seçin." />}
+
+      {congressId && <UnmatchedNamesPanel congressId={congressId} />}
 
       {congressId && <MatchesTable congressId={congressId} />}
     </main>

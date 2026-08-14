@@ -1020,6 +1020,130 @@ paths:
         '404':
           description: Rol bulunamadi.
 
+  /admin/program-roles/unmatched-names:
+    get:
+      summary: Eslesmeyen (UNMATCHED) rolleri isim bazinda gruplanmis rapor
+      description: >-
+        Faz 4c §4 - onay sonrasi gorunurluk raporu. Bu isimler icin User
+        kaydi OTOMATIK OLUSTURULMAZ (e-posta yok, Faz 2'nin gercek katilimci
+        listesiyle carpisip belirsiz eslesme uretebilir). Ayni kisi (searchName)
+        birden fazla oturum/sunumda geciyorsa hepsi TEK grupta doner. Katilimci
+        sonradan elle eklenirse POST /admin/program-roles/rematch bu isimleri
+        otomatik yeniden eslestirir.
+      operationId: getUnmatchedProgramRoleNames
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Gruplanmis eslesmeyen isim listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UnmatchedNameGroup'
+
+  /admin/program-imports/json:
+    post:
+      summary: Hazir bir ExtractionResult JSON'unu yukle (LLM cagrisi YOK, ucretsiz)
+      description: >-
+        Faz 4c §2 - Faz 4b'nin LLM adimini atlayan ikinci giris noktasi. Ayni
+        `writeExtractionToStaging` fonksiyonuna gider, ayni staging tablolarina
+        yazar, ayni onizleme/onay akisindan gecer. Govde YA bir multipart dosya
+        (`file` alani, JSON metin) YA DA dogrudan `application/json` govdesi
+        olabilir - her iki durumda da govdenin TAMAMI ExtractionResult'in
+        kendisidir (congressId asla govdeye karismaz, her zaman sorgu
+        parametresidir). Islem TAMAMEN senkron - BullMQ kuyruguna girmez.
+        model/inputTokens/outputTokens/estimatedCostUsd hep null kalir.
+      operationId: createJsonProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractionResultInput'
+      responses:
+        '201':
+          description: Staging'e yazildi, DRAFT durumunda.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [importId, status]
+                properties:
+                  importId:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: '#/components/schemas/ProgramImportStatus'
+        '400':
+          description: >-
+            Govde ExtractionResult semasina uymuyor - `errors` dizisi
+            Turkce, konumlu hata mesajlari icerir (ör. "3. oturumda
+            'startTime' alani eksik").
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, errors]
+                properties:
+                  message:
+                    type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+
+  /admin/program-imports/template.json:
+    get:
+      summary: Ornek/sablon bir ExtractionResult JSON'u indir
+      description: >-
+        JSON yukleme akisi icin doldurulmus, gercekci bir ornek (2 gun, 3
+        salon, moderatorlu bir oturum, cok sunumlu bir oturum, tek konusmacili
+        bir davetli konusma, bos `presentations` dizili bir kahve arasi).
+      operationId: getProgramImportJsonTemplate
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ornek ExtractionResult.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionResultInput'
+
   /admin/program-imports/estimate:
     post:
       summary: PDF/Excel program dosyasi icin token/maliyet tahmini (para harcamaz)
@@ -1492,13 +1616,63 @@ paths:
         '409':
           description: Yukleme artik DRAFT durumunda degil.
 
+  /admin/program-imports/{id}/halls-to-create/exclude:
+    post:
+      summary: Bir salon otomatik-olusturma adayini onizlemeden kaldir
+      description: >-
+        Faz 4c §3 - `hallName` `GET /admin/program-imports/{id}`'nin
+        `summary.hallsToCreate` listesindeki bir isimle BIREBIR eslesmeli
+        (farkli yazim varyasyonlari zaten TEK adaya birlesmis haldedir).
+        Eslesen TUM NEW satirlarin `hallAutoCreateExcluded` bayragini true
+        yapar - bu satirlarin hallId'si null kalir, onayda mevcut "salon
+        secilmemis" engeline duser (elle salon secimi gerekir).
+      operationId: excludeHallToCreate
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hallName]
+              properties:
+                hallName:
+                  type: string
+      responses:
+        '200':
+          description: Kac satirin isaretlendigi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [excludedSessionCount]
+                properties:
+                  excludedSessionCount:
+                    type: integer
+        '404':
+          description: Bu isimde bir salon adayi bulunamadi.
+
   /admin/program-imports/{id}/approve:
     post:
       summary: Staging'i tek transaction'da canli programa isle
       description: >-
         INVALID/EXCLUDED satirlar atlanir. Basliksiz sunumlar atlanir
         (Presentation.title NOT NULL). Mevcut programin UZERINE YAZMAZ,
-        yanina ekler. hallId eksik NEW bir oturum varsa 400 ile hangi
+        yanina ekler. hallId'si olmayan ama rawHallName'i olan (ve
+        hallAutoCreateExcluded=false) satirlar icin Faz 4c §3 geregi AYNI
+        transaction icinde otomatik Hall olusturulur (yaniti bkz.
+        ProgramImportApproveSummary.createdHalls) - digerleri (salon adi
+        hic yoktu YA DA admin adayi kaldirdi) icin 400 ile hangi
         oturumlarin eksik oldugu listelenir, transaction hic BASLAMAZ.
       operationId: approveProgramImport
       tags:
@@ -7166,7 +7340,7 @@ components:
 
     ProgramSourceType:
       type: string
-      enum: [PDF, EXCEL]
+      enum: [PDF, EXCEL, JSON]
 
     ProgramImportStatus:
       type: string
@@ -7557,7 +7731,7 @@ components:
           type: integer
         summary:
           type: object
-          required: [sessionsByStatus, rolesByMatchStatus, presentationCount]
+          required: [sessionsByStatus, rolesByMatchStatus, presentationCount, hallsToCreate]
           properties:
             sessionsByStatus:
               type: object
@@ -7569,6 +7743,14 @@ components:
                 type: integer
             presentationCount:
               type: integer
+            hallsToCreate:
+              type: array
+              description: >-
+                Faz 4c §3 - onayda otomatik olusturulacak salon adaylari
+                (farkli yazim varyasyonlari zaten TEK adaya birlestirilmis).
+                Yalnizca status=DRAFT iken anlamlidir.
+              items:
+                type: string
 
     ProgramImportApproveSummary:
       type: object
@@ -7577,6 +7759,7 @@ components:
         - createdPresentations
         - createdRoles
         - skippedPresentations
+        - createdHalls
       properties:
         createdSessions:
           type: integer
@@ -7587,3 +7770,154 @@ components:
         skippedPresentations:
           type: integer
           description: Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi.
+        createdHalls:
+          type: array
+          description: >-
+            Faz 4c §3 - onayda otomatik olusturulan salonlar. Bunlara HENUZ
+            beacon atanmamistir, panelde belirgin bir uyari gerekir.
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+
+    ExtractionResultInput:
+      type: object
+      description: >-
+        Faz 4c - JSON yukleme (`POST /admin/program-imports/json`) ve sablon
+        (`GET /admin/program-imports/template.json`) uc noktalarinin ortak
+        semasi. Faz 4b'nin LLM'e `output_config.format` ile zorlattigi
+        semanin BIREBIR AYNISI (`extraction-schema.ts`) - ikinci bir sema
+        ICAT EDILMEDI. Her string alan nullable ama KEY'i zorunludur (deger
+        `null` "bu bilgi belgede yoktu" anlamina gelir, KEY'in kendisinin
+        eksik olmasi yapisal bir hatadir - bkz. validate-extraction-result.ts).
+      required: [days, sessions]
+      properties:
+        days:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [label, date]
+            properties:
+              label:
+                type: string
+              date:
+                type: string
+                format: date
+                nullable: true
+        sessions:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required:
+              - dayLabel
+              - hallName
+              - startTime
+              - endTime
+              - title
+              - sessionType
+              - keywords
+              - moderators
+              - discussants
+              - presentations
+            properties:
+              dayLabel:
+                type: string
+                nullable: true
+              hallName:
+                type: string
+                nullable: true
+              startTime:
+                type: string
+                nullable: true
+                description: "'HH:MM' formatinda."
+              endTime:
+                type: string
+                nullable: true
+              title:
+                type: string
+                nullable: true
+              sessionType:
+                type: string
+                nullable: true
+              keywords:
+                type: array
+                items:
+                  type: string
+              moderators:
+                type: array
+                items:
+                  type: string
+              discussants:
+                type: array
+                items:
+                  type: string
+              presentations:
+                type: array
+                items:
+                  type: object
+                  required: [title, startTime, endTime, speakers]
+                  properties:
+                    title:
+                      type: string
+                      nullable: true
+                    startTime:
+                      type: string
+                      nullable: true
+                    endTime:
+                      type: string
+                      nullable: true
+                    speakers:
+                      type: array
+                      items:
+                        type: string
+
+    UnmatchedNameGroup:
+      type: object
+      description: >-
+        Faz 4c §4 - ayni kisinin (searchName ile normalize edilmis) birden
+        fazla oturum/sunumdaki gorunumleri TEK grupta toplanir.
+      required: [searchName, rawName, occurrences]
+      properties:
+        searchName:
+          type: string
+        rawName:
+          type: string
+          description: Panelde gosterilecek orijinal isim.
+        occurrences:
+          type: array
+          items:
+            type: object
+            required:
+              - roleId
+              - type
+              - sessionId
+              - sessionTitle
+              - presentationId
+              - presentationTitle
+            properties:
+              roleId:
+                type: string
+                format: uuid
+              type:
+                $ref: '#/components/schemas/ProgramRoleType'
+              sessionId:
+                type: string
+                format: uuid
+                nullable: true
+              sessionTitle:
+                type: string
+                nullable: true
+              presentationId:
+                type: string
+                format: uuid
+                nullable: true
+              presentationTitle:
+                type: string
+                nullable: true

@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   ImportRowStatus,
   ProgramImportStatus,
@@ -9,11 +13,12 @@ import {
   ProgramImportsService,
   sourceTypeFromFileName,
 } from './program-imports.service';
+import { validateExtractionResult } from '../extraction/validate-extraction-result';
 
 function createFakePrisma() {
   return {
-    congress: { findUnique: jest.fn() },
-    hall: { findUnique: jest.fn() },
+    congress: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
+    hall: { findUnique: jest.fn(), findMany: jest.fn() },
     programImport: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -28,6 +33,8 @@ function createFakePrisma() {
       groupBy: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
       aggregate: jest.fn(),
     },
     programImportPresentation: {
@@ -251,6 +258,7 @@ describe('ProgramImportsService.approveImport', () => {
       createdPresentations: 1,
       createdRoles: 2,
       skippedPresentations: 1,
+      createdHalls: [],
     });
   });
 
@@ -265,6 +273,188 @@ describe('ProgramImportsService.approveImport', () => {
     await expect(service.approveImport('imp-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
+  });
+
+  // Faz 4c §3: eslesmeyen ama BELGEDE yazili bir salon adi, onayda otomatik
+  // olusturulur - ayni transaction icinde, oturum yazilmadan HEMEN once.
+  it('hallId null ama rawHallName varsa salon otomatik olusturulur', async () => {
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+    prisma.programImportSession.findMany.mockResolvedValue([
+      {
+        id: 'row-1',
+        title: 'Açılış Oturumu',
+        hallId: null,
+        rawHallName: 'Salon Yeni',
+        hallAutoCreateExcluded: false,
+        startTime: new Date(2026, 8, 1, 9, 0),
+        endTime: new Date(2026, 8, 1, 10, 0),
+        sessionType: null,
+        dayLabel: '1. Gün',
+        keywords: null,
+        roles: [],
+        presentations: [],
+      },
+    ]);
+
+    const tx = {
+      hall: {
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'hall-new-1', name: 'Salon Yeni' }),
+      },
+      session: { create: jest.fn().mockResolvedValue({ id: 'session-1' }) },
+      programRole: { create: jest.fn() },
+      presentation: { create: jest.fn() },
+      programImport: { update: jest.fn().mockResolvedValue({}) },
+    };
+    prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+      Promise.resolve(cb(tx)),
+    );
+
+    const summary = await service.approveImport('imp-1');
+
+    expect(tx.hall.create).toHaveBeenCalledWith({
+      data: { congressId: 'cong-1', name: 'Salon Yeni' },
+    });
+    expect(tx.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ hallId: 'hall-new-1' }) as unknown,
+    });
+    expect(summary.createdHalls).toEqual([
+      { id: 'hall-new-1', name: 'Salon Yeni' },
+    ]);
+  });
+
+  it('ayni salonun farkli yazimlari TEK Hall olarak olusturulur', async () => {
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+    prisma.programImportSession.findMany.mockResolvedValue([
+      {
+        id: 'row-1',
+        title: 'Oturum 1',
+        hallId: null,
+        rawHallName: 'Salon B',
+        hallAutoCreateExcluded: false,
+        startTime: new Date(2026, 8, 1, 9, 0),
+        endTime: new Date(2026, 8, 1, 10, 0),
+        sessionType: null,
+        dayLabel: '1. Gün',
+        keywords: null,
+        roles: [],
+        presentations: [],
+      },
+      {
+        id: 'row-2',
+        title: 'Oturum 2',
+        hallId: null,
+        rawHallName: 'salon-b',
+        hallAutoCreateExcluded: false,
+        startTime: new Date(2026, 8, 1, 11, 0),
+        endTime: new Date(2026, 8, 1, 12, 0),
+        sessionType: null,
+        dayLabel: '1. Gün',
+        keywords: null,
+        roles: [],
+        presentations: [],
+      },
+    ]);
+
+    const tx = {
+      hall: {
+        create: jest
+          .fn()
+          .mockResolvedValue({ id: 'hall-new-1', name: 'Salon B' }),
+      },
+      session: { create: jest.fn().mockResolvedValue({ id: 'session-x' }) },
+      programRole: { create: jest.fn() },
+      presentation: { create: jest.fn() },
+      programImport: { update: jest.fn().mockResolvedValue({}) },
+    };
+    prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+      Promise.resolve(cb(tx)),
+    );
+
+    const summary = await service.approveImport('imp-1');
+
+    expect(tx.hall.create).toHaveBeenCalledTimes(1);
+    expect(summary.createdHalls).toEqual([
+      { id: 'hall-new-1', name: 'Salon B' },
+    ]);
+    expect(tx.session.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('admin adayi kaldirmissa (hallAutoCreateExcluded) yine 400 verir, otomatik olusturulmaz', async () => {
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+    prisma.programImportSession.findMany.mockResolvedValue([
+      {
+        id: 'row-1',
+        title: 'Oturum X',
+        hallId: null,
+        rawHallName: 'Salon Kaldırıldı',
+        hallAutoCreateExcluded: true,
+        startTime: new Date(),
+        endTime: new Date(),
+        roles: [],
+        presentations: [],
+      },
+    ]);
+
+    await expect(service.approveImport('imp-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+});
+
+describe('ProgramImportsService.excludeHallToCreate', () => {
+  it('eslesen tum NEW satirlari hallAutoCreateExcluded yapar', async () => {
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+    prisma.programImportSession.findMany.mockResolvedValue([
+      { id: 'row-1', rawHallName: 'Salon B' },
+      { id: 'row-2', rawHallName: 'salon-b' },
+      { id: 'row-3', rawHallName: 'Başka Salon' },
+    ]);
+    prisma.programImportSession.updateMany.mockResolvedValue({ count: 2 });
+
+    const result = await service.excludeHallToCreate('imp-1', 'SALON B');
+
+    expect(prisma.programImportSession.updateMany).toHaveBeenCalledWith({
+      where: { id: { in: ['row-1', 'row-2'] } },
+      data: { hallAutoCreateExcluded: true },
+    });
+    expect(result).toEqual({ excludedSessionCount: 2 });
+  });
+
+  it('eslesen satir yoksa 404 verir', async () => {
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+    prisma.programImportSession.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.excludeHallToCreate('imp-1', 'Yok Böyle Salon'),
+    ).rejects.toThrow('Bu isimde bir salon adayı bulunamadı');
   });
 });
 
@@ -369,5 +559,158 @@ describe('ProgramImportsService.updateSessionRow - EXCLUDED tek yonludur', () =>
         status: ImportRowStatus.EXCLUDED,
       }) as unknown,
     });
+  });
+});
+
+// Faz 4c §2: LLM cagrisi olmayan senkron yol - `requireConfigured` cagirilmaz
+// (extraction mock'undaki `isConfigured` hic KULLANILMAZ), model/token/
+// maliyet alanlari hep null kalir.
+describe('ProgramImportsService.createJsonImport', () => {
+  const VALID_BODY = {
+    days: [{ label: '1. Gün', date: '2026-09-10' }],
+    sessions: [
+      {
+        dayLabel: '1. Gün',
+        hallName: 'Ana Salon',
+        startTime: '09:00',
+        endTime: '10:00',
+        title: 'Açılış',
+        sessionType: null,
+        keywords: [],
+        moderators: [],
+        discussants: [],
+        presentations: [],
+      },
+    ],
+  };
+
+  it('kongre bulunamazsa 404 verir, hicbir ProgramImport olusturulmaz', async () => {
+    const { service, prisma } = buildService();
+    prisma.congress.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.createJsonImport('cong-x', 'admin-1', 'p.json', VALID_BODY),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.programImport.create).not.toHaveBeenCalled();
+  });
+
+  it('semaya uymayan govde icin 400 verir, hicbir ProgramImport olusturulmaz', async () => {
+    const { service, prisma } = buildService();
+    prisma.congress.findUnique.mockResolvedValue({ id: 'cong-1' });
+
+    await expect(
+      service.createJsonImport('cong-1', 'admin-1', 'p.json', {
+        days: [],
+        sessions: [],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.programImport.create).not.toHaveBeenCalled();
+  });
+
+  it('gecerli govde icin JSON kaynak turuyle, maliyet alanlari null olarak import olusturur', async () => {
+    const { service, prisma } = buildService();
+    prisma.congress.findUnique.mockResolvedValue({ id: 'cong-1' });
+    prisma.congress.findUniqueOrThrow.mockResolvedValue({
+      startDate: new Date(2026, 8, 10),
+    });
+    prisma.hall.findMany.mockResolvedValue([]);
+    prisma.programImport.create.mockResolvedValue({
+      id: 'imp-json-1',
+      status: ProgramImportStatus.EXTRACTING,
+    });
+    prisma.programImportSession.create.mockResolvedValue({});
+    prisma.programImport.update.mockResolvedValue({});
+
+    const result = await service.createJsonImport(
+      'cong-1',
+      'admin-1',
+      'p.json',
+      VALID_BODY,
+    );
+
+    // Tam esitlik (objectContaining DEGIL) kasitli: model/inputTokens/
+    // outputTokens/estimatedCostUsd/pageCount alanlarinin govdeye HIC
+    // eklenmedigini (Prisma semadaki varsayilan null'da kaldigini) bu
+    // sekilde kanitlar - fazladan bir alan eklenirse test KIRILIR.
+    expect(prisma.programImport.create).toHaveBeenCalledWith({
+      data: {
+        congressId: 'cong-1',
+        adminUserId: 'admin-1',
+        fileName: 'p.json',
+        sourceType: 'JSON',
+        status: ProgramImportStatus.EXTRACTING,
+      },
+    });
+
+    expect(prisma.programImportSession.create).toHaveBeenCalledTimes(1);
+    expect(prisma.programImport.update).toHaveBeenCalledWith({
+      where: { id: 'imp-json-1' },
+      data: { status: ProgramImportStatus.DRAFT },
+    });
+    expect(result).toEqual({
+      importId: 'imp-json-1',
+      status: ProgramImportStatus.DRAFT,
+    });
+  });
+
+  it('staging yazimi sirasinda hata olursa import FAILED olur ve hata yeniden firlatilir', async () => {
+    const { service, prisma } = buildService();
+    prisma.congress.findUnique.mockResolvedValue({ id: 'cong-1' });
+    prisma.congress.findUniqueOrThrow.mockResolvedValue({
+      startDate: new Date(2026, 8, 10),
+    });
+    prisma.hall.findMany.mockResolvedValue([]);
+    prisma.programImport.create.mockResolvedValue({
+      id: 'imp-json-2',
+      status: ProgramImportStatus.EXTRACTING,
+    });
+    prisma.programImportSession.create.mockRejectedValue(
+      new Error('DB patladı'),
+    );
+    prisma.programImportSession.deleteMany.mockResolvedValue({ count: 0 });
+    prisma.programImport.update.mockResolvedValue({});
+
+    await expect(
+      service.createJsonImport('cong-1', 'admin-1', 'p.json', VALID_BODY),
+    ).rejects.toThrow('DB patladı');
+
+    expect(prisma.programImport.update).toHaveBeenCalledWith({
+      where: { id: 'imp-json-2' },
+      data: {
+        status: ProgramImportStatus.FAILED,
+        errorMessage: 'DB patladı',
+      },
+    });
+  });
+});
+
+describe('ProgramImportsService.getTemplateJson', () => {
+  it('sema dogrulayicisindan gecen bir ExtractionResult doner', () => {
+    const { service } = buildService();
+
+    const template = service.getTemplateJson();
+    const validation = validateExtractionResult(template);
+
+    expect(validation.valid).toBe(true);
+  });
+
+  it('en az iki gun, uc farkli salon ve bir kahve arasi icerir', () => {
+    const { service } = buildService();
+    const template = service.getTemplateJson();
+
+    expect(template.days.length).toBeGreaterThanOrEqual(2);
+    const hallNames = new Set(template.sessions.map((s) => s.hallName));
+    expect(hallNames.size).toBeGreaterThanOrEqual(3);
+    expect(template.sessions.some((s) => s.presentations.length === 0)).toBe(
+      true,
+    );
+    expect(template.sessions.some((s) => s.presentations.length > 1)).toBe(
+      true,
+    );
+    expect(
+      template.sessions.some(
+        (s) => s.moderators.length > 0 && s.discussants.length === 0,
+      ),
+    ).toBe(true);
   });
 });

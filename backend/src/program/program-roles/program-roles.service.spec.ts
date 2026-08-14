@@ -263,3 +263,92 @@ describe('ProgramRolesService.link / ignore', () => {
     });
   });
 });
+
+// Faz 4c §4: onay sonrasi gorunurluk raporu - AYNI kisinin (searchName)
+// birden fazla oturum/sunumdaki gorunumleri TEK bir grupta toplanir.
+describe('ProgramRolesService.unmatchedNames', () => {
+  it('yalnizca UNMATCHED rolleri sorgular, ayni searchName tek grupta toplanir', async () => {
+    const prisma = createFakePrisma();
+    prisma.programRole.findMany.mockResolvedValue([
+      {
+        id: 'role-1',
+        type: ProgramRoleType.MODERATOR,
+        rawName: 'Ahmet Yılmaz',
+        searchName: 'ahmet yilmaz',
+        session: { id: 'session-1', title: 'Açılış Oturumu' },
+        presentation: null,
+      },
+      {
+        id: 'role-2',
+        type: ProgramRoleType.SPEAKER,
+        rawName: 'Prof.Dr. Ahmet Yılmaz',
+        searchName: 'ahmet yilmaz',
+        session: null,
+        presentation: { id: 'pres-1', title: 'Bir Sunum' },
+      },
+      {
+        id: 'role-3',
+        type: ProgramRoleType.DISCUSSANT,
+        rawName: 'Zeynep Arslan',
+        searchName: 'zeynep arslan',
+        session: { id: 'session-2', title: 'Olgu Tartışmaları' },
+        presentation: null,
+      },
+    ]);
+    const matching = createFakeMatching({
+      matchStatus: RoleMatchStatus.UNMATCHED,
+      userId: null,
+    });
+    const service = new ProgramRolesService(prisma as never, matching as never);
+
+    const result = await service.unmatchedNames('cong-1');
+
+    expect(prisma.programRole.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          matchStatus: RoleMatchStatus.UNMATCHED,
+          OR: [
+            { session: { congressId: 'cong-1' } },
+            { presentation: { session: { congressId: 'cong-1' } } },
+          ],
+        }) as unknown,
+      }) as unknown,
+    );
+
+    expect(result).toHaveLength(2);
+    const ahmetGroup = result.find((g) => g.searchName === 'ahmet yilmaz');
+    expect(ahmetGroup?.rawName).toBe('Ahmet Yılmaz');
+    expect(ahmetGroup?.occurrences).toHaveLength(2);
+    expect(ahmetGroup?.occurrences).toEqual([
+      expect.objectContaining({
+        roleId: 'role-1',
+        sessionId: 'session-1',
+        sessionTitle: 'Açılış Oturumu',
+        presentationId: null,
+      }) as unknown,
+      expect.objectContaining({
+        roleId: 'role-2',
+        sessionId: null,
+        presentationId: 'pres-1',
+        presentationTitle: 'Bir Sunum',
+      }) as unknown,
+    ]);
+
+    const zeynepGroup = result.find((g) => g.searchName === 'zeynep arslan');
+    expect(zeynepGroup?.occurrences).toHaveLength(1);
+  });
+
+  it('hic UNMATCHED rol yoksa bos dizi doner', async () => {
+    const prisma = createFakePrisma();
+    prisma.programRole.findMany.mockResolvedValue([]);
+    const matching = createFakeMatching({
+      matchStatus: RoleMatchStatus.UNMATCHED,
+      userId: null,
+    });
+    const service = new ProgramRolesService(prisma as never, matching as never);
+
+    const result = await service.unmatchedNames('cong-1');
+
+    expect(result).toEqual([]);
+  });
+});

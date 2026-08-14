@@ -80,7 +80,20 @@ export function ApprovePanel({
               <li>{approveResult.createdPresentations} sunum oluşturuldu</li>
               <li>{approveResult.createdRoles} rol oluşturuldu</li>
               <li>{approveResult.skippedPresentations} sunum atlandı (başlıksız)</li>
+              {approveResult.createdHalls.length > 0 && (
+                <li>{approveResult.createdHalls.length} salon otomatik oluşturuldu</li>
+              )}
             </ul>
+          </div>
+        )}
+
+        {approveResult && approveResult.createdHalls.length > 0 && (
+          <div className="import-beacon-warning" role="alert">
+            <strong>Dikkat:</strong> Şu salonlara henüz beacon atanmadı:{' '}
+            {approveResult.createdHalls.map((hall) => hall.name).join(', ')} — Beacon
+            yönetiminden atama yapın, aksi hâlde bu salonlardan veri gelmez.
+            <br />
+            <Link href={`/beacons?congressId=${congressId}`}>Beacon yönetimine git →</Link>
           </div>
         )}
         {status === 'APPROVED' && (

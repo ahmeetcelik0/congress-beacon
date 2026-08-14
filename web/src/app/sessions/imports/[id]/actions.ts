@@ -228,6 +228,21 @@ export async function createProgramImportRoleAction(
   return { error: null, saved: true };
 }
 
+// --- Salon otomatik oluşturma adayları (Faz 4c §3) ---
+
+export async function excludeHallToCreateAction(
+  importId: string,
+  hallName: string,
+): Promise<ActionResult> {
+  try {
+    await api.excludeHallToCreate(importId, hallName);
+  } catch (error) {
+    return { error: error instanceof ApiError ? error.message : 'Salon adayı kaldırılamadı.' };
+  }
+  refresh(importId);
+  return { error: null };
+}
+
 // --- Onay / iptal ---
 
 export type ApproveResult =

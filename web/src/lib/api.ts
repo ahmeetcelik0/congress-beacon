@@ -191,6 +191,25 @@ export type RematchSummary = {
   skipped: number;
 };
 
+// Faz 4c §4: onay sonrasi gorunurluk raporu - User kaydi OTOMATIK
+// OLUSTURULMAZ (bkz. `getUnmatchedProgramRoleNames` yorumu), bu yuzden ayni
+// kisinin (searchName) birden fazla oturum/sunumdaki gorunumleri TEK bir
+// grupta toplanir.
+export type UnmatchedNameOccurrence = {
+  roleId: string;
+  type: ProgramRoleType;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  presentationId: string | null;
+  presentationTitle: string | null;
+};
+
+export type UnmatchedNameGroup = {
+  searchName: string;
+  rawName: string;
+  occurrences: UnmatchedNameOccurrence[];
+};
+
 export type ProgramRoleCandidate = {
   id: string;
   firstName: string;
@@ -232,7 +251,7 @@ export type Session = {
 // Session/Presentation/ProgramRole tablolarina YAZILMAZ (bkz.
 // `approveProgramImport`).
 
-export type ProgramSourceType = 'PDF' | 'EXCEL';
+export type ProgramSourceType = 'PDF' | 'EXCEL' | 'JSON';
 export type ProgramImportStatus =
   | 'PENDING'
   | 'EXTRACTING'
@@ -344,6 +363,10 @@ export type ProgramImportDetail = {
     sessionsByStatus: Record<string, number>;
     rolesByMatchStatus: Record<string, number>;
     presentationCount: number;
+    // Faz 4c: onayda otomatik olusturulacak salon adaylari (farkli yazim
+    // varyasyonlari backend'de zaten TEK adaya birlestirilmis) - yalnizca
+    // status=DRAFT iken anlamlidir.
+    hallsToCreate: string[];
   };
 };
 
@@ -354,6 +377,9 @@ export type ProgramImportApproveSummary = {
   // Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi (Presentation.title
   // semada NOT NULL, bkz. backend yorumu).
   skippedPresentations: number;
+  // Faz 4c: onayda otomatik olusturulan salonlar - bunlara HENUZ beacon
+  // atanmamistir, panelde belirgin bir uyari gerekir (bkz. `ApprovePanel`).
+  createdHalls: { id: string; name: string }[];
 };
 
 export type HallDurationStats = {
@@ -1039,6 +1065,15 @@ export const api = {
   // sonucu doner - iki durumda da otomatik atama YOK, yetkili elle secer.
   getProgramRoleCandidates: (id: string) =>
     request<ProgramRoleCandidate[]>(`/admin/program-roles/${id}/candidates`),
+  // Faz 4c §4: program isimlerinden User kaydi OTOMATIK OLUSTURULMAZ (e-posta
+  // yok - giris yapamaz, kongre kaydi olmaz, Faz 2'nin gercek katilimci
+  // listesiyle CARPISIP belirsiz eslesme uretebilir). Bunun yerine onay
+  // sonrasi gorunurluk raporu - katilimci sonradan elle eklenirse
+  // `rematchProgramRoles` bu isimleri otomatik yeniden eslestirir.
+  getUnmatchedProgramRoleNames: (congressId: string) =>
+    request<UnmatchedNameGroup[]>(
+      `/admin/program-roles/unmatched-names${buildQuery({ congressId })}`,
+    ),
 
   // ===== Program dosyası içe aktarma / staging (Faz 4b) =====
   // Dosya-yukleyen iki fonksiyon FormData kullanir - `request()` Content-Type
@@ -1063,6 +1098,28 @@ export const api = {
       body: formData,
     });
   },
+
+  // Faz 4c: LLM cagrisi yok, maliyet tahmini adimi da yok - dosya secilir,
+  // dogrudan yuklenir. `congressId` govdeye DEGIL sorgu parametresine gider
+  // (govdenin TAMAMI ExtractionResult JSON'unun kendisi olabildigi icin,
+  // bkz. backend `createJsonImport`).
+  createJsonProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return request<{ importId: string; status: ProgramImportStatus }>(
+      `/admin/program-imports/json${buildQuery({ congressId })}`,
+      { method: 'POST', body: formData },
+    );
+  },
+
+  getProgramImportJsonTemplate: () =>
+    request<unknown>('/admin/program-imports/template.json'),
+
+  excludeHallToCreate: (importId: string, hallName: string) =>
+    request<{ excludedSessionCount: number }>(
+      `/admin/program-imports/${importId}/halls-to-create/exclude`,
+      { method: 'POST', body: JSON.stringify({ hallName }) },
+    ),
 
   listProgramImports: (congressId: string) =>
     request<{ imports: ProgramImport[]; totalSpendUsd: number }>(

@@ -47,3 +47,32 @@ export async function createProgramImportAction(
     };
   }
 }
+
+// Faz 4c §2: LLM cagrisi yok, tahmin adimi yok - tek adimda yuklenir. Hata
+// govdesi `{ message, errors: string[] }` (Turkce, konumlu hatalar, ör.
+// "3. oturumda 'startTime' alani eksik") - tek bir genel mesaj YETERSIZ,
+// kullanicinin JSON dosyasinin HANGI satirini duzeltecegini gormesi gerekir.
+export type CreateJsonResult =
+  | { error: null; errors: null; importId: string }
+  | { error: string; errors: string[] | null; importId: null };
+
+export async function createJsonProgramImportAction(
+  congressId: string,
+  file: File,
+): Promise<CreateJsonResult> {
+  try {
+    const result = await api.createJsonProgramImport(congressId, file);
+    revalidatePath('/sessions');
+    return { error: null, errors: null, importId: result.importId };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      const details = error.details as { errors?: string[] } | undefined;
+      return {
+        error: error.message,
+        errors: details?.errors ?? null,
+        importId: null,
+      };
+    }
+    return { error: 'Dosya yüklenemedi.', errors: null, importId: null };
+  }
+}
