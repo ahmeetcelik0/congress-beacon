@@ -122,16 +122,16 @@ class BeaconObservationService with WidgetsBindingObserver {
   // icin (ör. 8 saat cevrimdisi ~100.000 gozlem) tum kuyrugu tek seferde
   // gondermek zaman asimi/bellek riski tasir (bkz. Faz 8 talimati §4).
   //
-  // 500 DEGIL 50: talimat "baslangic icin 500 oner, olc ve gerekirse
-  // ayarla" diyordu - GERCEK cihazda 500'luk bir batch backend'den 413
-  // ("request entity too large") dondurdu. Kok neden: NestJS/Express'in
-  // VARSAYILAN JSON govde siniri ~100KB - 6 beacon'luk (gercek cihazda
-  // gorulen tipik yogunluk) 500 gozlemlik bir istek ~375KB'a ulasiyor.
-  // Backend'e DOKUNULMADI (mutlak kisit) - sinir yerine BURADA, istemci
-  // tarafinda kucultuldu. 50 kayit, 15 beacon/gozlem gibi GERCEKCI olandan
-  // COK daha yogun bir durumda bile (~84KB) siniri asmaz (bkz. Faz 8
-  // gercek cihaz olcumu, docs/decisions.md).
-  static const int _sendBatchLimit = 50;
+  // Faz 8'de GERCEK cihazda 500'luk bir batch backend'den 413 ("request
+  // entity too large") dondurmustu - NestJS/Express'in VARSAYILAN JSON
+  // govde siniri ~100KB, 6 beacon'luk (gercek cihazda gorulen tipik
+  // yogunluk) 500 gozlemlik bir istek ~375KB'a ulasiyordu. O zaman
+  // istemci tarafinda gecici olarak 50'ye dusuruldu. Faz 9'da backend
+  // govde siniri 2MB'a cikarildigi icin (bkz. `main.ts`) 500'e GERI
+  // ALINDI - 15 beacon/gozlem gibi gercekciligin COK ustunde bir
+  // yogunlukta bile (~836KB) yeni sinirin yalnizca %41'i, saglam bir
+  // pay birakiyor (bkz. Faz 9 gercek cihaz olcumu, docs/decisions.md).
+  static const int _sendBatchLimit = 500;
   // Kuyrukta hala kayit varsa bir sonraki batch'i sunucuyu bogmadan
   // gondermek icin ardisik batch'ler arasindaki kisa bekleme.
   static const Duration _drainRetryDelay = Duration(seconds: 2);

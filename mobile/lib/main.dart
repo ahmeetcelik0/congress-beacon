@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/application/auth_lifecycle_refresh_provider.dart';
+import 'features/notifications/application/push_notification_lifecycle_provider.dart';
 import 'features/observations/application/observation_lifecycle_provider.dart';
 
 void main() {
@@ -22,6 +23,9 @@ class CongressBeaconApp extends ConsumerWidget {
     // Faz 7.1: cevrimdisi oturumu, uygulama on plana gelince otomatik
     // yeniden dogrular (bkz. auth_lifecycle_refresh_provider.dart).
     ref.watch(authLifecycleRefreshProvider);
+    // Faz 9: push bildirimleri de AYNI desenle uygulama kokunde izlenir -
+    // bkz. push_notification_lifecycle_provider.dart.
+    ref.watch(pushNotificationLifecycleProvider);
 
     final router = ref.watch(goRouterProvider);
 

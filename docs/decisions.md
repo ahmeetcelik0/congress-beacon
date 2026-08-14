@@ -1179,3 +1179,119 @@ ayrı ayrı doğrulandı (loglarda `... kayit SILINDI (kapsam degisimi: ...)`
 ile). Arka plan veri akış hızı (10 dakika, ekran kilitli): 3100 gözlem
 (~5,0 gözlem/sn) - Faz 6 ölçümünden (2283/11,4dk ≈ 3,34/sn) DÜŞÜK DEĞİL,
 kalıcı kuyruk katmanı ranging'i YAVAŞLATMIYOR.
+
+## Faz 9 — Push bildirimleri (2026-08-11)
+
+### Mimari: iki ayrı job türü, tek kuyruk
+
+`NotificationSchedulerService` her oturum için **iki bağımsız BullMQ
+job'ı** planlar: `trigger-reminder` (startTime − 10dk) ve `trigger-start`
+(startTime). İkisi de ayrı `jobId` (`trigger-{kind}-{sessionId}`) ile
+tutulur, oturum güncellenince ikisi de iptal edilip yeniden planlanır,
+silinince ikisi de iptal edilir. Ayrı bir job/kuyruk yerine TEK
+sözleşmeyle iki türü ayırt etmenin sebebi: hatırlatma ve başlangıç
+bildirimleri tamamen bağımsız zamanlamalara sahip ama AYNI birleştirme/
+frekans-limiti mantığından geçmesi gerekiyor - kod tekrarını önlemek
+için ikisi de `onTrigger`/`onFlush` çiftinden geçer, yalnızca `kind`
+parametresiyle ayrılır.
+
+### Neden geçmiş oturumlara job kurulmuyor
+
+`shouldScheduleJob(fireAtMs, nowMs)` yalnızca **kesinlikle gelecekteki**
+bir ateş alma zamanı için `true` döner. Eski kod `delay = Math.max(0,
+fireAt - now)` kullanıyordu - geçmiş bir `fireAt` için `delay=0` üretip
+job'ı ANINDA ateşliyordu. Bu, Faz 4b'nin toplu program içe aktarma akışı
+(`ProgramImportsService.approveImport`) yüzlerce GEÇMİŞ tarihli oturumu
+tek seferde onaylayabildiği için gerçek bir risk: korumasız haliyle
+yüzlerce kullanıcıya aynı anda "geçmiş bir oturum başladı" bildirimi
+gönderilirdi. `approveImport` daha önce `scheduleForSession`'ı HİÇ
+çağırmıyordu (yalnızca `SessionService.create/update` çağırıyordu) - bu
+fazda BİLEREK bağlandı (yoksa içe aktarılan oturumlar hiç bildirim
+almazdı, bu fazın asıl amacına aykırı olurdu), ki bu yüzden geçmiş-oturum
+koruması ŞART hale geldi. Zamanlama transaction'ın DIŞINDA yapılır -
+oluşturulan oturumlar önce biriktirilir, transaction commit olduktan
+SONRA `scheduleForSession` çağrılır (aksi halde transaction geri
+alınırsa hiç var olmayan bir oturum için job kurulmuş olurdu).
+
+### Birleştirme: tetikleyici + gecikmeli "flush" job'ı
+
+Aynı dakikada başlayan/hatırlatılan birden fazla oturum TEK bir
+bildirimde birleştirilir. Mekanizma: bir oturumun tetikleyici job'ı ateş
+aldığında GÖNDERMEZ - `flush-{kind}-{congressId}-{dakikaKovası}` jobId'li
+5 saniye gecikmeli bir "flush" job'ı planlar. Aynı dakikada başka
+oturumların tetikleyicileri de AYNI jobId'yi üretir - BullMQ tamamlanmamış
+bir jobId'ye ikinci `add()` çağrısını DOĞAL olarak tekilleştirir, yani o
+dakika kovası için yalnızca TEK bir flush job'ı gerçekten çalışır. Flush
+çalıştığında o an veritabanında GERÇEKTEN o kovaya düşen tüm oturumları
+TAZE sorgulayıp (planlama anındaki değil) tek bir birleştirilmiş mesaj
+kurar. Tek oturumlu durum ÖZEL DURUM değildir - N=1 için de aynı kod
+yolundan geçer (`buildStartNotification`/`buildReminderNotification`,
+bkz. `notification-scheduling-rules.ts`). 5 saniyelik gecikme BİLİNÇLİ
+bir tercih: push bildirimi birkaç saniye gecikmesi kullanıcı için
+algılanamaz, ama aynı dakikadaki TÜM tetikleyicilerin flush'tan önce
+sıraya girmesi için yeterli bir pencere açar. Gerçek Redis/BullMQ
+üzerinde 3 eşzamanlı oturumla doğrulandı: üçü de AYNI flush job'ını
+üretti, flush tam 5 saniye sonra TEK bir "3 oturum başladı" bildirimi
+gönderdi.
+
+Birleştirilmiş (N>1) bir bildirimin "tek" bir oturumu YOKTUR -
+`NotificationLog.sessionId` bu durumda NULL yazılır (mobil taraf FCM
+`data`sında `sessionId` gelmediğinde programa yönlendirmeye düşer).
+
+### Saatlik frekans limiti
+
+`sendToDevice` - hem hatırlatma hem başlangıç bildirimlerinin GEÇTİĞİ
+TEK yer - göndermeden önce kullanıcının son 60 dakikada aldığı `SENT`
+durumlu bildirim sayısını sayar (`HOURLY_NOTIFICATION_CAP = 6`). Sınır
+aşılırsa gönderim YAPILMAZ ama `NotificationLog`a `SKIPPED` durumuyla
+iz bırakılır - sessizce yutulmaz, panelde ("Atlanan" metrik kartı) ve
+ileride teşhis için görünür kalır. Sabit `notification-scheduling-rules.ts`
+dosyasında TEK yerde tutulur.
+
+### `NotificationLog.congressId` neden ayrıca tutuluyor
+
+`sessionId` birleştirilmiş bildirimlerde NULL olabildiği için, panelin
+"kongre bazında gönderilen/açılan bildirim sayısı" raporu (bkz.
+`ReportsService.getNotificationSummary`) `session` ilişkisi ÜZERİNDEN
+güvenilir şekilde filtrelenemezdi. `congressId` doğrudan (denormalize
+edilerek) `NotificationLog`a eklendi - mevcut 5 satır, migration'da
+`Session` üzerinden backfill edildi (bkz. migration
+`20260811085606_notification_log_congress_id`).
+
+### Geçersiz push token temizliği
+
+`FcmNotificationSender`, FCM'in kalıcı hata kodlarında (ör.
+`messaging/registration-token-not-registered`) `Device.pushToken`'ı
+`null`layarak temizler - aksi halde silinmiş bir uygulamaya SONSUZA
+KADAR gönderim denenirdi. Geçici hatalarda (ağ, sunucu) token
+DOKUNULMAZ, bir sonraki gönderimde tekrar denenir.
+
+### `NotificationSender` arayüzüne `data` alanı eklendi
+
+Mobil derin bağlantı (bkz. Faz 9 talimati §5 - bildirime dokununca ilgili
+oturuma gitme) için FCM mesajının `data` alanına `notificationLogId` (+ tek
+oturumluysa `sessionId`) konması GEREKİYORDU. `notificationLogId` id'si
+GÖNDERİM SONUCU belli olmadan (`randomUUID()` ile) ÖNCEDEN üretilir -
+`NotificationLog` satırı bu id ile, gönderim SONUCU (SENT/FAILED)
+belliyken yazılır. Bu, `NotificationSender` arayüzüne eklenen TEK
+opsiyonel alan - `LoggingNotificationSender` ve mevcut çağrı yerleri
+DEĞİŞİKLİKSİZ çalışmaya devam eder.
+
+### Body limiti (Faz 8'den kalan) çözüldü
+
+Faz 8'de gerçek cihazda 500 kayıtlık bir gözlem batch'i HTTP 413
+alıyordu (Express'in varsayılan ~100KB JSON gövde sınırı) - istemci
+tarafında limit geçici olarak 50'ye düşürülmüştü. Bu faz backend'e zaten
+dokunduğu için kalıcı çözüm burada yapıldı: `main.ts`'te
+`bodyParser: false` + `useBodyParser('json'/'urlencoded', {limit:
+'2mb'})` ile sınır 2MB'a çıkarıldı (`NestExpressApplication.
+useBodyParser` - Nest'in kendi varsayılan parser'ını devre dışı bırakıp
+istenen limitle elle kaydetmenin resmi yolu). Mobil taraf
+`_sendBatchLimit` 500'e geri alındı - 15 beacon/gözlem gibi gerçekçiliğin
+ÇOK üstünde bir yoğunlukta bile (~836KB) yeni sınırın yalnızca %41'i.
+
+### Kapsam dışı bırakılanlar (bilerek)
+
+Android push, zengin bildirim (görsel/eylem butonu), duyuru bildirimleri,
+kullanıcı bildirim tercihleri - hepsi Faz 9 talimatının kapsam dışı
+listesinde açıkça belirtildi, bu fazda YAPILMADI.

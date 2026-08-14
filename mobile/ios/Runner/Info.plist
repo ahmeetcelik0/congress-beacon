@@ -58,6 +58,9 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
+		<!-- Faz 9: push bildirimleri (FCM) - mevcut "location" (Faz 6)
+		     KORUNDU, uzerine yazilmadi (bkz. Faz 9 talimati "mutlak kisit"). -->
+		<string>remote-notification</string>
 	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>

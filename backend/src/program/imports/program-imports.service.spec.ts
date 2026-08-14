@@ -70,17 +70,36 @@ function createFakeMatching() {
   };
 }
 
+// Faz 9: approveImport artik her olusturulan oturum icin bildirim job'lari
+// planliyor (bkz. program-imports.service.ts) - gercek BullMQ/Redis burada
+// GEREKMEZ, yalnizca cagrildigini dogrulayan sahte bir uygulama yeterli.
+function createFakeNotificationScheduler() {
+  return {
+    scheduleForSession: jest.fn().mockResolvedValue(undefined),
+    cancelForSession: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 function buildService(prisma = createFakePrisma()) {
   const extraction = createFakeExtraction();
   const queue = createFakeQueue();
   const matching = createFakeMatching();
+  const notificationScheduler = createFakeNotificationScheduler();
   const service = new ProgramImportsService(
     prisma as never,
     extraction as never,
     queue as never,
     matching as never,
+    notificationScheduler as never,
   );
-  return { service, prisma, extraction, queue, matching };
+  return {
+    service,
+    prisma,
+    extraction,
+    queue,
+    matching,
+    notificationScheduler,
+  };
 }
 
 describe('sourceTypeFromFileName', () => {

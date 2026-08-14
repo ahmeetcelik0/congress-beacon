@@ -467,6 +467,29 @@ paths:
                 items:
                   $ref: '#/components/schemas/BeaconHealthItem'
 
+  /reports/notifications:
+    get:
+      summary: Kongre bazinda gonderilen/acilan bildirim sayilari ve son gonderimler (Faz 9)
+      operationId: getNotificationSummaryReport
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bildirim ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSummary'
+
   /reports/hall-visits.csv:
     get:
       summary: Salon ziyaretlerini CSV olarak disa aktar
@@ -3965,6 +3988,64 @@ components:
         usersSeenCount:
           description: Bu beacon'i goren farkli katilimci sayisi (kapsama gostergesi).
           type: integer
+
+    NotificationSummary:
+      type: object
+      required:
+        - sentCount
+        - openedCount
+        - failedCount
+        - skippedCount
+        - openedRatio
+        - recent
+      properties:
+        sentCount:
+          type: integer
+        openedCount:
+          type: integer
+        failedCount:
+          type: integer
+        skippedCount:
+          description: Saatlik gonderim sinirini asip ATLANAN bildirim sayisi (bkz. Faz 9).
+          type: integer
+        openedRatio:
+          type: number
+          nullable: true
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentNotification'
+
+    RecentNotification:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - status
+        - sentAt
+        - openedAt
+        - userName
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        status:
+          type: string
+          enum: [SENT, FAILED, SKIPPED]
+        sentAt:
+          type: string
+          format: date-time
+        openedAt:
+          type: string
+          format: date-time
+          nullable: true
+        userName:
+          type: string
 
     Session:
       type: object

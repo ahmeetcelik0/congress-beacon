@@ -9,6 +9,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ProgramExtractionService } from '../extraction/program-extraction.service';
 import { ProgramImportQueueService } from '../extraction/program-import-queue.service';
 import { ProgramRoleMatchingService } from '../program-role-matching.service';
+import { NotificationSchedulerService } from '../../notifications/notification-scheduler.service';
 import { normalizeTurkishName } from '../../common/normalize-turkish-name';
 import { getAnthropicMaxOutputTokens } from '../extraction/anthropic-config';
 import { estimateCostUsd } from '../extraction/model-pricing';
@@ -70,6 +71,7 @@ export class ProgramImportsService {
     private readonly extraction: ProgramExtractionService,
     private readonly queue: ProgramImportQueueService,
     private readonly matching: ProgramRoleMatchingService,
+    private readonly notificationScheduler: NotificationSchedulerService,
   ) {}
 
   // Para harcamayan tek uc nokta - yalnizca token SAYAR (bkz.
@@ -502,6 +504,19 @@ export class ProgramImportsService {
       });
     }
 
+    // Bildirim planlamasi (BullMQ/Redis) transaction'in DISINDA yapilir -
+    // `tx.session.create` bir hata ile GERI ALINIRSA (ör. sonraki bir
+    // oturumda beklenmedik bir kisit ihlali), commit OLMAMIS bir oturum
+    // icin is planlanmis OLMAMALI (bkz. Faz 9 talimati §3). Bu yuzden
+    // olusturulan oturumlar once biriktirilir, transaction basariyla
+    // BITTIKTEN SONRA hepsi icin `scheduleForSession` cagrilir.
+    const createdSessionRows: {
+      id: string;
+      congressId: string;
+      title: string;
+      startTime: Date;
+    }[] = [];
+
     const summary = await this.prisma.$transaction(async (tx) => {
       let createdSessions = 0;
       let createdPresentations = 0;
@@ -523,6 +538,7 @@ export class ProgramImportsService {
           },
         });
         createdSessions++;
+        createdSessionRows.push(session);
 
         for (const roleRow of sessionRow.roles) {
           await tx.programRole.create({
@@ -584,6 +600,14 @@ export class ProgramImportsService {
         skippedPresentations,
       };
     });
+
+    // Faz 9: her onaylanan oturum icin bildirim job'lari planlanir. Gecmis
+    // tarihli oturumlar (ör. arsivlenmis eski bir program yuklendiginde)
+    // `scheduleForSession` icindeki `shouldScheduleJob` kontrolunden
+    // GECMEZ - toplu bir bildirim yagmuru OLMAZ (bkz. Faz 9 talimati §3).
+    for (const session of createdSessionRows) {
+      await this.notificationScheduler.scheduleForSession(session);
+    }
 
     return summary;
   }

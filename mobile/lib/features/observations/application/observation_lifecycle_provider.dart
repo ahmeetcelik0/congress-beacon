@@ -11,6 +11,7 @@ import '../../../core/storage/secure_storage_provider.dart';
 import '../../../models/auth_models.dart';
 import '../../auth/application/auth_session_provider.dart';
 import '../../devices/data/device_repository.dart';
+import '../../notifications/application/push_notification_lifecycle_provider.dart';
 import '../data/bootstrap_repository.dart';
 import '../data/sqlite_observation_queue_store.dart';
 import '../domain/beacon_observation_service.dart';
@@ -372,6 +373,16 @@ class ObservationLifecycleNotifier extends Notifier<BeaconObservationService?> {
             appVersion: packageInfo.version,
           );
       await ref.read(secureStorageProvider).saveDeviceId(device.id);
+      // Faz 9: yeni deviceId, sunucudaki ESKI push token kaydiyla ARTIK
+      // eslesmiyor (Faz 6.2 kurtarma akisinda YENI bir Device satiri
+      // olusturulur) - GUNCEL FCM token'i bu yeni deviceId ile tekrar
+      // gonderilir. Firebase hic baslatilmamissa (izin/yapilandirma yok)
+      // sessizce hicbir sey yapmaz (bkz. PushNotificationService).
+      unawaited(
+        ref
+            .read(pushNotificationServiceProvider)
+            .reRegisterCurrentTokenIfAvailable(device.id),
+      );
       return device.id;
     } catch (_) {
       return null;

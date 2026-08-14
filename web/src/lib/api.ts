@@ -401,6 +401,34 @@ export type BeaconHealthItem = {
   usersSeenCount: number;
 };
 
+// Faz 9: kongre bazinda gonderilen/acilan bildirim ozeti + son gonderimler
+// listesi. Backend sozlesmesi `backend/src/reports/reports.service.ts`
+// (`getNotificationSummary`) ve `shared/openapi.yaml` (`NotificationSummary`/
+// `RecentNotification`) altinda dogrulandi - burada birebir eslenir.
+export type NotificationDeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED';
+
+export type RecentNotification = {
+  id: string;
+  title: string;
+  body: string;
+  status: NotificationDeliveryStatus;
+  sentAt: string;
+  openedAt: string | null;
+  userName: string;
+};
+
+export type NotificationSummary = {
+  sentCount: number;
+  openedCount: number;
+  failedCount: number;
+  // Saatlik gonderim sinirini asip ATLANAN bildirim sayisi.
+  skippedCount: number;
+  openedRatio: number | null;
+  // En yeni 20 kayit, en yeniden en eskiye - sayfalama YOK (bkz. backend
+  // `RECENT_NOTIFICATIONS_LIMIT`).
+  recent: RecentNotification[];
+};
+
 export type HallVisitSummary = {
   id: string;
   userId: string;
@@ -908,6 +936,9 @@ export const api = {
 
   getBeaconHealthReport: (congressId: string) =>
     request<BeaconHealthItem[]>(`/reports/beacon-health${buildQuery({ congressId })}`),
+
+  getNotificationSummaryReport: (congressId: string) =>
+    request<NotificationSummary>(`/reports/notifications${buildQuery({ congressId })}`),
 
   // `GET /sessions` sunumlari ve rolleri IC ICE doner, sunucuda zaten
   // `dayLabel -> startTime -> displayOrder` sirali - panel EKSTRA siralama

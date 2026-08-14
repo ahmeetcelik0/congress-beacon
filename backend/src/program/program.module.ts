@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AdminAuthModule } from '../admin-auth/admin-auth.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ProgramRoleMatchingService } from './program-role-matching.service';
 import { PresentationsController } from './presentations/presentations.controller';
 import { PresentationsService } from './presentations/presentations.service';
@@ -12,7 +13,7 @@ import { ProgramImportsController } from './imports/program-imports.controller';
 import { ProgramImportsService } from './imports/program-imports.service';
 
 @Module({
-  imports: [AdminAuthModule],
+  imports: [AdminAuthModule, NotificationsModule],
   controllers: [
     PresentationsController,
     ProgramRolesController,

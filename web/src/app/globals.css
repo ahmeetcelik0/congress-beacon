@@ -457,6 +457,16 @@ body::after {
   margin-top: 0.5rem;
 }
 
+/* Bir h2 bölümü içindeki alt başlık (ör. "Bildirimler" içindeki "Son
+   Gönderimler") — h2'den daha düşük görsel ağırlık, tablo hemen üstünde. */
+.reports-subheading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

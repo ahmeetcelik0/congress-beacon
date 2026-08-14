@@ -75,6 +75,16 @@ dependencies:
   sqflite: ^2.4.3
   path: ^1.9.1
 
+  # Faz 9 - push bildirimleri (FCM). Ikisi de pub.dev'den DOGRULANDI
+  # (2026-08-11): firebase_core 4.13.0, firebase_messaging 16.5.0 (ikisi de
+  # 7 gun once yayinlandi). Ek bir yerel-bildirim paketi (ör.
+  # flutter_local_notifications) EKLENMEDI: iOS'ta onplandayken sistem
+  # bildirim baloncugunu gostermek icin firebase_messaging'in kendi
+  # `setForegroundNotificationPresentationOptions` API'si yeterli - ayrica
+  # bir pakete GEREK YOK (bkz. push_notification_lifecycle_provider.dart).
+  firebase_core: ^4.13.0
+  firebase_messaging: ^16.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

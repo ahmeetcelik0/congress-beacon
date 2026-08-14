@@ -32,6 +32,7 @@ class SecureStorageService {
   static const String _lastKnownSessionUserIdKey = 'last_known_session_user_id';
   static const String _lastKnownSessionCachedAtKey =
       'last_known_session_cached_at';
+  static const String _pushPermissionRequestedKey = 'push_permission_requested';
 
   Future<void> saveAccessToken(String token) async {
     await _storage.write(key: _accessTokenKey, value: token);
@@ -118,6 +119,22 @@ class SecureStorageService {
 
   Future<bool> isPermissionOnboardingComplete() async {
     final value = await _storage.read(key: _permissionOnboardingCompleteKey);
+    return value == 'true';
+  }
+
+  // Faz 9: bildirim izni KONUM izninden farkli olarak ZORUNLU degil - tek
+  // seferlik bir istektir (bkz. push_notification_lifecycle_provider.dart).
+  // Bu bayrak, kullanici izni REDDETSE bile bir daha SORULMAMASI icin
+  // (iOS zaten ayni etkiyi OS seviyesinde saglar - ikinci `requestPermission()`
+  // cagrisi sistem diyalogunu tekrar GOSTERMEZ, sessizce onceki cevabi
+  // doner - ama burada AYRICA tutulmasinin sebebi gereksiz SDK cagrisindan
+  // kacinmak).
+  Future<void> savePushPermissionRequested() async {
+    await _storage.write(key: _pushPermissionRequestedKey, value: 'true');
+  }
+
+  Future<bool> isPushPermissionRequested() async {
+    final value = await _storage.read(key: _pushPermissionRequestedKey);
     return value == 'true';
   }
 

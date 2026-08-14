@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/config/package_info_provider.dart';
 import '../../../core/testing/widget_keys.dart';
@@ -126,6 +127,19 @@ class ProfilePage extends ConsumerWidget {
                 trailingLabel: 'Şifre Değiştir',
                 enabled: !isOffline,
                 onTap: () => context.push('/change-password'),
+              ),
+              const Divider(height: 1),
+              // Faz 9: bildirim izni ZORUNLU degil ve uygulama ici bir
+              // ekrandan degil, dogrudan Sistem Ayarlari'ndan yonetilir -
+              // cevrimdisiyken de calisir (sunucu GEREKTIRMEZ), bu yuzden
+              // digerlerinin aksine `isOffline`a bagli DEGIL.
+              _ActionTile(
+                key: WidgetKeys.profileNotificationSettings,
+                icon: Icons.notifications_outlined,
+                title: 'Bildirimler',
+                subtitle: 'Oturum bildirimleri',
+                trailingLabel: 'Ayarlar',
+                onTap: () => launchUrl(Uri.parse('app-settings:')),
               ),
             ],
           ),

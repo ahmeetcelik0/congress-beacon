@@ -2,8 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceQueryService } from '../attendance/attendance-query.service';
 import { HallVisitsQueryDto } from '../attendance/dto/hall-visits-query.dto';
+import { NotificationStatus } from '../../generated/prisma/client';
 
 const CSV_EXPORT_MAX_ROWS = 5000;
+// Faz 9: panelde "son gonderimler" listesi icin ust sinir - sinirsiz
+// buyumeyi onlemek amacli, sayfalama bu kapsamda YOK (kucuk bir liste
+// yeterli, bkz. Faz 9 talimati §6 "kucuk bir ekleme").
+const RECENT_NOTIFICATIONS_LIMIT = 20;
 
 @Injectable()
 export class ReportsService {
@@ -144,6 +149,54 @@ export class ReportsService {
         usersSeenCount: usersSeenMap.get(beacon.id) ?? 0,
       };
     });
+  }
+
+  // Faz 9: kongre bazinda gonderilen/acilan bildirim sayisi + son
+  // gonderimler listesi (bkz. Faz 9 talimati §6). `NotificationLog.
+  // congressId` dogrudan filtrelenir - birlestirilmis bildirimlerde
+  // `sessionId` NULL olabildigi icin session iliskisi UZERINDEN
+  // filtrelemek GUVENILMEZ olurdu (bkz. schema.prisma yorumu).
+  async getNotificationSummary(congressId: string) {
+    const [sentCount, openedCount, failedCount, skippedCount, recent] =
+      await Promise.all([
+        this.prisma.notificationLog.count({
+          where: { congressId, status: NotificationStatus.SENT },
+        }),
+        this.prisma.notificationLog.count({
+          where: { congressId, openedAt: { not: null } },
+        }),
+        this.prisma.notificationLog.count({
+          where: { congressId, status: NotificationStatus.FAILED },
+        }),
+        this.prisma.notificationLog.count({
+          where: { congressId, status: NotificationStatus.SKIPPED },
+        }),
+        this.prisma.notificationLog.findMany({
+          where: { congressId },
+          orderBy: { sentAt: 'desc' },
+          take: RECENT_NOTIFICATIONS_LIMIT,
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        }),
+      ]);
+
+    return {
+      sentCount,
+      openedCount,
+      failedCount,
+      skippedCount,
+      openedRatio: sentCount > 0 ? openedCount / sentCount : null,
+      recent: recent.map((log) => ({
+        id: log.id,
+        title: log.title,
+        body: log.body,
+        status: log.status,
+        sentAt: log.sentAt,
+        openedAt: log.openedAt,
+        userName: `${log.user.firstName} ${log.user.lastName}`,
+      })),
+    };
   }
 
   async getHallVisitsCsv(query: HallVisitsQueryDto): Promise<string> {

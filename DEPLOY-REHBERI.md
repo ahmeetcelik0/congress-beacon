@@ -284,6 +284,43 @@ Faz 4b — canlı testte bulunan sorunlar).
 
 ---
 
+## 9.8) Faz 9 — Push bildirimleri (Firebase service account)
+
+Bu faz `.env.prod`'a bir değişken ekliyor:
+
+```bash
+FIREBASE_SERVICE_ACCOUNT_JSON=...   # tek satirda, TAM JSON icerigi
+```
+
+**Nasıl elde edilir:** Firebase Console → Proje Ayarları → Servis
+Hesapları → "Yeni özel anahtar oluştur" → indirilen `.json` dosyasının
+TAM İÇERİĞİ (dosya yolu DEĞİL, içeriğin kendisi) tek satıra sıkıştırılıp
+`.env.prod`'a yazılır. Örnek (yerelde tek satıra çevirmek için):
+
+```bash
+cat service-account.json | tr -d '\n' | pbcopy   # panoya kopyalar (macOS)
+```
+
+**Boş bırakılırsa uygulama ÇÖKMEZ** — yalnızca `LoggingNotificationSender`
+devrede kalır: bildirimler gerçekten GÖNDERİLMEZ, yalnızca sunucu loguna
+yazılır (`docker compose -f docker-compose.prod.yml logs -f backend` ile
+görülebilir). Geri kalan hiçbir özellik etkilenmez (bkz.
+`docs/decisions.md` "Faz 9", `MailSender`/`ANTHROPIC_API_KEY` ile aynı
+zarif düşme deseni — §9.7).
+
+**Bu gerçek bir kimlik bilgisidir** — asla `.env.prod.example`'a veya
+git'e yazılmaz, yalnızca sunucudaki `.env.prod` dosyasında tutulur.
+
+**Apple tarafı (mobil push'un çalışması için AYRICA gerekli, backend'i
+etkilemez):** APNs Authentication Key (`.p8`) Apple Developer Program
+(ücretli üyelik) hesabından üretilip Firebase Console'a yüklenmelidir —
+bu adım backend deploy'undan tamamen bağımsızdır, yalnızca Firebase'in
+iOS cihazlara gerçekten push gönderebilmesi için gerekir. Backend,
+Firebase'e mesajı doğru şekilde gönderir; mesajın Apple'ın APNs
+sunucularından cihaza ulaşması bu anahtara bağlıdır.
+
+---
+
 ## 10) Bakım / günlük komutlar
 
 ```bash

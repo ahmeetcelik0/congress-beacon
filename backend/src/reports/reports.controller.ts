@@ -20,6 +20,11 @@ export class ReportsController {
     return this.reportsService.getBeaconHealth(query.congressId);
   }
 
+  @Get('notifications')
+  getNotificationSummary(@Query() query: CongressScopeDto) {
+    return this.reportsService.getNotificationSummary(query.congressId);
+  }
+
   @Get('hall-visits.csv')
   async getHallVisitsCsv(
     @Query() query: HallVisitsCsvQueryDto,

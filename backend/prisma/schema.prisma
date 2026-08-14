@@ -74,6 +74,7 @@ model Congress {
   keynoteSpeakers     KeynoteSpeaker[]
   infoSections        CongressInfoSection[]
   programImports      ProgramImport[]
+  notificationLogs    NotificationLog[]
 }
 
 enum VenueType {
@@ -769,11 +770,19 @@ model ProgramImportRole {
 enum NotificationStatus {
   SENT
   FAILED
+  // Faz 9: saatlik gonderim sinirini asan kullanicilar icin - sessizce
+  // yutulmaz, iz birakilir (bkz. notification-scheduler.service.ts).
+  SKIPPED
 }
 
 model NotificationLog {
   id        String             @id @default(uuid())
   sessionId String?
+  // Faz 9: birlestirilmis (N>1 oturumu kapsayan) bildirimlerde sessionId
+  // NULL olabilir (bkz. notification-scheduler.service.ts) - panelde
+  // "kongre bazinda gonderilen/acilan bildirim sayisi" gibi raporlar bu
+  // yuzden session iliskisi UZERINDEN degil, DOGRUDAN bu alanla filtrelenir.
+  congressId String
   userId    String
   deviceId  String
   title     String
@@ -782,10 +791,12 @@ model NotificationLog {
   sentAt    DateTime           @default(now())
   openedAt  DateTime?
 
-  session Session? @relation(fields: [sessionId], references: [id])
-  user    User     @relation(fields: [userId], references: [id])
-  device  Device   @relation(fields: [deviceId], references: [id])
+  session  Session? @relation(fields: [sessionId], references: [id])
+  congress Congress @relation(fields: [congressId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  device   Device   @relation(fields: [deviceId], references: [id])
 
   @@index([userId])
   @@index([sessionId])
+  @@index([congressId, sentAt])
 }

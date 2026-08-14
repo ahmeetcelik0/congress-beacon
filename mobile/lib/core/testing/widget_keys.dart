@@ -54,6 +54,11 @@ class WidgetKeys {
   static const profileChangeCongress = Key('profile_change_congress');
   static const profileChangePassword = Key('profile_change_password');
   static const profileLogout = Key('profile_logout');
+  // Faz 9: bildirim izni ZORUNLU degil - kullanici sonradan izin vermek
+  // isterse Sistem Ayarlari'na goturen giris noktasi (bkz. Faz 9 talimati §5).
+  static const profileNotificationSettings = Key(
+    'profile_notification_settings',
+  );
 
   // --- Faz 7.1: cevrimdisi soguk baslangic (bkz. features/auth/presentation/offline_banner.dart) ---
   static const offlineBanner = Key('offline_banner');
