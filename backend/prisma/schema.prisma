@@ -568,6 +568,14 @@ model Session {
   // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
   // docs/decisions.md. @db.Text'e genisletildi.
   title        String   @db.Text
+  // Faz 4d: kanonik semanin ayri `titleEn`/`series` alanlari - eskiden Faz
+  // 4b'de iki dilli basliklar TEK `title` alaninda BIRLESIK yaziliyordu
+  // (yukaridaki yorum), artik ayri tutuluyor. Nullable - eski veri ve
+  // tek dilli programlar icin bos kalabilir. Mobil `/mobile/*` yanitlarina
+  // BU FAZDA eklenmedi (bkz. Faz 4d talimati) - yalnizca veri kaybetmemek
+  // icin saklaniyor.
+  titleEn      String?  @db.Text
+  series       String?  @db.Text
   // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
   // tutulur (bkz. asagisi). Bu alan yalnizca Faz 4a ONCESI olusmus mevcut
   // verinin ve /sessions panelinin eski gorunumunun bozulmamasi icin
@@ -601,6 +609,11 @@ model Presentation {
   id           String    @id @default(uuid())
   sessionId    String
   title        String    @db.Text
+  // Faz 4d: kanonik semanin `item.titleEn`/`item.code` alanlari (bkz.
+  // Session.titleEn/series yorumu - ayni gerekce). `code` bildiri/olgu
+  // kodu icin (ör. "ZS 006").
+  titleEn      String?   @db.Text
+  code         String?
   startTime    DateTime?
   endTime      DateTime?
   abstract     String?   @db.Text
@@ -711,6 +724,10 @@ model ProgramImportSession {
   // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
   // docs/decisions.md. @db.Text'e genisletildi (canli Session.title ile ayni).
   title        String?         @db.Text
+  // Faz 4d: kanonik semanin `event.titleEn`/`event.series` alanlari (bkz.
+  // canli Session.titleEn/series yorumu - ayni gerekce).
+  titleEn      String?         @db.Text
+  series       String?         @db.Text
   rawHallName  String? // belgede yazan salon adi
   hallId       String? // eslesen Hall (backend hesaplar, bkz. hall-matching.ts)
   dayLabel     String?
@@ -743,6 +760,9 @@ model ProgramImportPresentation {
   importSessionId String
   rowOrder        Int
   title           String?   @db.Text
+  // Faz 4d: canli Presentation.titleEn/code ile ayni gerekce.
+  titleEn         String?   @db.Text
+  code            String?
   rawStartTime    String?
   rawEndTime      String?
   startTime       DateTime?

@@ -120,6 +120,23 @@ export function JsonProgramImportPanel({ congressId }: { congressId: string }) {
           </p>
         )}
 
+        <details className="imports-schema-summary">
+          <summary>JSON şeması hakkında</summary>
+          <p>
+            Program <strong>gün → salon → etkinlik → öğe</strong> hiyerarşisinde olmalı. Zorunlu
+            alanlar: kongre adı ve başlangıç tarihi; her günün kendi tarihi; her salonun adı; her
+            etkinliğin başlangıç/bitiş saati, türü (<code>session</code>/<code>break</code>/
+            <code>ceremony</code>/<code>live_case</code>/<code>other</code>) ve başlığı; her
+            öğenin türü (<code>presentation</code>/<code>discussion</code>) ve başlığı.
+          </p>
+          <p>
+            Opsiyonel alanlar: gün etiketi, salonun İngilizce adı, etkinliğin İngilizce başlığı /
+            serisi / anahtar kelimeleri / oturum başkanları (<code>chairs</code>) / panelistleri (
+            <code>panelists</code>), öğenin saatleri / bildiri kodu / konuşmacıları. Yazılmayan
+            opsiyonel alanlar boş kabul edilir — hata vermez.
+          </p>
+        </details>
+
         <div className="imports-upload-row">
           <label className="imports-upload-label">
             Dosya seç

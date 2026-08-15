@@ -143,6 +143,34 @@
   color: var(--status-critical) !important;
 }
 
+/* ===== JSON şema özeti (Faz 4d §6) ===== */
+.imports-schema-summary {
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.imports-schema-summary summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.imports-schema-summary p {
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+
+.imports-schema-summary code {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  color: var(--signal);
+}
+
 .imports-estimate-card {
   padding: 1rem 1.1rem;
   border: 1px solid var(--signal);

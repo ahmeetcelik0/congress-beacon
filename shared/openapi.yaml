@@ -1056,14 +1056,16 @@ paths:
     post:
       summary: Hazir bir ExtractionResult JSON'unu yukle (LLM cagrisi YOK, ucretsiz)
       description: >-
-        Faz 4c §2 - Faz 4b'nin LLM adimini atlayan ikinci giris noktasi. Ayni
-        `writeExtractionToStaging` fonksiyonuna gider, ayni staging tablolarina
-        yazar, ayni onizleme/onay akisindan gecer. Govde YA bir multipart dosya
-        (`file` alani, JSON metin) YA DA dogrudan `application/json` govdesi
-        olabilir - her iki durumda da govdenin TAMAMI ExtractionResult'in
-        kendisidir (congressId asla govdeye karismaz, her zaman sorgu
-        parametresidir). Islem TAMAMEN senkron - BullMQ kuyruguna girmez.
-        model/inputTokens/outputTokens/estimatedCostUsd hep null kalir.
+        Faz 4c §2 (Faz 4d'de kanonik semaya tasindi) - Faz 4b'nin LLM adimini
+        atlayan ikinci giris noktasi. Ayni `writeExtractionToStaging`
+        fonksiyonuna gider, ayni staging tablolarina yazar, ayni onizleme/onay
+        akisindan gecer. Govde YA bir multipart dosya (`file` alani, JSON
+        metin) YA DA dogrudan `application/json` govdesi olabilir - her iki
+        durumda da govdenin TAMAMI ExtractionResult'in (gun -> salon ->
+        etkinlik -> oge hiyerarsisi) kendisidir (congressId asla govdeye
+        karismaz, her zaman sorgu parametresidir). Islem TAMAMEN senkron -
+        BullMQ kuyruguna girmez. model/inputTokens/outputTokens/
+        estimatedCostUsd hep null kalir.
       operationId: createJsonProgramImport
       tags:
         - Program
@@ -1106,9 +1108,9 @@ paths:
                     $ref: '#/components/schemas/ProgramImportStatus'
         '400':
           description: >-
-            Govde ExtractionResult semasina uymuyor - `errors` dizisi
-            Turkce, konumlu hata mesajlari icerir (ör. "3. oturumda
-            'startTime' alani eksik").
+            Govde kanonik semaya uymuyor - `errors` dizisi Turkce, konumlu
+            hata mesajlari icerir (ör. "1. gün, 3. salon (Ankara Salonu),
+            6. etkinlikte 'startTime' biçimi geçersiz").
           content:
             application/json:
               schema:
@@ -1129,8 +1131,9 @@ paths:
       summary: Ornek/sablon bir ExtractionResult JSON'u indir
       description: >-
         JSON yukleme akisi icin doldurulmus, gercekci bir ornek (2 gun, 3
-        salon, moderatorlu bir oturum, cok sunumlu bir oturum, tek konusmacili
-        bir davetli konusma, bos `presentations` dizili bir kahve arasi).
+        salon, oturum-baskanli/panelistli bir oturum, bildiri kodlu ve
+        cok ogeli bir oturum, tek konusmacili bir davetli konusma, bos
+        `items` dizili bir kahve arasi).
       operationId: getProgramImportJsonTemplate
       tags:
         - Program
@@ -7788,95 +7791,134 @@ components:
     ExtractionResultInput:
       type: object
       description: >-
-        Faz 4c - JSON yukleme (`POST /admin/program-imports/json`) ve sablon
-        (`GET /admin/program-imports/template.json`) uc noktalarinin ortak
-        semasi. Faz 4b'nin LLM'e `output_config.format` ile zorlattigi
-        semanin BIREBIR AYNISI (`extraction-schema.ts`) - ikinci bir sema
-        ICAT EDILMEDI. Her string alan nullable ama KEY'i zorunludur (deger
-        `null` "bu bilgi belgede yoktu" anlamina gelir, KEY'in kendisinin
-        eksik olmasi yapisal bir hatadir - bkz. validate-extraction-result.ts).
-      required: [days, sessions]
+        Faz 4d - kanonik program semasi. PDF/Excel LLM cikarimi
+        (`output_config.format` ile zorlatilir), JSON yukleme
+        (`POST /admin/program-imports/json`) ve sablon
+        (`GET /admin/program-imports/template.json`) uc noktalarinin
+        HEPSI bu semayi kullanir - tek kaynak
+        `shared/congress-program.schema.json` (JSON Schema draft
+        2020-12), burada ikinci kez ELLE KOPYALANMAZ, bu tanim o
+        dosyanin OpenAPI'ye yansitilmis halidir. Gun -> salon ->
+        etkinlik -> oge hiyerarsisi gercek kongre programlarinin dogal
+        yapisini izler (bkz. docs/decisions.md "Faz 4d"). Kok nesnede
+        ve her ic-ici nesnede ek alan KABUL EDILMEZ
+        (`additionalProperties: false`) - cikarim-sureci metalari
+        (`extraction`, `source_page` vb.) kanonik sozlesmenin PARCASI
+        DEGILDIR ve reddedilir.
+      required: [schemaVersion, congress, days]
       properties:
+        schemaVersion:
+          type: string
+          enum: ['1.0']
+        congress:
+          type: object
+          required: [name, startDate]
+          properties:
+            name:
+              type: string
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+              nullable: true
+            venue:
+              type: string
+              nullable: true
         days:
           type: array
           minItems: 1
           items:
             type: object
-            required: [label, date]
+            required: [date, halls]
             properties:
-              label:
-                type: string
               date:
                 type: string
                 format: date
-                nullable: true
-        sessions:
-          type: array
-          minItems: 1
-          items:
-            type: object
-            required:
-              - dayLabel
-              - hallName
-              - startTime
-              - endTime
-              - title
-              - sessionType
-              - keywords
-              - moderators
-              - discussants
-              - presentations
-            properties:
-              dayLabel:
+              label:
                 type: string
                 nullable: true
-              hallName:
-                type: string
-                nullable: true
-              startTime:
-                type: string
-                nullable: true
-                description: "'HH:MM' formatinda."
-              endTime:
-                type: string
-                nullable: true
-              title:
-                type: string
-                nullable: true
-              sessionType:
-                type: string
-                nullable: true
-              keywords:
+                description: "orn. '1. Gun'."
+              halls:
                 type: array
-                items:
-                  type: string
-              moderators:
-                type: array
-                items:
-                  type: string
-              discussants:
-                type: array
-                items:
-                  type: string
-              presentations:
-                type: array
+                minItems: 1
                 items:
                   type: object
-                  required: [title, startTime, endTime, speakers]
+                  required: [name, events]
                   properties:
-                    title:
+                    name:
+                      type: string
+                    nameEn:
                       type: string
                       nullable: true
-                    startTime:
-                      type: string
-                      nullable: true
-                    endTime:
-                      type: string
-                      nullable: true
-                    speakers:
+                    events:
                       type: array
+                      description: Bos olabilir.
                       items:
-                        type: string
+                        type: object
+                        required: [startTime, endTime, type, title, items]
+                        properties:
+                          startTime:
+                            type: string
+                            description: "'HH:MM' formatinda."
+                          endTime:
+                            type: string
+                          type:
+                            type: string
+                            enum: [session, break, ceremony, live_case, other]
+                          title:
+                            type: string
+                          titleEn:
+                            type: string
+                            nullable: true
+                          series:
+                            type: string
+                            nullable: true
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                          chairs:
+                            type: array
+                            description: "-> ProgramRoleType.MODERATOR."
+                            items:
+                              type: string
+                          panelists:
+                            type: array
+                            description: "-> ProgramRoleType.DISCUSSANT."
+                            items:
+                              type: string
+                          items:
+                            type: array
+                            description: >-
+                              Bos olabilir. `type: discussion` ogeleri de
+                              (konusmacisiz olsa bile) birer Presentation
+                              satiri olarak yazilir, ATLANMAZ.
+                            items:
+                              type: object
+                              required: [type, title]
+                              properties:
+                                startTime:
+                                  type: string
+                                  nullable: true
+                                endTime:
+                                  type: string
+                                  nullable: true
+                                type:
+                                  type: string
+                                  enum: [presentation, discussion]
+                                code:
+                                  type: string
+                                  nullable: true
+                                  description: Bildiri kodu, orn. 'ZS 006'.
+                                title:
+                                  type: string
+                                speakers:
+                                  type: array
+                                  description: "-> ProgramRoleType.SPEAKER."
+                                  items:
+                                    type: string
 
     UnmatchedNameGroup:
       type: object

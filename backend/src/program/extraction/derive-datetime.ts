@@ -1,41 +1,10 @@
-export type ExtractedDay = { label: string; date: string | null };
-
-export type DayDateInfo = { date: Date | null; derived: boolean };
-
-/**
- * LLM'in ustteki `days[]` listesini (gun etiketi -> varsa tarih) gercek
- * Date nesnelerine cevirir. Bir gunun tarihi belgede yoksa, kongrenin
- * `startDate`'inden GUN SIRASINA gore turetilir (1. gun -> startDate,
- * 2. gun -> startDate+1, ...). Kongrenin startDate'i de yoksa o gun icin
- * tarih hesaplanamaz (null kalir, cagiran taraf uyari birakir).
- */
-export function buildDayDateMap(
-  days: ExtractedDay[],
-  congressStartDate: Date | null,
-): Map<string, DayDateInfo> {
-  const map = new Map<string, DayDateInfo>();
-
-  days.forEach((day, index) => {
-    if (day.date) {
-      const parsed = parseIsoDate(day.date);
-      if (parsed) {
-        map.set(day.label, { date: parsed, derived: false });
-        return;
-      }
-    }
-
-    if (congressStartDate) {
-      const derived = new Date(congressStartDate);
-      derived.setDate(derived.getDate() + index);
-      map.set(day.label, { date: derived, derived: true });
-      return;
-    }
-
-    map.set(day.label, { date: null, derived: false });
-  });
-
-  return map;
-}
+// Faz 4d: kanonik semada her gunun kendi tarihi ZORUNLUDUR (bkz.
+// shared/congress-program.schema.json `days[].date`) - Faz 4b/4c'nin
+// "tarih opsiyonel, kongre baslangicindan gun SIRASINA gore INDEX bazli
+// turet" modeli (eski `buildDayDateMap`/`resolveDayDate`) bu yuzden
+// GEREKSIZ hale geldi ve KALDIRILDI (bkz. docs/decisions.md "Faz 4d").
+// Burada yalnizca saat/tarih metinlerini gercek Date nesnelerine ceviren
+// SAF yardimcilar kalir.
 
 function parseIsoDate(value: string): Date | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
@@ -56,38 +25,30 @@ function parseTimeOfDay(
   return { hours, minutes };
 }
 
-// Faz 4c: elle hazirlanan JSON'da saat/tarih biçimi bozuk olabilir (LLM
-// çıktısında bu OLMAZ, `output_config.format` zorunlu kılar) -
-// `validate-extraction-result.ts` bu iki fonksiyonu kullanarak "hatalı saat
-// biçimi" gibi konumlu, Türkçe hatalar üretir. Ayrıştırma mantığı TEK yerde
-// (yukarıdaki `parseIsoDate`/`parseTimeOfDay`) kalır, burada TEKRAR
-// YAZILMAZ.
-export function isValidDateFormat(value: string): boolean {
-  return parseIsoDate(value) !== null;
-}
-
-export function isValidTimeFormat(value: string): boolean {
-  return parseTimeOfDay(value) !== null;
-}
-
-export function resolveDayDate(
-  dayLabel: string | null,
-  dayDateMap: Map<string, DayDateInfo>,
-): DayDateInfo {
-  if (!dayLabel) return { date: null, derived: false };
-  return dayDateMap.get(dayLabel) ?? { date: null, derived: false };
+// `validate-extraction-result.ts` (AJV `pattern` kisiti) zaten `date`
+// bicimini garanti eder - bu fonksiyon yine de `null` donebilir (savunma
+// amacli), cagiran taraf (write-extraction-to-staging.ts) her zaman
+// GECERLI veri bekledigi icin pratikte hic tetiklenmez.
+export function parseCanonicalDate(value: string): Date | null {
+  return parseIsoDate(value);
 }
 
 /** "HH:MM" + bir gun tarihini birlestirip tam bir DateTime uretir. */
-export function combineDateAndTime(
-  date: Date | null,
-  rawTime: string | null,
-): Date | null {
-  if (!date || !rawTime) return null;
+export function combineDateAndTime(date: Date, rawTime: string): Date | null {
   const time = parseTimeOfDay(rawTime);
   if (!time) return null;
 
   const result = new Date(date);
   result.setHours(time.hours, time.minutes, 0, 0);
   return result;
+}
+
+// `validate-extraction-result.ts` (zaman sirasi kontrolu) ve
+// `write-extraction-to-staging.ts` (cakisan etkinlik uyarisi) AYNI
+// "HH:MM -> gunun kacinci dakikasi" donusumune ihtiyac duyar - tek kaynak
+// burasi. Gecerli "HH:MM" varsayar (cagiran taraf AJV/`parseTimeOfDay` ile
+// zaten dogrulamis olmali).
+export function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
 }

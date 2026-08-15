@@ -1,0 +1,16 @@
+# Faz 4d: backend/Dockerfile build context'i repo koku (bkz. docker-
+# compose.prod.yml) - bu dosya olmadan `mobile/`, `.git`, tum node_modules
+# klasorleri gereksiz yere build context'ine dahil olup build'i yavaslatir.
+# web/Dockerfile hala KENDI context'ini (./web) kullaniyor, bu dosyadan
+# ETKILENMEZ.
+.git
+mobile
+web
+docs
+ekranGörüntüleri
+**/node_modules
+backend/dist
+backend/generated
+**/.env
+**/.env.*
+*.log

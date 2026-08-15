@@ -30,6 +30,7 @@
     "@nestjs/throttler": "^6.5.0",
     "@prisma/adapter-mariadb": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "ajv": "^8.20.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.79.3",
     "class-transformer": "^0.5.1",

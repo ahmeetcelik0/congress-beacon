@@ -30,8 +30,12 @@ services:
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      # Faz 4d: context repo koku - backend/Dockerfile artik `shared/`
+      # klasorune (kanonik program semasi, tek kaynak) de ihtiyac duyuyor,
+      # bu dosya build context'i backend/e sinirliyken erisilemezdi (bkz.
+      # backend/Dockerfile yorumu, docs/decisions.md "Faz 4d").
+      context: .
+      dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}

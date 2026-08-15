@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://congress-beacon.local/schemas/congress-program.schema.json",
+  "title": "Kongre Bilimsel Program - Kanonik Şema",
+  "description": "Faz 4d: PDF'den LLM çıkarımı, elle hazırlanmış JSON yüklemesi, doğrulama ve staging - hepsi bu tek şemayı kullanır. Gün -> salon -> etkinlik -> öğe hiyerarşisi, gerçek kongre programlarının doğal yapısını yansıtır (bkz. docs/decisions.md 'Faz 4d'). Bu dosya tek kaynaktır - backend'de ikinci kez elle kopyalanmaz (bkz. backend/src/program/extraction/extraction-schema.ts, validate-extraction-result.ts).",
+  "type": "object",
+  "required": ["schemaVersion", "congress", "days"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "congress": {
+      "type": "object",
+      "required": ["name", "startDate"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "startDate": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "endDate": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "venue": { "type": "string" }
+      }
+    },
+    "days": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["date", "halls"],
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+          },
+          "label": { "type": "string" },
+          "halls": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "events"],
+              "additionalProperties": false,
+              "properties": {
+                "name": { "type": "string", "minLength": 1 },
+                "nameEn": { "type": "string" },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "startTime",
+                      "endTime",
+                      "type",
+                      "title",
+                      "items"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "startTime": {
+                        "type": "string",
+                        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                      },
+                      "endTime": {
+                        "type": "string",
+                        "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                      },
+                      "type": {
+                        "enum": [
+                          "session",
+                          "break",
+                          "ceremony",
+                          "live_case",
+                          "other"
+                        ]
+                      },
+                      "title": { "type": "string", "minLength": 1 },
+                      "titleEn": { "type": "string" },
+                      "series": { "type": "string" },
+                      "keywords": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "chairs": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "panelists": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "items": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["type", "title"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "startTime": {
+                              "type": "string",
+                              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                            },
+                            "endTime": {
+                              "type": "string",
+                              "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                            },
+                            "type": {
+                              "enum": ["presentation", "discussion"]
+                            },
+                            "code": { "type": "string" },
+                            "title": { "type": "string", "minLength": 1 },
+                            "speakers": {
+                              "type": "array",
+                              "items": { "type": "string" }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -2,24 +2,36 @@ import { validateExtractionResult } from './validate-extraction-result';
 
 function baseValid() {
   return {
-    days: [{ label: '1. Gün', date: '2026-04-09' }],
-    sessions: [
+    schemaVersion: '1.0',
+    congress: { name: 'Test Kongresi', startDate: '2026-09-10' },
+    days: [
       {
-        dayLabel: '1. Gün',
-        hallName: 'Salon A',
-        startTime: '09:00',
-        endTime: '10:00',
-        title: 'Açılış Oturumu',
-        sessionType: 'panel',
-        keywords: ['girişimsel kardiyoloji'],
-        moderators: ['Prof. Dr. Şule Çelik'],
-        discussants: [],
-        presentations: [
+        date: '2026-09-10',
+        label: '1. Gün',
+        halls: [
           {
-            title: 'Açılış Konuşması',
-            startTime: '09:00',
-            endTime: '09:15',
-            speakers: ['Prof. Dr. Şule Çelik'],
+            name: 'Ankara Salonu',
+            events: [
+              {
+                startTime: '09:00',
+                endTime: '10:00',
+                type: 'session',
+                title: 'Açılış Oturumu',
+                keywords: ['girişimsel kardiyoloji'],
+                chairs: ['Prof. Dr. Şule Çelik'],
+                panelists: [],
+                items: [
+                  {
+                    startTime: '09:00',
+                    endTime: '09:30',
+                    type: 'presentation',
+                    code: 'ZS 001',
+                    title: 'Açılış Konuşması',
+                    speakers: ['Prof. Dr. Şule Çelik'],
+                  },
+                ],
+              },
+            ],
           },
         ],
       },
@@ -28,126 +40,162 @@ function baseValid() {
 }
 
 describe('validateExtractionResult', () => {
-  it('geçerli bir ExtractionResult için valid:true döner', () => {
+  it('geçerli bir kanonik program için valid:true döner ve varsayılanları uygular', () => {
     const result = validateExtractionResult(baseValid());
     expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.result.congress.venue).toBeNull();
+      expect(result.result.congress.endDate).toBeNull();
+      expect(result.result.days[0].halls[0].events[0].panelists).toEqual([]);
+    }
   });
 
   it('kök nesne değilse hata döner', () => {
     const result = validateExtractionResult('bozuk json');
     expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.errors[0]).toMatch(/JSON nesnesi olmalı/);
-    }
   });
 
   it("'days' dizisi boşsa Türkçe hata döner", () => {
     const data = baseValid();
-    data.days = [];
+    (data as { days: unknown[] }).days = [];
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors).toContain("'days' dizisi boş olamaz");
+      expect(
+        result.errors.some((e) => e.includes("'days' dizisi boş olamaz")),
+      ).toBe(true);
     }
   });
 
-  it("'sessions' dizisi boşsa Türkçe hata döner", () => {
+  it('zorunlu bir alan eksikse konumlu ve Türkçe hata döner', () => {
     const data = baseValid();
-    data.sessions = [];
+    delete (data.days[0].halls[0].events[0] as Record<string, unknown>)
+      .startTime;
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors).toContain("'sessions' dizisi boş olamaz");
-    }
-  });
-
-  it("3. oturumda 'startTime' alanı eksikse konumlu hata döner", () => {
-    const data = baseValid();
-    data.sessions.push(
-      { ...baseValid().sessions[0] },
-      { ...baseValid().sessions[0] },
-    );
-    delete (data.sessions[2] as Record<string, unknown>).startTime;
-    const result = validateExtractionResult(data);
-    expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.errors).toContain("3. oturumda 'startTime' alanı eksik");
-    }
-  });
-
-  it("2. oturumun 1. sunumunda 'title' boşsa (null) geçerli sayılır, ama alan eksikse hata döner", () => {
-    const data = baseValid();
-    data.sessions.push({ ...baseValid().sessions[0] });
-    (data.sessions[1].presentations[0] as Record<string, unknown>).title = null;
-    const nullResult = validateExtractionResult(data);
-    expect(nullResult.valid).toBe(true);
-
-    delete (data.sessions[1].presentations[0] as Record<string, unknown>).title;
-    const missingResult = validateExtractionResult(data);
-    expect(missingResult.valid).toBe(false);
-    if (!missingResult.valid) {
-      expect(missingResult.errors).toContain(
-        "2. oturumun 1. sunumunda 'title' alanı eksik",
+      expect(result.errors[0]).toMatch(
+        /1\. gün.*1\. salon.*Ankara Salonu.*1\. etkinlik.*'startTime' alanı eksik/,
       );
+    }
+  });
+
+  it('hall.name eksikse gün/salon konumu (isim olmadan) doğru raporlanır', () => {
+    const data = baseValid();
+    delete (data.days[0].halls[0] as Record<string, unknown>).name;
+    const result = validateExtractionResult(data);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors.some((e) => e.includes("'name' alanı eksik"))).toBe(
+        true,
+      );
+    }
+  });
+
+  it('geçersiz event.type değeri için izin verilenleri listeleyen hata döner', () => {
+    const data = baseValid();
+    (data.days[0].halls[0].events[0] as Record<string, unknown>).type =
+      'yanlış-tip';
+    const result = validateExtractionResult(data);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors[0]).toMatch(/'type' alanı geçersiz değerde/);
     }
   });
 
   it('hatalı saat biçimi konumlu hata döner', () => {
     const data = baseValid();
-    data.sessions[0].startTime = '25:99';
+    data.days[0].halls[0].events[0].startTime = '25:99';
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {
       expect(result.errors[0]).toMatch(
-        /1\. oturumda 'startTime'.*saat biçiminde/,
+        /'startTime' alanı geçersiz saat biçiminde/,
       );
     }
   });
 
   it('hatalı tarih biçimi konumlu hata döner', () => {
     const data = baseValid();
-    data.days[0].date = '09-04-2026';
+    data.days[0].date = '10-09-2026';
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors[0]).toMatch(/1\. günde 'date'.*tarih biçiminde/);
+      expect(result.errors[0]).toMatch(/'date' alanı geçersiz tarih biçiminde/);
     }
   });
 
-  it('yanlış tipte bir dizi alanı hata döner', () => {
+  it('şemada tanımsız fazladan bir alan reddedilir', () => {
     const data = baseValid();
-    (data.sessions[0] as Record<string, unknown>).keywords = 'tek metin';
+    (data.days[0].halls[0].events[0] as Record<string, unknown>).fooBar = 'x';
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {
-      expect(result.errors).toContain(
-        "1. oturumda 'keywords' alanı bir dizi olmalı",
+      expect(result.errors[0]).toMatch(/tanımsız bir alan var: 'fooBar'/);
+    }
+  });
+
+  it("endTime, startTime'dan önce veya aynıysa hata döner", () => {
+    const data = baseValid();
+    data.days[0].halls[0].events[0].endTime = '09:00';
+    const result = validateExtractionResult(data);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors[0]).toMatch(
+        /'endTime' alanı 'startTime' alanından önce veya aynı olamaz/,
       );
+    }
+  });
+
+  it("öğenin endTime'ı startTime'dan önceyse hata döner", () => {
+    const data = baseValid();
+    data.days[0].halls[0].events[0].items[0].endTime = '09:00';
+    data.days[0].halls[0].events[0].items[0].startTime = '09:15';
+    const result = validateExtractionResult(data);
+    expect(result.valid).toBe(false);
+    if (!result.valid) {
+      expect(result.errors[0]).toMatch(/1\. öğe.*'endTime'/);
     }
   });
 
   it('nullable alanların null değeri geçerlidir (LLM boş bilgi raporlarken kullandığı biçim)', () => {
     const data = baseValid();
-    (data.sessions[0] as Record<string, unknown>).sessionType = null;
-    (data.sessions[0] as Record<string, unknown>).hallName = null;
+    (data.days[0].halls[0].events[0] as Record<string, unknown>).series = null;
+    (data.days[0].halls[0].events[0] as Record<string, unknown>).titleEn = null;
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(true);
   });
 
-  it("'days' alanı hiç yoksa hata döner", () => {
-    const data = baseValid() as Record<string, unknown>;
-    delete data.days;
+  it('opsiyonel bir alan hiç yazılmasa da geçerlidir (kullanıcının elle yazdığı JSON)', () => {
+    const data = baseValid();
+    delete (data.days[0].halls[0].events[0] as Record<string, unknown>).series;
+    delete (data.days[0].halls[0] as Record<string, unknown>).nameEn;
     const result = validateExtractionResult(data);
-    expect(result.valid).toBe(false);
-    if (!result.valid) {
-      expect(result.errors).toContain("'days' alanı eksik");
+    expect(result.valid).toBe(true);
+    if (result.valid) {
+      expect(result.result.days[0].halls[0].events[0].series).toBeNull();
+      expect(result.result.days[0].halls[0].nameEn).toBeNull();
     }
+  });
+
+  it("'discussion' tipi öğe konuşmacısız da geçerlidir", () => {
+    const data = baseValid();
+    data.days[0].halls[0].events[0].items.push({
+      startTime: '09:30',
+      endTime: '09:40',
+      type: 'discussion',
+      code: null,
+      title: 'Tartışma',
+      speakers: [],
+    });
+    const result = validateExtractionResult(data);
+    expect(result.valid).toBe(true);
   });
 
   it('birden fazla hata varsa hepsi birden döner (tek tek düzeltme turu istemez)', () => {
     const data = baseValid();
-    data.days = [];
-    delete (data.sessions[0] as Record<string, unknown>).title;
+    delete (data.days[0].halls[0].events[0] as Record<string, unknown>).title;
+    data.days[0].halls[0].events[0].startTime = 'geçersiz';
     const result = validateExtractionResult(data);
     expect(result.valid).toBe(false);
     if (!result.valid) {

@@ -262,6 +262,73 @@ describe('ProgramImportsService.approveImport', () => {
     });
   });
 
+  it('sessionRow/presentationRow uzerindeki titleEn/series/code alanlarini canli tabloya aktarir', async () => {
+    // Regresyon: Faz 4d Prisma migration'i bu alanlari staging'e ve canli
+    // Session/Presentation tablolarina ekledi, ancak `approveImport` ilk
+    // yazildiginda `tx.session.create`/`tx.presentation.create` cagrilarina
+    // EKLENMEMISTI - staging'de dogru duran veri onayda SESSIZCE kayboluyordu
+    // (bkz. docs/decisions.md "Faz 4d", tarayici dogrulamasinda bulundu).
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+
+    prisma.programImportSession.findMany.mockResolvedValue([
+      {
+        id: 'row-1',
+        title: 'Açılış Oturumu',
+        hallId: 'hall-1',
+        startTime: new Date(2026, 8, 10, 9, 0),
+        endTime: new Date(2026, 8, 10, 10, 30),
+        sessionType: 'session',
+        dayLabel: '1. Gün',
+        keywords: '',
+        titleEn: 'Opening Session',
+        series: 'ZS Serisi',
+        roles: [],
+        presentations: [
+          {
+            title: 'Zor Bir Olgu',
+            startTime: new Date(2026, 8, 10, 9, 0),
+            endTime: new Date(2026, 8, 10, 9, 20),
+            titleEn: null,
+            code: 'ZS 001',
+            roles: [],
+          },
+        ],
+      },
+    ]);
+
+    const tx = {
+      session: { create: jest.fn().mockResolvedValue({ id: 'session-1' }) },
+      programRole: { create: jest.fn().mockResolvedValue({ id: 'role-x' }) },
+      presentation: {
+        create: jest.fn().mockResolvedValue({ id: 'presentation-1' }),
+      },
+      programImport: { update: jest.fn().mockResolvedValue({}) },
+    };
+    prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+      Promise.resolve(cb(tx)),
+    );
+
+    await service.approveImport('imp-1');
+
+    expect(tx.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        titleEn: 'Opening Session',
+        series: 'ZS Serisi',
+      }) as unknown,
+    });
+    expect(tx.presentation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        titleEn: null,
+        code: 'ZS 001',
+      }) as unknown,
+    });
+  });
+
   it('ikinci onay denemesi 409 verir', async () => {
     const { service, prisma } = buildService();
     prisma.programImport.findUnique.mockResolvedValue({
@@ -567,19 +634,25 @@ describe('ProgramImportsService.updateSessionRow - EXCLUDED tek yonludur', () =>
 // maliyet alanlari hep null kalir.
 describe('ProgramImportsService.createJsonImport', () => {
   const VALID_BODY = {
-    days: [{ label: '1. Gün', date: '2026-09-10' }],
-    sessions: [
+    schemaVersion: '1.0',
+    congress: { name: 'Test Kongresi', startDate: '2026-09-10' },
+    days: [
       {
-        dayLabel: '1. Gün',
-        hallName: 'Ana Salon',
-        startTime: '09:00',
-        endTime: '10:00',
-        title: 'Açılış',
-        sessionType: null,
-        keywords: [],
-        moderators: [],
-        discussants: [],
-        presentations: [],
+        date: '2026-09-10',
+        halls: [
+          {
+            name: 'Ana Salon',
+            events: [
+              {
+                startTime: '09:00',
+                endTime: '10:00',
+                type: 'session',
+                title: 'Açılış',
+                items: [],
+              },
+            ],
+          },
+        ],
       },
     ],
   };
@@ -600,8 +673,9 @@ describe('ProgramImportsService.createJsonImport', () => {
 
     await expect(
       service.createJsonImport('cong-1', 'admin-1', 'p.json', {
+        schemaVersion: '1.0',
+        congress: {},
         days: [],
-        sessions: [],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.programImport.create).not.toHaveBeenCalled();
@@ -612,6 +686,7 @@ describe('ProgramImportsService.createJsonImport', () => {
     prisma.congress.findUnique.mockResolvedValue({ id: 'cong-1' });
     prisma.congress.findUniqueOrThrow.mockResolvedValue({
       startDate: new Date(2026, 8, 10),
+      endDate: null,
     });
     prisma.hall.findMany.mockResolvedValue([]);
     prisma.programImport.create.mockResolvedValue({
@@ -658,6 +733,7 @@ describe('ProgramImportsService.createJsonImport', () => {
     prisma.congress.findUnique.mockResolvedValue({ id: 'cong-1' });
     prisma.congress.findUniqueOrThrow.mockResolvedValue({
       startDate: new Date(2026, 8, 10),
+      endDate: null,
     });
     prisma.hall.findMany.mockResolvedValue([]);
     prisma.programImport.create.mockResolvedValue({
@@ -699,17 +775,22 @@ describe('ProgramImportsService.getTemplateJson', () => {
     const template = service.getTemplateJson();
 
     expect(template.days.length).toBeGreaterThanOrEqual(2);
-    const hallNames = new Set(template.sessions.map((s) => s.hallName));
+
+    const halls = template.days.flatMap((day) => day.halls);
+    const hallNames = new Set(halls.map((h) => h.name));
     expect(hallNames.size).toBeGreaterThanOrEqual(3);
-    expect(template.sessions.some((s) => s.presentations.length === 0)).toBe(
+
+    const events = halls.flatMap((h) => h.events);
+    expect(events.some((e) => e.type === 'break' && e.items.length === 0)).toBe(
       true,
     );
-    expect(template.sessions.some((s) => s.presentations.length > 1)).toBe(
-      true,
-    );
+    expect(events.some((e) => e.items.length > 1)).toBe(true);
     expect(
-      template.sessions.some(
-        (s) => s.moderators.length > 0 && s.discussants.length === 0,
+      events.some((e) => e.chairs.length > 0 && e.panelists.length > 0),
+    ).toBe(true);
+    expect(
+      events.some(
+        (e) => e.items.length === 1 && e.items[0].speakers.length === 1,
       ),
     ).toBe(true);
   });

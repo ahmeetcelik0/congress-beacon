@@ -1,178 +1,119 @@
+import { writeExtractionToStaging } from './write-extraction-to-staging';
 import {
   ImportRowStatus,
   ProgramRoleType,
   RoleMatchStatus,
 } from '../../../generated/prisma/client';
-import { writeExtractionToStaging } from './write-extraction-to-staging';
 import type { ExtractionResult } from './extraction-schema';
 
-type RoleCreateData = {
-  type: ProgramRoleType;
-  rawName: string;
-  searchName: string;
-  previewMatchStatus: RoleMatchStatus;
-  previewUserId: string | null;
-};
+const HALLS = [{ id: 'hall-1', name: 'Salon A' }];
 
-type PresentationCreateData = {
-  rowOrder: number;
-  title: string | null;
-  rawStartTime: string | null;
-  rawEndTime: string | null;
-  startTime: Date | null;
-  endTime: Date | null;
-  warning: string | null;
-  roles?: { create: RoleCreateData[] };
-};
-
-type SessionCreateData = {
-  importId: string;
-  rowOrder: number;
-  title: string | null;
-  rawHallName: string | null;
-  hallId: string | null;
-  dayLabel: string | null;
-  rawDate: string | null;
-  rawStartTime: string | null;
-  rawEndTime: string | null;
-  startTime: Date | null;
-  endTime: Date | null;
-  sessionType: string | null;
-  keywords: string | null;
-  status: ImportRowStatus;
-  message: string | null;
-  warning: string | null;
-  presentations?: { create: PresentationCreateData[] };
-  roles?: { create: RoleCreateData[] };
-};
+type SessionCreateCall = { data: Record<string, unknown> };
 
 function createFakePrisma() {
   return {
     programImportSession: {
-      create: jest.fn().mockResolvedValue({ id: 'row-1' }),
+      create: jest
+        .fn<Promise<unknown>, [SessionCreateCall]>()
+        .mockResolvedValue({}),
     },
   };
 }
 
 function createFakeMatching(
-  resultsByName: Record<
-    string,
-    { matchStatus: RoleMatchStatus; userId: string | null }
-  > = {},
+  result: { matchStatus: RoleMatchStatus; userId: string | null } = {
+    matchStatus: RoleMatchStatus.UNMATCHED,
+    userId: null,
+  },
 ) {
+  return { matchRole: jest.fn().mockResolvedValue(result) };
+}
+
+function baseExtraction(): ExtractionResult {
   return {
-    matchRole: jest.fn().mockImplementation(
-      (_congressId: string, searchName: string) =>
-        resultsByName[searchName] ?? {
-          matchStatus: RoleMatchStatus.UNMATCHED,
-          userId: null,
-        },
-    ),
+    schemaVersion: '1.0',
+    congress: {
+      name: 'Test',
+      startDate: '2026-09-10',
+      endDate: null,
+      venue: null,
+    },
+    days: [
+      {
+        date: '2026-09-10',
+        label: '1. Gün',
+        halls: [
+          {
+            name: 'Salon A',
+            nameEn: null,
+            events: [
+              {
+                startTime: '09:00',
+                endTime: '10:00',
+                type: 'session',
+                title: 'Açılış Oturumu',
+                titleEn: null,
+                series: null,
+                keywords: ['kardiyoloji'],
+                chairs: [],
+                panelists: [],
+                items: [],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   };
 }
 
-function lastSessionCreateData(
-  prisma: ReturnType<typeof createFakePrisma>,
-): SessionCreateData {
-  const calls = prisma.programImportSession.create.mock.calls as [
-    { data: SessionCreateData },
-  ][];
+function lastSessionCreateData(prisma: ReturnType<typeof createFakePrisma>) {
+  const calls = prisma.programImportSession.create.mock.calls;
   return calls[calls.length - 1][0].data;
 }
 
-const HALLS = [{ id: 'hall-1', name: 'Salon A' }];
-
 describe('writeExtractionToStaging', () => {
-  it('basligi olan, salonu eslesen, gunu belgede tarihli bir oturumu dogru sekilde yazar', async () => {
+  it('başlığı olan, salonu eşleşen bir etkinliği doğru şekilde yazar', async () => {
     const prisma = createFakePrisma();
-    const matching = createFakeMatching({
-      'ahmet yilmaz': {
-        matchStatus: RoleMatchStatus.MATCHED,
-        userId: 'user-1',
-      },
-    });
-
-    const extraction: ExtractionResult = {
-      days: [{ label: '1. Gün', date: '2026-09-01' }],
-      sessions: [
-        {
-          dayLabel: '1. Gün',
-          hallName: 'Salon A',
-          startTime: '09:00',
-          endTime: '10:30',
-          title: 'Kardiyoloji Sempozyumu',
-          sessionType: 'Sempozyum',
-          keywords: ['kardiyoloji', 'ritim'],
-          moderators: ['Prof. Dr. Ahmet Yılmaz'],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
 
     await writeExtractionToStaging(
       prisma as never,
       matching as never,
-      'import-1',
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      new Date(2026, 8, 10),
+      null,
+    );
+
+    const data = lastSessionCreateData(prisma);
+    expect(data.title).toBe('Açılış Oturumu');
+    expect(data.hallId).toBe('hall-1');
+    expect(data.sessionType).toBe('session');
+    expect(data.keywords).toBe('kardiyoloji');
+    expect(data.status).toBe(ImportRowStatus.NEW);
+    expect(data.warning).toBeNull();
+    expect((data.startTime as Date).getHours()).toBe(9);
+    expect((data.endTime as Date).getHours()).toBe(10);
+  });
+
+  it('yalnızca boşluktan oluşan başlığı INVALID işaretler', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events[0].title = '   ';
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
       'cong-1',
       extraction,
       HALLS,
       null,
-    );
-
-    expect(prisma.programImportSession.create).toHaveBeenCalledTimes(1);
-    const data = lastSessionCreateData(prisma);
-
-    expect(data.title).toBe('Kardiyoloji Sempozyumu');
-    expect(data.status).toBe(ImportRowStatus.NEW);
-    expect(data.message).toBeNull();
-    expect(data.hallId).toBe('hall-1');
-    expect(data.warning).toBeNull();
-    expect(data.keywords).toBe('kardiyoloji, ritim');
-    expect(data.startTime?.getHours()).toBe(9);
-    expect(data.endTime?.getHours()).toBe(10);
-
-    expect(matching.matchRole).toHaveBeenCalledWith('cong-1', 'ahmet yilmaz');
-    expect(data.roles?.create).toEqual([
-      {
-        type: ProgramRoleType.MODERATOR,
-        rawName: 'Prof. Dr. Ahmet Yılmaz',
-        searchName: 'ahmet yilmaz',
-        previewMatchStatus: RoleMatchStatus.MATCHED,
-        previewUserId: 'user-1',
-      },
-    ]);
-  });
-
-  it('basligi olmayan bir oturumu INVALID isaretler', async () => {
-    const prisma = createFakePrisma();
-    const matching = createFakeMatching();
-
-    const extraction: ExtractionResult = {
-      days: [],
-      sessions: [
-        {
-          dayLabel: null,
-          hallName: null,
-          startTime: null,
-          endTime: null,
-          title: null,
-          sessionType: null,
-          keywords: [],
-          moderators: [],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
-
-    await writeExtractionToStaging(
-      prisma as never,
-      matching as never,
-      'import-1',
-      'cong-1',
-      extraction,
-      HALLS,
       null,
     );
 
@@ -181,209 +122,354 @@ describe('writeExtractionToStaging', () => {
     expect(data.message).toBe('Başlık belgede bulunamadı');
   });
 
-  it('eslesmeyen salon adi icin hallId null + uyari birakir', async () => {
+  it('eşleşmeyen salon adı için hallId null + uyarı bırakır', async () => {
     const prisma = createFakePrisma();
     const matching = createFakeMatching();
-
-    const extraction: ExtractionResult = {
-      days: [{ label: '1. Gün', date: '2026-09-01' }],
-      sessions: [
-        {
-          dayLabel: '1. Gün',
-          hallName: 'Olmayan Salon',
-          startTime: '09:00',
-          endTime: '10:00',
-          title: 'Bir Oturum',
-          sessionType: null,
-          keywords: [],
-          moderators: [],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].name = 'Bilinmeyen Salon';
 
     await writeExtractionToStaging(
       prisma as never,
       matching as never,
-      'import-1',
+      'imp-1',
       'cong-1',
       extraction,
       HALLS,
+      null,
       null,
     );
 
     const data = lastSessionCreateData(prisma);
     expect(data.hallId).toBeNull();
-    expect(data.warning).toContain('Salon eşleşmedi');
+    expect(data.rawHallName).toBe('Bilinmeyen Salon');
+    expect(data.warning).toBe('Salon eşleşmedi, panelden seçin');
   });
 
-  it('tarih kongre baslangicindan turetildiginde uyari birakir', async () => {
+  it('gün tarihi kongre başlangıç tarihinden önceyse uyarı bırakır', async () => {
     const prisma = createFakePrisma();
     const matching = createFakeMatching();
-    const congressStart = new Date(2026, 8, 1);
-
-    const extraction: ExtractionResult = {
-      days: [{ label: '1. Gün', date: null }],
-      sessions: [
-        {
-          dayLabel: '1. Gün',
-          hallName: 'Salon A',
-          startTime: '09:00',
-          endTime: '10:00',
-          title: 'Bir Oturum',
-          sessionType: null,
-          keywords: [],
-          moderators: [],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
+    const extraction = baseExtraction();
 
     await writeExtractionToStaging(
       prisma as never,
       matching as never,
-      'import-1',
+      'imp-1',
       'cong-1',
       extraction,
       HALLS,
-      congressStart,
-    );
-
-    const data = lastSessionCreateData(prisma);
-    expect(data.warning).toContain('kongre başlangıcından türetildi');
-    expect(data.startTime?.getDate()).toBe(1);
-  });
-
-  it('gun etiketi belgede yoksa tarih hesaplanamaz + uyari birakir', async () => {
-    const prisma = createFakePrisma();
-    const matching = createFakeMatching();
-
-    const extraction: ExtractionResult = {
-      days: [],
-      sessions: [
-        {
-          dayLabel: null,
-          hallName: 'Salon A',
-          startTime: '09:00',
-          endTime: '10:00',
-          title: 'Bir Oturum',
-          sessionType: null,
-          keywords: [],
-          moderators: [],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
-
-    await writeExtractionToStaging(
-      prisma as never,
-      matching as never,
-      'import-1',
-      'cong-1',
-      extraction,
-      HALLS,
-      new Date(2026, 8, 1),
-    );
-
-    const data = lastSessionCreateData(prisma);
-    expect(data.startTime).toBeNull();
-    expect(data.endTime).toBeNull();
-    expect(data.warning).toContain('Gün etiketi belgede yoktu');
-  });
-
-  it('sunum + konusmaci rolunu iliskili sekilde yazar, birden fazla aday icin AMBIGUOUS delegasyonu yapar', async () => {
-    const prisma = createFakePrisma();
-    const matching = createFakeMatching({
-      'sule celik': { matchStatus: RoleMatchStatus.AMBIGUOUS, userId: null },
-    });
-
-    const extraction: ExtractionResult = {
-      days: [{ label: '1. Gün', date: '2026-09-01' }],
-      sessions: [
-        {
-          dayLabel: '1. Gün',
-          hallName: 'Salon A',
-          startTime: '09:00',
-          endTime: '10:30',
-          title: 'Oturum',
-          sessionType: null,
-          keywords: [],
-          moderators: [],
-          discussants: [],
-          presentations: [
-            {
-              title: 'Sunum 1',
-              startTime: '09:00',
-              endTime: '09:20',
-              speakers: ['Dr. Şule Çelik'],
-            },
-          ],
-        },
-      ],
-    };
-
-    await writeExtractionToStaging(
-      prisma as never,
-      matching as never,
-      'import-1',
-      'cong-1',
-      extraction,
-      HALLS,
+      // `congress.service.ts`teki gercek davranisi yansitmak icin ISO
+      // string'den (`new Date(dto.startDate)`) kuruluyor - kongre 15'inde
+      // basliyor, gun 10'unda.
+      new Date('2026-09-15'),
       null,
     );
 
     const data = lastSessionCreateData(prisma);
-    expect(data.presentations?.create).toHaveLength(1);
-    const presentation = data.presentations?.create[0];
-    expect(presentation?.title).toBe('Sunum 1');
-    expect(presentation?.roles?.create).toEqual([
-      {
-        type: ProgramRoleType.SPEAKER,
-        rawName: 'Dr. Şule Çelik',
-        searchName: 'sule celik',
-        previewMatchStatus: RoleMatchStatus.AMBIGUOUS,
-        previewUserId: null,
-      },
-    ]);
+    expect(data.warning).toContain(
+      'Gün tarihi kongre başlangıç tarihinden önce',
+    );
   });
 
-  it('bos isim (bosluk) icin rol OLUSTURMAZ ve matchRole cagirmaz', async () => {
+  it('gün tarihi kongre bitiş tarihinden sonraysa uyarı bırakır', async () => {
     const prisma = createFakePrisma();
     const matching = createFakeMatching();
-
-    const extraction: ExtractionResult = {
-      days: [],
-      sessions: [
-        {
-          dayLabel: null,
-          hallName: null,
-          startTime: null,
-          endTime: null,
-          title: 'Oturum',
-          sessionType: null,
-          keywords: [],
-          moderators: ['   '],
-          discussants: [],
-          presentations: [],
-        },
-      ],
-    };
+    const extraction = baseExtraction();
 
     await writeExtractionToStaging(
       prisma as never,
       matching as never,
-      'import-1',
+      'imp-1',
       'cong-1',
       extraction,
       HALLS,
+      null,
+      new Date('2026-09-05'), // kongre 5'inde bitiyor, gün 10'unda
+    );
+
+    const data = lastSessionCreateData(prisma);
+    expect(data.warning).toContain('Gün tarihi kongre bitiş tarihinden sonra');
+  });
+
+  it('gün tarihi kongre başlangıç tarihiyle AYNIYSA uyarı bırakmaz (saat dilimi kaymasına karşı regresyon)', async () => {
+    // Bug: congress.startDate `new Date(dto.startDate)` ile (tarih-only ISO
+    // string -> UTC gece yarisi) kuruluyor, `dayDate` ise YEREL gece yarisi
+    // olarak kuruluyor. Bu ikisini dogrudan karsilastirmak, UTC disi bir
+    // sunucu saat diliminde (orn. TR, UTC+3) AYNI takvim gunu icin bile
+    // yanlislikla "once" uyarisi uretiyordu (bkz. write-extraction-to-
+    // staging.ts `toLocalMidnightFromUtcCalendarDate`).
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      new Date('2026-09-10'), // gün de 2026-09-10 (baseExtraction)
+      new Date('2026-09-12'),
+    );
+
+    const data = lastSessionCreateData(prisma);
+    expect(data.warning).toBeNull();
+  });
+
+  it('aynı salonda çakışan iki etkinlik varsa her ikisine de uyarı bırakır', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events.push({
+      startTime: '09:30',
+      endTime: '10:30',
+      type: 'session',
+      title: 'Çakışan Oturum',
+      titleEn: null,
+      series: null,
+      keywords: [],
+      chairs: [],
+      panelists: [],
+      items: [],
+    });
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const calls = prisma.programImportSession.create.mock.calls;
+    const first = calls[0][0].data;
+    const second = calls[1][0].data;
+    expect(first.warning).toContain('çakışan başka bir etkinlik var');
+    expect(second.warning).toContain('çakışan başka bir etkinlik var');
+  });
+
+  it('çakışmayan iki etkinlik için çakışma uyarısı bırakmaz', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events.push({
+      startTime: '10:00',
+      endTime: '11:00',
+      type: 'session',
+      title: 'Ardışık Oturum',
+      titleEn: null,
+      series: null,
+      keywords: [],
+      chairs: [],
+      panelists: [],
+      items: [],
+    });
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const calls = prisma.programImportSession.create.mock.calls;
+    expect(calls[0][0].data.warning).toBeNull();
+    expect(calls[1][0].data.warning).toBeNull();
+  });
+
+  it('öğenin saati etkinlik aralığının dışındaysa sunum satırına uyarı bırakır', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events[0].items = [
+      {
+        startTime: '08:30',
+        endTime: '09:15',
+        type: 'presentation',
+        code: null,
+        title: 'Erken Başlayan Sunum',
+        speakers: [],
+      },
+    ];
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const data = lastSessionCreateData(prisma);
+    const presentations = (
+      data.presentations as { create: Array<Record<string, unknown>> }
+    ).create;
+    expect(presentations[0].warning).toBe(
+      'Öğenin saati, ait olduğu etkinliğin saat aralığının dışında',
+    );
+  });
+
+  it("'discussion' tipi öğeyi de bir sunum satırı olarak yazar", async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events[0].items = [
+      {
+        startTime: '09:45',
+        endTime: '10:00',
+        type: 'discussion',
+        code: null,
+        title: 'Tartışma',
+        speakers: [],
+      },
+    ];
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const data = lastSessionCreateData(prisma);
+    const presentations = (
+      data.presentations as { create: Array<Record<string, unknown>> }
+    ).create;
+    expect(presentations).toHaveLength(1);
+    expect(presentations[0].title).toBe('Tartışma');
+  });
+
+  it('sunum + konuşmacı rolünü ilişkili şekilde yazar, chairs->MODERATOR panelists->DISCUSSANT olur', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching({
+      matchStatus: RoleMatchStatus.AMBIGUOUS,
+      userId: null,
+    });
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events[0].chairs = ['Prof. Dr. Ahmet Yılmaz'];
+    extraction.days[0].halls[0].events[0].panelists = ['Dr. Fatma Şahin'];
+    extraction.days[0].halls[0].events[0].items = [
+      {
+        startTime: '09:00',
+        endTime: '09:30',
+        type: 'presentation',
+        code: 'ZS 001',
+        title: 'Bir Sunum',
+        speakers: ['Şule Çelik'],
+      },
+    ];
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const data = lastSessionCreateData(prisma);
+    const roles = (data.roles as { create: Array<Record<string, unknown>> })
+      .create;
+    expect(roles).toHaveLength(2);
+    expect(
+      roles.find((r) => r.rawName === 'Prof. Dr. Ahmet Yılmaz')?.type,
+    ).toBe(ProgramRoleType.MODERATOR);
+    expect(roles.find((r) => r.rawName === 'Dr. Fatma Şahin')?.type).toBe(
+      ProgramRoleType.DISCUSSANT,
+    );
+
+    const presentations = (
+      data.presentations as { create: Array<Record<string, unknown>> }
+    ).create;
+    expect(presentations[0].code).toBe('ZS 001');
+    const presentationRoles = (
+      presentations[0].roles as { create: Array<Record<string, unknown>> }
+    ).create;
+    expect(presentationRoles[0].type).toBe(ProgramRoleType.SPEAKER);
+    expect(presentationRoles[0].rawName).toBe('Şule Çelik');
+  });
+
+  it('boş isim (boşluk) için rol OLUŞTURMAZ ve matchRole çağırmaz', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days[0].halls[0].events[0].chairs = ['   '];
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
       null,
     );
 
     expect(matching.matchRole).not.toHaveBeenCalled();
     const data = lastSessionCreateData(prisma);
     expect(data.roles).toBeUndefined();
+  });
+
+  it('birden fazla gün/salon arasında rowOrder GLOBAL olarak artan sırayla devam eder', async () => {
+    const prisma = createFakePrisma();
+    const matching = createFakeMatching();
+    const extraction = baseExtraction();
+    extraction.days.push({
+      date: '2026-09-11',
+      label: '2. Gün',
+      halls: [
+        {
+          name: 'Salon A',
+          nameEn: null,
+          events: [
+            {
+              startTime: '09:00',
+              endTime: '10:00',
+              type: 'session',
+              title: '2. Gün Oturumu',
+              titleEn: null,
+              series: null,
+              keywords: [],
+              chairs: [],
+              panelists: [],
+              items: [],
+            },
+          ],
+        },
+      ],
+    });
+
+    await writeExtractionToStaging(
+      prisma as never,
+      matching as never,
+      'imp-1',
+      'cong-1',
+      extraction,
+      HALLS,
+      null,
+      null,
+    );
+
+    const calls = prisma.programImportSession.create.mock.calls;
+    expect(calls[0][0].data.rowOrder).toBe(0);
+    expect(calls[1][0].data.rowOrder).toBe(1);
   });
 });

@@ -1393,3 +1393,115 @@ Mobil uygulama, Faz 9'un gerçek cihaz doğrulaması (hâlâ Apple onayını
 bekliyor), ölü kod/doküman temizliği (Faz 10), program isimlerinden
 `User` kaydı otomatik oluşturma, JSON'dan beacon otomatik atama/oluşturma
 - hiçbiri bu fazın kapsamında değildi, dokunulmadı.
+
+## Faz 4d — Kanonik Program Şeması (2026-08-15)
+
+Faz 4c'nin şeması programı düz bir `sessions[]` listesi olarak
+modelliyordu; gün ve salon yalnızca her oturumun üzerindeki
+`dayLabel`/`hallName` metin alanlarıydı. Kullanıcı gerçek bir kongre
+programını (33. Ulusal Uygulamalı Girişimsel Kardiyoloji Kongresi) elle
+bu formata çevirmeye çalıştığında yapı uyuşmadı - gerçek programlar
+doğal olarak gün → salon → oturum → öğe hiyerarşisinde. Bu faz, PDF/Excel
+LLM çıkarımı, elle hazırlanmış JSON yüklemesi, doğrulama ve staging
+yazımının HEPSİNİN aynı kanonik, hiyerarşik veri sözleşmesini kullandığı
+kalıcı bir çözüm kurdu.
+
+### Neden hiyerarşik yapı seçildi
+
+Düz liste modeli her oturumda günü/salonu TEKRAR ETTİRİYORDU - bu hem
+elle JSON hazırlarken hataya açık (aynı günün 10 oturumunda 10 kez aynı
+tarihi yazmak) hem de gerçek kongre programlarının doğal şeklini
+yansıtmıyor. `days[].halls[].events[].items[]` yapısı bir kongre
+programının PDF/Excel'de göründüğü şekle birebir karşılık gelir - LLM
+çıkarımı için de daha doğal bir hedef.
+
+### Tek kaynak: `shared/congress-program.schema.json`
+
+Kanonik şema JSON Schema (draft 2020-12) olarak `shared/` altında,
+backend'in DIŞINDA tutulur - Faz 4c'nin "TypeScript'te ikinci kez elle
+yazma" hatasına düşmemek için `extraction-schema.ts` bu dosyayı
+`process.cwd()` üzerinden diskten okur (bkz. o dosyadaki yorum -
+`__dirname` KULLANILMAZ, çünkü `nest start --watch` dev'de bile
+`dist/src/...` altından çalışır ve bu `__dirname`'i dev/prod arasında
+farklı derinlikte yapar; `process.cwd()` `uploads.service.ts`'teki
+`UPLOADS_ROOT` deseniyle tutarlı, nest'in HER ZAMAN backend kökünden
+çalıştırılmasına dayanır). Docker build context'i bu yüzden repo
+KÖKÜNE genişletildi (`docker-compose.prod.yml` `context: .`,
+`backend/Dockerfile` `WORKDIR /app/backend`, `shared/` `/app/shared`e
+kardeş klasör olarak kopyalanır) - dev ortamındaki gerçek klasör
+yapısını (backend/ ve shared/ repo kökünde kardeş) birebir yansıtır.
+
+Aynı şemadan `ajv` (draft 2020-12 desteği için `ajv/dist/2020` alt
+modülü) ile İKİ farklı doğrulama "aroması" türetilir
+(`transformOptionalFields`): `toStrictLlmSchema` Claude'un
+`output_config.format` strict modu için TÜM alanları `required`+nullable
+yapar (LLM eksik bir alanı ATLAYAMAZ, `null` YAZMAK zorunda);
+`toNullTolerantSchema` kullanıcı yüklemesi için `required` listesini
+DEĞİŞTİRMEZ ama opsiyonel alanların tipine `null` ekler - böylece hem
+"key hiç yok" (kullanıcı yazmadı) hem "key var ama null" (LLM "bu bilgi
+yok" dedi) TEK bir doğrulayıcıdan geçer.
+
+### Yapısal ve anlamsal doğrulama bilerek ayrıldı
+
+`validate-extraction-result.ts` yalnızca YAPISAL bütünlüğü (zorunlu
+alanlar, tipler, enum, saat/tarih biçimi, `endTime >= startTime`)
+kontrol eder - bunların hepsi HATA, yükleme reddedilir. Kongre tarih
+aralığı dışı bir gün, aynı salonda çakışan iki etkinlik, aralık dışı
+öğe saati gibi ÇAPRAZ-REFERANS gerektiren (kongre kaydı veya aynı
+salondaki DİĞER etkinlikler gibi doğrulayıcının hiç görmediği veriye
+ihtiyaç duyan) kontroller BİLEREK `write-extraction-to-staging.ts`de
+yapılır ve yalnızca ilgili satırın `warning` alanına yazılır - upload'ı
+REDDETMEZ. Sebep: bu tür sorunlar çoğu zaman veri hatası değil, admin'in
+henüz kongre tarihini girmemiş olması gibi geçici durumlar - reddetmek
+yerine görünür kılmak yeterli.
+
+### `titleEn`/`series`/`code` alanları ve discussion/break'in saklanması
+
+Kanonik şema iki dilli başlıkları (`event.titleEn`, `hall.nameEn`),
+oturum serisini (`event.series`) ve bildiri kodunu (`item.code`)
+tanıyor - Faz 4c'nin şemasında bunlar yoktu ama gerçek kongre
+programlarında yaygın. `Session`/`Presentation` ve karşılık gelen
+staging tablolarına nullable alanlar olarak eklendi (tek migration,
+veri kaybı yok). `type: "discussion"` öğeleri ve `type: "break"/
+"ceremony"` etkinlikleri de (konuşmacısı/sunumu olmasa bile) birer
+Presentation/Session satırı olarak yazılır, ATLANMAZ - "Tartışma" gibi
+bir program öğesinin sessizce kaybolması, kullanıcının PDF/Excel'de
+gördüğü programla panelde gördüğü program arasında fark yaratır.
+
+### İki gerçek hata, tarayıcı doğrulamasında bulundu
+
+Uçtan uca tarayıcı testleri sırasında (kod incelemesinde
+YAKALANMAYAN) iki hata ortaya çıktı, ikisi de aynı oturumda düzeltildi
+ve regresyon testleriyle kilitlendi:
+
+1. **Gün tarihi karşılaştırmasında saat dilimi kayması.** `day.date`
+   (`parseCanonicalDate`) YEREL saat diliminde gece yarısı olarak
+   kuruluyor (`combineDateAndTime`'ın `setHours` ile doğru yerel saati
+   üretebilmesi için gerekli). `congress.startDate`/`endDate` ise
+   `congress.service.ts`de `new Date(dto.startDate)` ile - tarih-only
+   ISO string'ler JS'te UTC gece yarısı olarak yorumlanır. İkisini
+   DOĞRUDAN karşılaştırmak, UTC dışı bir sunucu saat diliminde (bu
+   makine TR, UTC+3) kongre başlangıcıyla AYNI güne bile yanlışlıkla
+   "başlangıç tarihinden önce" uyarısı üretiyordu. Düzeltme:
+   `write-extraction-to-staging.ts`deki `buildDayRangeWarning` artık
+   kongre sınırlarını KENDİ UTC takvim günü bileşenlerinden yerel gece
+   yarısına çevirip (`toLocalMidnightFromUtcCalendarDate`) öyle
+   karşılaştırıyor.
+2. **`titleEn`/`series`/`code` onayda kayboluyordu.** Bu alanlar
+   staging'e doğru yazılıyordu ama `program-imports.service.ts`deki
+   `approveImport` fonksiyonu `tx.session.create`/`tx.presentation.create`
+   çağrılarına EKLENMEMİŞTİ - staging'de doğru duran veri, canlı
+   `Session`/`Presentation`a geçerken sessizce siliniyordu. İkisi de
+   `write-extraction-to-staging.spec.ts` ve
+   `program-imports.service.spec.ts`e regresyon testleriyle eklendi.
+
+### Kapsam dışı bırakılanlar (bilerek)
+
+Mobil uygulama (`mobile/`'a dokunulmadı), Faz 9'un gerçek cihaz
+doğrulaması, staging modelinin (ProgramImportSession/Presentation)
+düz/flat yapıdan hiyerarşik bir modele geçirilmesi - kanonik GİRDİ
+hiyerarşik olsa da onay akışı (`approveImport`/salon eşleştirme/
+`excludeHallToCreate`) hâlâ düz bir liste üzerinden çalışıyor,
+`rowOrder` tüm günler/salonlar arasında tek bir artan sıra izliyor;
+bu, mevcut onay ekranının yeniden tasarlanmasını gerektirirdi ve bu
+fazın kapsamında değildi.

@@ -187,7 +187,7 @@ export class ProgramImportsService {
         }),
         this.prisma.congress.findUniqueOrThrow({
           where: { id: congressId },
-          select: { startDate: true },
+          select: { startDate: true, endDate: true },
         }),
       ]);
 
@@ -199,6 +199,7 @@ export class ProgramImportsService {
         validation.result,
         halls,
         congress.startDate,
+        congress.endDate,
       );
 
       await this.prisma.programImport.update({
@@ -723,6 +724,8 @@ export class ProgramImportsService {
             sessionType: sessionRow.sessionType,
             dayLabel: sessionRow.dayLabel,
             keywords: sessionRow.keywords,
+            titleEn: sessionRow.titleEn,
+            series: sessionRow.series,
           },
         });
         createdSessions++;
@@ -756,6 +759,8 @@ export class ProgramImportsService {
               title: presentationRow.title,
               startTime: presentationRow.startTime,
               endTime: presentationRow.endTime,
+              titleEn: presentationRow.titleEn,
+              code: presentationRow.code,
             },
           });
           createdPresentations++;

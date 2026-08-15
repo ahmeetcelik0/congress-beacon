@@ -130,7 +130,7 @@ export class ProgramImportQueueService
         }),
         this.prisma.congress.findUniqueOrThrow({
           where: { id: importRecord.congressId },
-          select: { startDate: true },
+          select: { startDate: true, endDate: true },
         }),
       ]);
 
@@ -142,6 +142,7 @@ export class ProgramImportQueueService
         outcome.result,
         halls,
         congress.startDate,
+        congress.endDate,
       );
 
       await this.prisma.programImport.update({
