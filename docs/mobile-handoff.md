@@ -968,3 +968,92 @@ idempotent), yalnızca zararsız bir yinelenen log satırı.
 Bu fazda dokunulmayanlar: bildirim izinleri, arka plan fetch, FCM token
 kaydı. Faz 8'in kuyruk mimarisiyle hiçbir çakışma beklenmiyor - push,
 gözlem gönderiminden tamamen bağımsız bir kanal.
+
+## 2026-08-18 — Faz 9/10 Kapanış: Push, E-posta ve Program Ekranı Gerçek Cihaz Doğrulaması
+
+`docs/decisions.md`deki "Faz 9/10 Kapanış" bölümünün mobil-özel kısmı.
+Berke'nin iPhone'u "Baş" üzerinde, gerçek Firebase/APNs/Brevo kurulumuyla
+yapıldı. Ayrıntılı sonuçlar (12+ push senaryosu, Faz 10 UI'ın 10 maddesi,
+e-posta testleri) `decisions.md`de - burada yalnızca mobil kod/test
+değişiklikleri ve ortam bulguları var.
+
+### Gerçek hata bulundu ve düzeltildi: `home_page.dart` erişilebilirlik taşması
+
+`_ContentGrid`deki sabit `childAspectRatio: 1.5`, maksimum iOS
+erişilebilirlik yazı boyutunda "Bilimsel Program"/"Ana Konuşmacılar"
+etiketlerini taşırıyordu. `MediaQuery.textScalerOf(context).scale(14)/14`
+ile okunan ölçeğe göre `aspectRatio` artık dinamik hesaplanıyor
+(`(1.5 / textScale.clamp(1.0, 2.2)).clamp(0.85, 1.5)`) - normal ölçekte
+(scale=1.0) davranış değişmedi, hâlâ 1.5. Cihazda görsel olarak
+doğrulandı, `flutter analyze` temiz, `flutter test` 42/42.
+
+### `GoogleService-Info.plist` + `Runner.entitlements` Xcode hedefine eklendi
+
+İkisi de `xcodeproj` Ruby gem'iyle (Xcode GUI'sinin "Add Files"/
+"+Capability" eylemleriyle eşdeğer) eklendi - dosyayı yalnızca klasöre
+kopyalamak YETMEZ, Runner target'ının Copy Bundle Resources'ına
+(plist için) ve `CODE_SIGN_ENTITLEMENTS` build ayarına (üç konfigürasyonda
+da - Debug/Release/Profile) dahil edilmesi gerekiyor. `git diff` ile her
+ikisi de standart, minimal diff'ler olarak doğrulandı.
+
+**Firebase Cloud Messaging'in gizli tuzağı:** tek bir .p8 APNs Auth Key
+teknik olarak evrensel olsa da, Firebase Console'un "Apple app
+configuration" bölümünde AYRI "Development" ve "Production" yükleme
+slotları var - yalnızca Production'a yüklemek debug build'lerin (sandbox/
+development token'lı) `messaging/third-party-auth-error: Invalid APNs
+credential.` almasına yol açıyordu. Kullanıcının kendi açık Firebase
+Console sekmesinin ekran görüntüsü alınınca "No development APNs auth key
+[Upload]" görüldü - aynı .p8 Development slotuna da yüklenince düzeldi.
+
+### `integration_test`te bulunan ve düzeltilen 2 test hatası (uygulama kodu DEĞİL)
+
+Gerçek/büyük "Deneme" kongre verisiyle (74 oturum) ilk kez çalıştırılınca
+`program_test.dart`taki "Salon filtresi çalışır" testinde iki gerçek test
+kusuru ortaya çıktı:
+
+1. Mola/tören/diğer türlerin `programSessionCard` anahtarı TAŞIMADIĞI
+   (Faz 10'da kasıtlı, gerçek cihazda doğrulanmış davranış - bkz.
+   `program_page.dart` `_isMinorEvent`) bu testte hesaba katılmıyordu.
+   Testte AYNI kural mirror'landı (`_isMinorEvent` kopyası eklendi),
+   beklenen/hariç kart listelerinden bu türler çıkarıldı.
+2. Test, `expect(find.byKey(...), findsOneWidget)`i doğrudan çağırıyordu
+   - `ListView.separated`in lazy-build ettiği, henüz viewport/cache
+   extent'e girmemiş kartlar için bu başarısız oluyordu (küçük test
+   verisiyle hiç ortaya çıkmamıştı). `tester.scrollUntilVisible` ile
+   düzeltildi (dikey `ListView`i `find.byWidgetPredicate` ile diğer iki
+   yatay `ListView`den - gün sekmeleri, salon filtresi - ayırt ederek).
+
+Düzeltmeden sonra test verisi temizlenip yeniden çalıştırıldığında bu iki
+sorun BİR DAHA görülmedi - kalan tek engel aşağıdaki bilinen hata oldu.
+
+### ⚠️ ÖNCELİKLİ, BİR SONRAKİ FAZA: `BeaconObservationService._flushWriteBuffer` yarış durumu YENİDEN VE SIK GÖZLENDİ
+
+Bu turda **6 farklı anda** aynı `RangeError` ile karşılaşıldı:
+`navigasyon_test.dart`, `program_test.dart` (2 kez), `olceklendirme_test.dart`
+integration_test koşumlarında VE kullanıcının canlı `flutter run`
+oturumunda 2 kez (her ikisinde de sonrasında "Lost connection to device"
+- uygulama cihazda kendi kendine toparlandı, ama garanti değil).
+
+Kök neden (kod DEĞİŞTİRİLMEDİ, yalnızca okunup teşhis edildi):
+`_flushWriteBuffer()` (satır ~532) HEM `_onRangingResult`den (satır ~516,
+BEKLENMEDEN/re-entrancy koruması OLMADAN) HEM DE `_trySendBatch()`den
+(satır ~575, `_isBatching` bayrağıyla korunan) çağrılıyor - bu iki çağrı
+noktası BİRBİRİNDEN BAĞIMSIZ olduğu için `_isBatching` aralarındaki
+çakışmayı önlemiyor. İki çağrı çakışırsa, hızlı biten `_writeBuffer`ı
+`removeRange`ler; yavaş olan kendi `removeRange`ine ulaştığında tampon
+artık beklediğinden kısa - `RangeError (end): Invalid value: ...`.
+
+**Bu turda kesinlikle DOKUNULMADI** (kullanıcı talimatı: ranging/duty-cycle/
+kuyruk mantığına asla dokunma). Gerçek aktif beacon donanımı yakınında,
+uygulama ~15-25 saniyeden uzun süre ön planda kaldığında NEREDEYSE HER
+SEFERİNDE tetiklendiği için bu, `integration_test` paketinin gerçek bir
+salon ortamında güvenilir şekilde tamamlanmasını fiilen ENGELLEYEN,
+öncelikli bir sonraki-faz maddesi. Olası çözüm yönü: iki çağrı noktasını
+tek bir kilitli/kuyruklu giriş noktasından geçirmek (ör. çağrıları bir
+`Future` zincirine serileştirmek) - ranging/duty-cycle davranışına
+dokunmadan.
+
+### Sonuçları nereye bildir
+
+`docs/decisions.md` "Faz 9/10 Kapanış" bölümü + bu bölüm. Faz 9'un
+"gerçek cihaz doğrulaması bekliyor" notu artık KAPANDI.

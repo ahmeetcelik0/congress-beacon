@@ -1296,6 +1296,9 @@ Android push, zengin bildirim (görsel/eylem butonu), duyuru bildirimleri,
 kullanıcı bildirim tercihleri - hepsi Faz 9 talimatının kapsam dışı
 listesinde açıkça belirtildi, bu fazda YAPILMADI.
 
+**Not (2026-08-18):** bu fazın açık kalan tek maddesi olan "gerçek cihazda
+push doğrulaması" **KAPANDI** - bkz. aşağıdaki "Faz 9/10 Kapanış" bölümü.
+
 ## Faz 4c — JSON ile Program Yükleme ve Otomatik Salon Oluşturma (2026-08-14)
 
 Faz 4b'nin LLM ile PDF/Excel çıkarımı zaten var, ama bazı derneklerde
@@ -1682,3 +1685,217 @@ gelen kutusuna düştüğünü doğrulama) sağlayıcı/DNS kurulumu kullanıcı
 tarafından tamamlanana kadar YAPILAMADI - kod tarafı hazır, `.env`
 `MAIL_REPLY_TO` eklendi, `.env.prod.example`de `photofocustr.com`
 placeholder'ları güncellendi.
+
+## Faz 9/10 Kapanış — E-posta, Push ve Program Ekranı Gerçek Cihaz Doğrulaması (2026-08-18)
+
+Faz 9'un (push) ve Faz 10'un (program ekranı + e-posta) kod tarafı
+tamamlanmış ama gerçek cihazda doğrulanmamış üç açık kalemi kapatan tur.
+Berke'nin iPhone'u "Baş" üzerinde, gerçek Brevo/Firebase/Apple Developer
+kurulumuyla yapıldı. `BeaconObservationService`e HİÇ dokunulmadı (git diff
+ile doğrulandı).
+
+### Bölüm A — E-posta gönderimi canlıya alındı
+
+Brevo SMTP relay (`smtp-relay.brevo.com:587`), `auth.photofocustr.com`
+ALT ALAN ADINDA doğrulanmış DKIM/SPF, DMARC `p=none` (izleme modu).
+**Kök `photofocustr.com` DEĞİL** - GoDaddy'nin ilgisiz varsayılan SPF/DMARC
+kaydını taşıyor, bu yüzden özellikle alt alan adı seçildi.
+
+**Gmail iOS uygulaması "..." ile katlanmış görünme hatası bulundu ve
+düzeltildi:** ham MIME kaynağı incelenince Brevo'nun SMTP relay'inin HER
+transactional e-postaya, gövdenin EN BAŞINA, kapatılamayan bir açık-izleme
+pikseli + MSO koşullu yorum bloğu enjekte ettiği görüldü (Brevo'nun kendi
+forumu: "No Way to Disable Open Tracking Pixel in Transactional E-Mail").
+Gövdenin başında GERÇEK/görünür bir metin olmayınca Gmail'in mobil
+uygulaması ilk render'da içeriği "..." ile katlanmış gösterip dokunmayı
+bekliyordu - yalnızca Gmail iOS'a özgü, Gmail masaüstü web ve Outlook
+mobil ETKİLENMİYORDU. Düzeltme: `verification-code-email.ts`de, Brevo'nun
+enjeksiyonundan ÖNCE, gövdenin ilk içeriği olarak gizli ama gerçek bir
+"preheader" metin bloğu eklendi (bkz. kod içi yorum). Kullanıcı gerçek
+cihazda yeniden test etti: **"evet düzeldi, '...' yok, direkt açıldı."**
+
+**Doğrulanan diğer maddeler:** gerçek Gmail ve Outlook adreslerine kod
+gönderimi (ikisi de gelen kutusuna düştü, spama değil), kodla gerçek
+giriş tamamlandı, hata yolu (`SMTP_PASS` kasıtlı bozuldu) tam olarak
+`503 {"message":"Kod gönderilemedi, lütfen tekrar deneyin"}` döndü ve
+kullanıcının `passwordHash`'i DOKUNULMAMIŞ kaldı (Faz 10'un lockout-önleme
+düzeltmesinin canlı kanıtı) - loglarda yalnızca `userId` + ham SMTP hatası
+vardı, kod/şifre HİÇ görünmedi. Brevo ücretsiz planı (günde 300 e-posta)
+kullanıcının kendi kararıyla şimdilik yeterli görüldü; kongre yoğunluğunda
+gerekirse ücretli kademeye geçilecek - bu bir hesap/plan kararı, kod
+tarafında ele alınmadı (bilerek).
+
+### Bölüm B — Faz 10 program ekranı, 10 maddenin TAMAMI gerçek kongre
+### verisiyle (74 oturum/224 sunum "Deneme" + kullanıcının gerçek 33.
+### Ulusal Kongre verisi) doğrulandı
+
+1. Sunumlar oturum içinde saat sırasına göre - ✅
+2. Gün butonları görünür, tarih biçimli, doğru seçiliyor - ✅
+3. Seçili gün başlığı HER ZAMAN görünür (Tüm Salonlar dahil), her kartta
+   salon adı var - ✅
+4. Mola/oylama satırları görsel olarak ayrışık VE dokunulamaz - ✅
+   (kullanıcı: "kahve arası ve oylama satırına tıklayamıyorum")
+5. Zaman çizelgesi çizgisi doğru render oluyor - ✅
+6. Devam eden oturum vurgusu - test sırasında canlı bir oturum
+   OLMADIĞI için doğrulanamadı (uydurulmadı, açıkça bu şekilde raporlandı)
+7. `series` etiketi görünüyor, sade - ✅
+8. Geçiş animasyonları GERÇEKTEN kaldırıldı (sekme + ekran geçişi), geri
+   navigasyon çalışıyor - ✅ (kullanıcı: "animasyonsuz açıldı, geri döndüm")
+9. Profilim → Kongre Değiştir listesi kongre tarihine göre en yeniden
+   eskiye sıralı - ✅
+10. Uzun Türkçe başlıklar/çok konuşmacılı sunumlar taşmıyor, maksimum
+    erişilebilirlik yazı boyutunda da layout ayakta - ✅ **ama bu turda
+    GERÇEK bir hata bulundu ve düzeltildi**: `home_page.dart`daki
+    `_ContentGrid`, sabit `childAspectRatio: 1.5` yüzünden maksimum
+    erişilebilirlik ölçeğinde "Bilimsel Program"/"Ana Konuşmacılar"
+    etiketlerini taşırıyordu. Düzeltme: `MediaQuery.textScalerOf` ile
+    okunan ölçeğe göre `aspectRatio` dinamik hesaplanıyor (normal ölçekte
+    davranış DEĞİŞMEDİ, hâlâ 1.5). `flutter analyze` temiz, `flutter test`
+    42/42, sonra cihazda görsel olarak doğrulandı.
+
+### Bölüm C — Push bildirimleri (Faz 9) canlıya alındı, KAPANDI
+
+Firebase projesi + iOS uygulaması (bundle ID Xcode'daki
+`PRODUCT_BUNDLE_IDENTIFIER` ile birebir eşleşti), `GoogleService-Info.plist`
+`mobile/ios/Runner/`e kopyalandı VE `xcodeproj` gem'i ile Xcode Runner
+hedefine (Copy Bundle Resources) eklendi - yalnızca dosya kopyalamak
+YETMEZDİ. Apple Developer'da APNs Authentication Key (.p8) oluşturuldu;
+Firebase Cloud Messaging'de **hem Production HEM Development APNs auth key
+slotlarına** aynı .p8 yüklenmesi gerektiği keşfedildi (yalnızca Production'a
+yüklemek `messaging/third-party-auth-error: Invalid APNs credential.`
+hatasına yol açıyordu - debug build'in token'ı development slotu istiyor).
+`Runner.entitlements` (`aps-environment: development`) `xcodeproj` gem'iyle
+eklendi, Background Modes → Remote notifications (Faz 9'dan) korundu.
+Backend `FIREBASE_SERVICE_ACCOUNT_JSON` dolduruldu, `FcmNotificationSender`
+(LoggingNotificationSender DEĞİL) aktif olduğu doğrulandı.
+
+**Gerçek cihazda test edilen 12+ senaryo, TÜMÜ ✅:**
+
+1. Bildirim izni BİR KEZ soruldu, kullanıcı onayladı
+2. `Device.pushToken` doldu (APNs key yüklenene kadar beklenen şekilde
+   NULL'du, key yüklenince doldu)
+3. **Ön planda** teslimat - ✅
+4. **Arka planda** teslimat - ✅
+5. **Tamamen kapalı (force-quit) uygulamada** teslimat - ✅ (backend
+   `NotificationLog.status=SENT`, kullanıcı: "evet, geldi")
+6. Bildirime dokununca doğru oturum ekranına yönlendirme + `openedAt`
+   dolduruldu - ✅
+7. Oturum başlamadan **10 dakika önce hatırlatma** bildirimi - ✅ (içerik:
+   "Oturum yakında başlıyor" / "... 10 dakika içinde başlıyor.")
+8. **Aynı dakikada başlayan 3 oturum TEK birleştirilmiş bildirimde**
+   toplandı - ✅ (`sessionId=NULL`, başlık "3 oturum başladı", gövde
+   "Bursa Salonu, Antalya Salonu, İstanbul Salonu" - hem backend log hem
+   cihazda görüldü)
+9. **Saatlik frekans limiti** (6/saat) aşılınca gönderim durduruldu ve
+   `NotificationLog.status=SKIPPED` olarak loglandı - ✅ (6. bildirim
+   SENT, 7. bildirim SKIPPED, cihazda da 7. gelmedi)
+10. Panel `/reports/notifications` doğru sent/opened/failed/skipped
+    sayılarını ve oranını döndürüyor (API seviyesinde `curl` ile DB'yle
+    birebir doğrulandı: `sentCount=6, openedCount=1, skippedCount=1,
+    openedRatio=0.1667`) - **görsel ekran görüntüsü tarayıcı uzantısı
+    hatası ("Frame with ID 0 is showing error page", 2 sekme/3 yöntemde
+    tekrarlanan) yüzünden alınamadı**, bu yüzden yalnızca API+kod
+    seviyesinde doğrulandı olarak işaretleniyor - görsel doğrulama
+    yapılmadı
+11. Geçersiz/eski token otomatik temizleniyor - Faz 9'dan kalma bir
+    `dummy_token_123` test kaydı `messaging/invalid-argument` üretip
+    `Device.pushToken` NULL'landı - tesadüfen (yeni bir test kurulmadan)
+    doğrulandı
+12. **Çıkış yap → tekrar giriş yap sonrası token yeniden kaydı** - ✅
+    (`Device.updatedAt` çıkıştan önce 18:09:32, girişten sonra 18:49:21)
+13. **Bildirim izni REDDEDİLİNCE uygulama çökmedi** - ✅ (kullanıcı: iOS
+    Ayarlar'dan izni kapattı, uygulamaya döndü, sorun yaşamadı)
+
+**Ortamla ilgili, kodla İLGİSİZ bir bulgu:** debug build'te uygulama
+tamamen zorla kapatıldığında (force-quit) simgeden tekrar açılamıyor -
+bu, `flutter run`ın debug build'i Flutter/Xcode debugger'ı BAĞLIYKEN
+çalışacak şekilde imzalamasından kaynaklanıyor, App Store/TestFlight'a
+giden gerçek `--release` build'lerde YAŞANMIYOR. Her seferinde
+`flutter run -d <cihaz> --dart-define=...` ile yeniden başlatıldı.
+
+**Sonuç: Faz 9'un "gerçek cihaz doğrulaması bekliyor" notu KAPANDI.**
+
+### Bölüm D — Regresyon kontrolü
+
+Beacon gözlem akışı, bu oturum boyunca yapılan TÜM push/e-posta/entegrasyon
+testleri, cihaz zorla kapatma/yeniden başlatmalar ve çıkış-giriş
+döngülerinde KESİNTİSİZ devam etti - `[ObservationLifecycle] START` /
+`[BeaconObservationService] state=active` / `[ObservationQueue] batch
+gonderildi` log satırları her yeniden başlatmada normal sırayla göründü,
+`BeaconObservation` satırları DB'ye gelmeye devam etti.
+
+`cd backend && npm test` (386/386 geçti), `npm run lint` (temiz),
+`npm run build` (temiz). `cd mobile && flutter analyze` ("No issues
+found!"), `flutter test` (42/42 geçti).
+
+**`integration_test`te bulunan ve düzeltilen İKİ gerçek test hatası**
+(uygulama kodu DEĞİL, test kodu - gerçek/büyük "Deneme" kongre verisiyle
+ilk kez çalıştırılınca ortaya çıktı):
+
+1. `program_test.dart`taki "Salon filtresi çalışır" testi, mola/tören/
+   diğer türlerin (Bölüm B madde 4'te KASITLI olarak `programSessionCard`
+   anahtarı TAŞIMADIĞI, doğrulanmış davranış) bu testte hâlâ normal bir
+   kart gibi bekleniyordu - düzeltildi (`_isMinorEvent` mirror fonksiyonu
+   eklendi, bu türler beklenen/hariç listelerinden çıkarıldı).
+2. Aynı test, tek bir salonun bir GÜNÜ kapsayan uzun listesinde
+   `ListView.separated`in lazy-build ettiği, henüz viewport/cache
+   extent'e girmemiş kartları `find.byKey` ile bulamıyordu (küçük test
+   verisiyle bu hiç ortaya çıkmamıştı) - `tester.scrollUntilVisible` ile
+   düzeltildi.
+
+Düzeltmelerden sonra test, mola satırı/kaydırma sorunlarını BİR DAHA
+üretmedi - kalan tek engel aşağıdaki bilinen, KASITLI OLARAK
+DOKUNULMAYAN hata oldu.
+
+`kuyruk_test.dart` ve `cevrimdisi_test.dart`, backend'in test SIRASINDA
+elle durdurulup başlatılmasını gerektiren, Faz 8'in kendi tasarımı olan
+çok-aşamalı manuel senaryolar (dosya başındaki kullanım örneğine bakın) -
+tek `flutter test dosya.dart` çağrısıyla otomatik koşacak şekilde
+YAZILMADILAR, bu turda (Faz 8 zaten önceki oturumda ayrıca doğrulanmıştı)
+tekrar koşulmadı.
+
+### ⚠️ ÖNEMLİ, BİR SONRAKİ FAZA TAŞINACAK: `BeaconObservationService._flushWriteBuffer` yarış durumu
+
+Bu turda **6 kez** aynı hatayla karşılaşıldı - `navigasyon_test.dart`,
+`program_test.dart` (2 kez), `olceklendirme_test.dart` çalışırken VE
+kullanıcının canlı `flutter run` oturumunda 2 kez, hep aynı imza:
+
+```
+RangeError (end): Invalid value: ...
+  at BeaconObservationService._flushWriteBuffer (beacon_observation_service.dart:560)
+```
+
+**Kök neden:** `_flushWriteBuffer()` HEM `_onRangingResult`den (satır
+~516) doğrudan/beklenmeden HEM DE `_trySendBatch()`den (satır ~575,
+`_isBatching` bayrağıyla korunan) çağrılıyor - bu iki çağrı noktası
+BİRBİRİNDEN BAĞIMSIZ, `_isBatching` aralarındaki çakışmayı ÖNLEMİYOR. İki
+`_flushWriteBuffer()` çağrısı çakışırsa, HIZLI olan `_writeBuffer`ı
+boşaltıp biter; YAVAŞ olan kendi `removeRange`ine ulaştığında tampon
+artık kendi beklediğinden KISA - `RangeError` bu yüzden fırlıyor.
+
+**Etki:** bu oturumda GERÇEK aktif beacon donanımı yakınında, uygulama
+~15-25 saniyeden uzun süre ön planda kaldığında NEREDEYSE HER SEFERİNDE
+tetiklendi - yalnızca nadir bir uç durum DEĞİL, gerçek bir salon
+ortamında `integration_test` paketinin GÜVENİLİR şekilde tamamlanmasını
+engelleyen, öncelikli bir hata. Kullanıcının canlı testlerinde uygulama
+"Lost connection to device" sonrası HER İKİ SEFERDE de cihazda kendi
+kendine toparlandı/çalışmaya devam etti - veri kaybı gözlenmedi ama
+garanti edilemez.
+
+**Bu turda KASITLI OLARAK DOKUNULMADI** (kullanıcı talimatı:
+"BeaconObservationService'in ranging/duty-cycle/kuyruk mantığını asla
+değiştirme"). Bir sonraki fazda ele alınması önerilir - olası çözüm
+yönü: iki çağrı noktasını TEK bir kilitli/kuyruklu giriş noktasından
+geçirmek (örn. `_flushWriteBuffer` çağrılarını bir `Future` zincirine
+serileştirmek), ranging/duty-cycle DAVRANIŞINA dokunmadan.
+
+### Kapsam dışı bırakılanlar (bilerek)
+
+Android push, yeni ürün özelliği, panel tasarım değişikliği - hiçbiri bu
+turun kapsamında değildi. Bu tur boyunca oluşturulan TÜM geçici test
+verisi (2 test kullanıcısı, ~17 test `Session`/`NotificationLog` kaydı,
+1 entegrasyon test kullanıcısı) DB'den silindi; yalnızca `faz10-push-test
+@example.com` admin test hesabı, gerçek `AuditLog` kayıtlarına referans
+verdiği için (silme `RESTRICT` FK hatası verdi, audit trail'i bozmamak
+için zorlanmadı) DB'de bırakıldı - zararsız, isteğe bağlı olarak elle
+silinebilir.
