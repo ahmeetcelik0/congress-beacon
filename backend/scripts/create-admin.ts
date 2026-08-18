@@ -1,3 +1,9 @@
+// KALICI yardimci betik - yeni bir panel yoneticisi olusturmak/mevcut birinin
+// sifresini sifirlamak icin production'da da elle calistirilir (upsert,
+// tekrar calistirmak guvenli). Once derle, sonra derlenmis JS'i calistir
+// ("npx ts-node scripts/..." DEGIL - Prisma'nin ozel cikti yolu ts-node'un
+// CJS transpilasyonuyla runtime'da cozumlenemiyor):
+//   npm run build && node dist/scripts/create-admin.js <email> <sifre> [isim]
 import 'dotenv/config';
 import { hash } from 'bcryptjs';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
