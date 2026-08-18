@@ -3,6 +3,7 @@ import 'package:beacon/core/network/api_endpoints.dart';
 import 'package:beacon/core/testing/widget_keys.dart';
 import 'package:beacon/core/utils/turkish_date_format.dart';
 import 'package:beacon/models/mobile_content_models.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -41,6 +42,14 @@ List<String> _deriveExpectedDayOrder(List<MobileSession> sessions) {
   keys.sort((a, b) => firstStartByKey[a]!.compareTo(firstStartByKey[b]!));
   return keys;
 }
+
+/// `program_page.dart`taki `_isMinorEvent` ile AYNI kural - mola/toren/
+/// diger turler `_SessionCard` DEGIL `_MinorEventRow` ile cizilir, bu
+/// yuzden `WidgetKeys.programSessionCard` anahtarini TASIMAZLAR (bkz.
+/// docs/decisions.md "Faz 10" - gercek cihazda dogrulanan kasitli
+/// davranis: bu satirlar gorsel olarak ayrisik VE dokunulamaz).
+bool _isMinorEvent(String? sessionType) =>
+    sessionType == 'break' || sessionType == 'ceremony' || sessionType == 'other';
 
 /// `program_page.dart`taki `_filter`in arama kismi ile AYNI kural.
 bool _matchesQuery(MobileSession session, String normalizedQuery) {
@@ -192,8 +201,13 @@ void main() {
       return;
     }
     final currentDay = expectedDayOrder.first;
+    // Mola/toren/diger turler `programSessionCard` anahtarini TASIMAZ
+    // (bkz. yukaridaki `_isMinorEvent` yorumu) - salon filtresi testi
+    // yalnizca gercek kart olarak cizilen oturumlari kontrol edebilir.
     final daySessions = program.sessions
-        .where((s) => dayKey(s.startTime) == currentDay)
+        .where(
+          (s) => dayKey(s.startTime) == currentDay && !_isMinorEvent(s.sessionType),
+        )
         .toList();
 
     final hallCounts = <String, int>{};
@@ -232,8 +246,25 @@ void main() {
     await tester.tap(hallChip);
     await tester.pumpAndSettle(const Duration(milliseconds: 300));
 
+    // Gercek kongre programi tek bir salonda bile bir gunun tamamini
+    // kaplayabiliyor (bkz. docs/decisions.md "Faz 10" - 74 oturumluk
+    // "Deneme" verisi) - `ListView.separated` uzak ogeleri henuz
+    // insa ETMEMIS olabilir, bu yuzden dogrudan `find.byKey` yerine
+    // listeyi kaydirarak arayan `scrollUntilVisible` kullanilir.
+    final verticalSessionList = find.byWidgetPredicate(
+      (w) => w is ListView && w.scrollDirection == Axis.vertical,
+    );
     for (final id in expectedIds) {
-      expect(find.byKey(WidgetKeys.programSessionCard(id)), findsOneWidget);
+      final cardFinder = find.byKey(WidgetKeys.programSessionCard(id));
+      await tester.scrollUntilVisible(
+        cardFinder,
+        200,
+        scrollable: find.descendant(
+          of: verticalSessionList,
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(cardFinder, findsOneWidget);
     }
     for (final id in excludedIds) {
       expect(find.byKey(WidgetKeys.programSessionCard(id)), findsNothing);

@@ -43,4 +43,18 @@ describe('buildVerificationCodeEmail', () => {
     expect(first.html).not.toBe(second.html);
     expect(first.text).not.toBe(second.text);
   });
+
+  it('gizli on-basmi (preheader) govdenin EN BASINDA yer alir - Gmail iOS uygulamasinin katlanmis "..." gostermesini onlemek icin (gercek cihazda dogrulandi, bkz. docs/decisions.md "Faz 10")', () => {
+    const email = buildVerificationCodeEmail('246810');
+    const bodyIndex = email.html.indexOf('<body');
+    const preheaderIndex = email.html.indexOf('display:none;max-height:0');
+    const visibleTableIndex = email.html.indexOf('<table');
+    expect(bodyIndex).toBeGreaterThan(-1);
+    expect(preheaderIndex).toBeGreaterThan(bodyIndex);
+    // On-basim, gorunur icerigin (ilk <table>) ONCESINDE olmali - Brevo'nun
+    // SMTP relay'de her govdenin basina enjekte ettigi acik-izleme
+    // pikselinden/kosullu yorum blogundan ONCE gelecek konumda durmali.
+    expect(preheaderIndex).toBeLessThan(visibleTableIndex);
+    expect(email.html).toContain('246810');
+  });
 });

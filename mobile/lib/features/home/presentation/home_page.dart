@@ -284,13 +284,26 @@ class _ContentGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Faz 10 dogrulama turu: gercek cihazda iOS "Erisilebilirlik Metin
+    // Boyutlari"nin EN BUYUK kademesinde (Faz 7'nin test ettigi 1.3x'in
+    // COK USTUNDE, ~3x'e kadar cikabiliyor) bu kartlarin `Flexible`+
+    // `maxLines:2`+`ellipsis` korumasina RAGMEN tasip birbirine bindigi
+    // bulundu - `GridView.count`in `childAspectRatio`si SABIT ve metin
+    // olcegini HIC bilmiyordu, hucre yuksekligi buyumeyen bir kutuya 2
+    // satirlik COK BUYUK yazi sigdirmaya calisiyordu. `childAspectRatio`
+    // artik metin olcegine gore HESAPLANIYOR - normal olcekte (1.0x)
+    // SONUC AYNI (1.5, gorsel degisiklik yok), yalnizca buyuk olcekte
+    // hucreler orantili olarak uzuyor.
+    final textScale = MediaQuery.textScalerOf(context).scale(14) / 14;
+    final aspectRatio = (1.5 / textScale.clamp(1.0, 2.2)).clamp(0.85, 1.5);
+
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       crossAxisCount: 2,
       mainAxisSpacing: AppSpacing.sm,
       crossAxisSpacing: AppSpacing.sm,
-      childAspectRatio: 1.5,
+      childAspectRatio: aspectRatio,
       children: [
         _ContentButton(
           key: WidgetKeys.homeContentButtonInfoSections,

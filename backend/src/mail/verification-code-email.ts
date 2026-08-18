@@ -31,6 +31,22 @@ export function buildVerificationCodeEmail(
   const html = `<!doctype html>
 <html lang="tr">
   <body style="margin:0;padding:0;background-color:#F5F6FB;font-family:Arial,Helvetica,sans-serif;">
+    <!-- Faz 10 dogrulama turu: gizli "preheader" metni - HEM gelen kutusu
+         onizleme satirinin anlamli olmasini saglar HEM DE (asil sebep)
+         Gmail iOS uygulamasinin "..." ile katlanmis/yuklenmemis gorunum
+         gostermesini onler. Gercek cihazda dogrulandi: Brevo'nun SMTP
+         relay'i her e-postaya kendi acik-izleme pikselini + MSO kosullu
+         yorum bloğunu body'nin EN BASINA ekliyor (Brevo hesap ayarlarindan
+         KAPATILAMAZ, bkz. community.brevo.com "No Way to Disable... in
+         Transactional E-Mail") - govdenin basinda GERCEK, gorunur metin
+         OLMAYINCA Gmail'in mobil uygulamasi ilk render'da icerigi
+         "..." ile katlanmis gosterip dokunmayi bekliyordu (Gmail masaustu
+         web ve Outlook mobil BU SORUNU YASAMIYORDU - yalnizca Gmail iOS
+         uygulamasina ozgu). Bu blok, Brevo'nun enjeksiyonundan ONCE,
+         govdenin ILK icerigi olarak durur. -->
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#F5F6FB;">
+      Kongre Beacon giriş kodunuz: ${code}
+    </div>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#F5F6FB;padding:24px 0;">
       <tr>
         <td align="center">
