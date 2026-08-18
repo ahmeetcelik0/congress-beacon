@@ -148,6 +148,27 @@ class BeaconObservationService with WidgetsBindingObserver {
   bool _isBatching = false;
   bool _isForeground = true;
 
+  // `_flushWriteBuffer` BES ayri yerden tetiklenir (periyodik zamanlayici,
+  // arka plana gecis, tampon esigi, batch gonderimi oncesi, stop()) ve
+  // coguesi `unawaited`dir - eskiden re-entrancy korumasi YOKTU: iki cagri
+  // cakisirsa, ikisi de AYNI `_writeBuffer` icerigini kopyalayip kendi
+  // `await enqueueAll(...)`inde askiya aliniyor, sonra ikisi de kendi
+  // `removeRange(0, toFlush.length)`ini calistirmaya calisiyordu - hizli
+  // biten tamponu once bosaltinca, yavas biten kendi payini cikaramayip
+  // `RangeError` firlatiyordu (bkz. docs/decisions.md "Faz 10.1"). Bu
+  // zincir, HICBIR flush istegini DUSURMEDEN (`if (_isFlushing) return;`
+  // gibi bir kisayol arka plana gecerken tamponu diske yazmayi
+  // ATLAYABILIRDI - force-quit'te veri kaybi demek olurdu) her cagriyi bir
+  // onceki cagrinin bitmesini bekleyip KENDI turunu calistiracak sekilde
+  // sıraya sokar - boylece ayni anda en fazla TEK bir `_doFlush()` calisir.
+  Future<void> _flushChain = Future<void>.value();
+
+  Future<void> _flushWriteBuffer() {
+    final chained = _flushChain.then((_) => _doFlush());
+    _flushChain = chained;
+    return chained;
+  }
+
   // Faz 8: `stop()` cagrildiginda `_drainQueue`in devam eden bir dongusu
   // OLABILIR (ör. yavas bir ag yanitini bekliyor) - `stop()` bunu iptal
   // ETMEZ, ama bu bayrak dongunun bir SONRAKI `peekBatch` cagrisindan once
@@ -529,7 +550,11 @@ class BeaconObservationService with WidgetsBindingObserver {
   /// basarisiz olursa (ör. gecici disk hatasi) tampon TEMIZLENMEZ - bir
   /// sonraki flush'ta (5sn zamanlayici veya bir sonraki dolma) tekrar
   /// denenir; boylece basarisiz bir yazimda veri sessizce kaybolmaz.
-  Future<void> _flushWriteBuffer() async {
+  ///
+  /// YALNIZCA `_flushWriteBuffer()`in zinciri uzerinden cagrilir - bu
+  /// sayede ayni anda en fazla TEK bir cagri calisir, `_writeBuffer`
+  /// uzerinde yaris durumu olusmaz (bkz. yukaridaki `_flushChain` yorumu).
+  Future<void> _doFlush() async {
     if (_writeBuffer.isEmpty) return;
     final toFlush = List<ObservationSnapshot>.from(_writeBuffer);
     final createdAt = DateTime.now().toUtc();
@@ -557,9 +582,38 @@ class BeaconObservationService with WidgetsBindingObserver {
     // `removeRange` (`clear()` DEGIL): await sirasinda `_onRangingResult`
     // tampona YENI kayit eklemis olabilir - yalnizca BURADA yazilan ilk
     // `toFlush.length` kaydi cikarmak, o yeni kayitlarin kaybolmamasini saglar.
-    _writeBuffer.removeRange(0, toFlush.length);
+    //
+    // Savunma amacli sinir: `_flushChain` sayesinde `_writeBuffer`in bu
+    // noktada `toFlush.length`den KISA olmasi beklenmez (tek seferde tek
+    // `_doFlush()` calisir) - ama ileride baska bir eszamanlilik yolu
+    // acilirsa `RangeError` yerine sessiz/dogru davranis uretmesi icin
+    // silinecek adet tamponun o anki uzunlugunu asmaz.
+    final removeCount = toFlush.length < _writeBuffer.length
+        ? toFlush.length
+        : _writeBuffer.length;
+    _writeBuffer.removeRange(0, removeCount);
     _persistedCount += toFlush.length;
   }
+
+  // Asagidaki ucu, `_writeBuffer`/`_flushWriteBuffer` YARIS DURUMUNU birim
+  // testinde GERCEKTEN uretebilmek icin var (bkz. docs/decisions.md
+  // "Faz 10.1") - `_onRangingResult` (tamponu dolduran) ve `start()`
+  // (platform kanaliyla gercek beacon taramasi baslatan) testte dogrudan
+  // tetiklenemedigi icin bu, private tampon durumuna disaridan erisimin
+  // TEK yolu. Sadece testte kullanilir, uretim kodundan cagrilmaz.
+  @visibleForTesting
+  void debugEnqueueSnapshotForTest(ObservationSnapshot snapshot) {
+    _writeBuffer.add(snapshot);
+  }
+
+  @visibleForTesting
+  Future<void> debugFlushWriteBufferForTest() => _flushWriteBuffer();
+
+  @visibleForTesting
+  int get debugWriteBufferLengthForTest => _writeBuffer.length;
+
+  @visibleForTesting
+  int get debugPersistedCountForTest => _persistedCount;
 
   Future<void> _trySendBatch() async {
     if (kDebugMode) {

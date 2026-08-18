@@ -1899,3 +1899,115 @@ verisi (2 test kullanıcısı, ~17 test `Session`/`NotificationLog` kaydı,
 verdiği için (silme `RESTRICT` FK hatası verdi, audit trail'i bozmamak
 için zorlanmadı) DB'de bırakıldı - zararsız, isteğe bağlı olarak elle
 silinebilir.
+
+## Faz 10.1 — Beacon Yazma Tamponu Yarış Durumu Düzeltmesi (2026-08-18)
+
+Faz 9/10 kapanış turunda 6 kez gözlenen `BeaconObservationService.
+_flushWriteBuffer` `RangeError`ının kapatılması. Kök neden, düzeltme,
+testler ve gerçek cihaz kanıtı aşağıda.
+
+### Kök neden (özet)
+
+`_flushWriteBuffer` **beş** çağrı noktasından tetikleniyordu (periyodik
+zamanlayıcı, arka plana geçiş, tampon eşiği, batch gönderimi öncesi,
+`stop()`), dördü `unawaited` - re-entrancy koruması YOKTU. İki çağrı
+çakışırsa: her ikisi de `toFlush = List.from(_writeBuffer)` ile AYNI
+içeriği kopyalıyor, ikisi de kendi `await enqueueAll(...)`inde askıya
+alınıyordu. Hızlı biten önce `_writeBuffer.removeRange(0, toFlush.length)`
+ile tamponu boşaltıyor (yalnızca await sırasında eklenen yeni kayıtlar
+kalıyor); yavaş biten kendi `removeRange`ine ulaştığında tampon artık
+kendi `toFlush.length`inden KISA oluyor - `RangeError` bu yüzden
+fırlıyordu.
+
+### Düzeltme: sıralı zincir, hiçbir flush düşürülmez
+
+`if (_isFlushing) return;` gibi bir kısayol BİLEREK kullanılmadı - bu,
+arka plana geçerken (`_enterBackgroundMode`) yapılan flush'ın
+atlanmasına ve force-quit'te tampondaki gözlemlerin KAYBOLMASINA yol
+açardı. Bunun yerine `_flushWriteBuffer` artık bir `_flushChain`
+(`Future<void>`) üzerinden zincirleniyor:
+
+```dart
+Future<void> _flushChain = Future<void>.value();
+
+Future<void> _flushWriteBuffer() {
+  final chained = _flushChain.then((_) => _doFlush());
+  _flushChain = chained;
+  return chained;
+}
+```
+
+Her çağrı, bir önceki çağrının bitmesini bekleyip KENDİ turunu çalıştırır
+- aynı anda en fazla TEK bir `_doFlush()` (eski `_flushWriteBuffer`
+gövdesi, adı değişti) çalışır, hiçbir istek düşürülmez, `stop()`ün
+`await`i zincirin TAMAMININ bitmesini bekler (kendi turu + önündeki
+tüm turlar). Savunma derinliği olarak `_doFlush` içindeki `removeRange`
+artık tamponun o anki uzunluğunu asla aşmıyor (`removeCount = min(
+toFlush.length, _writeBuffer.length)`) - zincirleme sayesinde bu sınıra
+normalde hiç ulaşılmaz, ama ileride başka bir eşzamanlılık yolu açılırsa
+istisna yerine sessiz/doğru davranış üretir. `_persistedCount` her
+zaman `toFlush.length` (gerçekten diske yazılan miktar) kadar artar -
+çift artma riski yok, çünkü zincirleme sayesinde iki `_doFlush()` asla
+aynı kayıtları iki kez `enqueueAll`a göndermez.
+
+**Dokunulmayanlar (doğrulandı, git diff):** ranging, duty-cycle
+pencereleri, `_batchInterval` senkronizasyonu, `_onMonitoringResult`,
+`didChangeAppLifecycleState`, `deviceInvalid` kurtarma, SQLite kuyruk
+şeması, batch limiti. Değişiklik `mobile/lib/features/observations/
+domain/beacon_observation_service.dart`da yalnızca tampon boşaltma
+eşzamanlılığıyla (yeni `_flushChain` alanı + `_flushWriteBuffer`/
+`_doFlush` ayrımı + savunma sınırı) ve test için eklenen 4 adet
+`@visibleForTesting debugXForTest` erişimcisiyle sınırlı.
+
+### Birim testi - yarışı GERÇEKTEN üretti
+
+`mobile/test/beacon_observation_service_flush_test.dart` (yeni), yavaş
+bir sahte `ObservationQueueStore` (`enqueueAll`i bir `Completer` ile
+kontrollü şekilde geciktiren) kullanarak iki flush'ı bilerek çakıştırır:
+3 kayıt eklenir, ilk flush başlatılır (askıda), flush hâlâ askıdayken
+2 kayıt DAHA eklenir, ikinci flush tetiklenir. Zincirleme sayesinde
+ikinci flush kendi `_doFlush()`ini BİRİNCİ bitene kadar başlatmaz -
+`store.enqueueAllCallCount`in ikinci flush tetiklendikten hemen sonra
+hâlâ `1` olduğu doğrulanarak bu ispatlanır. **Kanıt:** zincirleme kodu
+geçici olarak devre dışı bırakılıp (`return _doFlush();` - `git stash`
+KULLANILMADI, `Edit` ile satır içi geçici değişiklik yapılıp hemen geri
+alındı) aynı test çalıştırıldığında, tam da bu satırda başarısız oldu
+(`enqueueAllCallCount` beklenen `1` yerine `2` çıktı - iki flush
+eşzamanlı başlamıştı) - test GERÇEKTEN ayırt edici. Ayrıca: `enqueueAll`
+hata fırlattığında tamponun korunduğu (mevcut davranış, regresyon
+değil) ve ardışık `unawaited` flush çağrılarının hiçbirinin
+düşürülmediği ayrı testlerle doğrulandı. Üç test de yeşil, `flutter
+test` toplam 45/45, `flutter analyze` "No issues found!".
+
+### Gerçek cihazda doğrulama (Berke'nin iPhone'u "Baş", gerçek beacon donanımı)
+
+Düzeltmeyle yeniden derlenip cihaza kurulan uygulamada, KESİNTİSİZ **3
+dakika 52 saniye** (232sn) ön planda, aktif beacon'ların yanında
+çalıştırıldı - log'da **hiç `RangeError` görünmedi** (önceden 15-25
+saniyede tetikleniyordu). Aynı pencerede backend'e ulaşan gözlem sayısı
+198 arttı (82403 → 82601, `BeaconObservation` tablosu) - kesintisiz veri
+akışının kanıtı.
+
+Ardından **5 dakika 22 saniye** arka planda + ekran kilitli test edildi
+(`foreground=false` log'da doğrulandı) - yine hiç `RangeError` yok,
+990 yeni gözlem (83380 → 84370) ≈ **3,07 gözlem/sn** - Faz 6.1'in ölçtüğü
+~3,34 gözlem/sn ve Faz 8'in ölçtüğü ~5,0 gözlem/sn ile aynı büyüklük
+mertebesinde (ön plan duty-cycle penceresi yüzünden ön plandaki ölçüm
+daha düşük çıkar - bu düzeltmeyle İLGİSİZ, önceden de böyleydi).
+
+Son olarak Faz 8'in çevrimdışı/force-quit senaryosu tekrar koşuldu:
+backend durduruldu, 2 dakikada kuyruk 186 kayda çıktı (`Hata:
+Gönderilemedi` doğru işlendi), uygulama **tamamen kapatıldı**
+(force-quit) ve **yeniden başlatıldı** - widget ağacı kurulmadan ÖNCE
+diskten okunan sayı **182** oldu (Faz 8'in kritik kanıtı: kuyruk
+korunmuş - force-quit anında tampondaki birkaç saniyelik son kayıt,
+bilinen/kabul edilen bedelle kayboldu, kalıcı kuyruğun kendisi
+bozulmadı). Backend açılınca kuyruk kademeli olarak temiz şekilde
+boşaldı (`pending` sıfıra düştü), `HallVisit` üretimi kesintisiz devam
+etti (199 kayıt, en son test penceresinde). Bu son iki testte de
+**hiç `RangeError` yok**.
+
+### Sonuç
+
+**`BeaconObservationService._flushWriteBuffer` yarış durumu KAPANDI.**
+Bkz. `docs/mobile-handoff.md` aynı tarihli bölüm.

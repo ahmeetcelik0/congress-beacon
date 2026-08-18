@@ -1026,7 +1026,7 @@ kusuru ortaya çıktı:
 Düzeltmeden sonra test verisi temizlenip yeniden çalıştırıldığında bu iki
 sorun BİR DAHA görülmedi - kalan tek engel aşağıdaki bilinen hata oldu.
 
-### ⚠️ ÖNCELİKLİ, BİR SONRAKİ FAZA: `BeaconObservationService._flushWriteBuffer` yarış durumu YENİDEN VE SIK GÖZLENDİ
+### ✅ KAPANDI (Faz 10.1, 2026-08-18) — `BeaconObservationService._flushWriteBuffer` yarış durumu YENİDEN VE SIK GÖZLENDİ
 
 Bu turda **6 farklı anda** aynı `RangeError` ile karşılaşıldı:
 `navigasyon_test.dart`, `program_test.dart` (2 kez), `olceklendirme_test.dart`
@@ -1043,15 +1043,24 @@ noktası BİRBİRİNDEN BAĞIMSIZ olduğu için `_isBatching` aralarındaki
 `removeRange`ler; yavaş olan kendi `removeRange`ine ulaştığında tampon
 artık beklediğinden kısa - `RangeError (end): Invalid value: ...`.
 
-**Bu turda kesinlikle DOKUNULMADI** (kullanıcı talimatı: ranging/duty-cycle/
+**O turda kesinlikle DOKUNULMADI** (kullanıcı talimatı: ranging/duty-cycle/
 kuyruk mantığına asla dokunma). Gerçek aktif beacon donanımı yakınında,
 uygulama ~15-25 saniyeden uzun süre ön planda kaldığında NEREDEYSE HER
 SEFERİNDE tetiklendiği için bu, `integration_test` paketinin gerçek bir
 salon ortamında güvenilir şekilde tamamlanmasını fiilen ENGELLEYEN,
-öncelikli bir sonraki-faz maddesi. Olası çözüm yönü: iki çağrı noktasını
-tek bir kilitli/kuyruklu giriş noktasından geçirmek (ör. çağrıları bir
-`Future` zincirine serileştirmek) - ranging/duty-cycle davranışına
-dokunmadan.
+öncelikli bir sonraki-faz maddesi olarak not edilmişti.
+
+**Faz 10.1'de (2026-08-18, aynı gün) KAPANDI** - `_flushWriteBuffer`
+artık bir `Future` zincirine (`_flushChain`) serileştiriliyor, aynı anda
+en fazla tek bir flush çalışıyor, hiçbir flush isteği düşürülmüyor.
+Ranging/duty-cycle davranışına dokunulmadı. Tam kök neden/düzeltme/test
+detayı: `docs/decisions.md` "Faz 10.1" bölümü. Özet kanıt: gerçek
+cihazda 3dk52sn ön planda + 5dk22sn arka planda/kilitli ekranda +
+backend-kapalı/force-quit/backend-açık tam döngüsünde **hiç `RangeError`
+görülmedi** (önceden ~15-25 saniyede tetikleniyordu); yeni birim testi
+(`beacon_observation_service_flush_test.dart`) yarışı kontrollü şekilde
+üretip düzeltmeyi doğruluyor - hatta zincirleme geçici olarak devre dışı
+bırakılınca testin GERÇEKTEN başarısız olduğu ayrıca doğrulandı.
 
 ### Sonuçları nereye bildir
 
