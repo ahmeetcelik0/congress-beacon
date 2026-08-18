@@ -1505,3 +1505,180 @@ hiyerarşik olsa da onay akışı (`approveImport`/salon eşleştirme/
 `rowOrder` tüm günler/salonlar arasında tek bir artan sıra izliyor;
 bu, mevcut onay ekranının yeniden tasarlanmasını gerektirirdi ve bu
 fazın kapsamında değildi.
+
+## Faz 10 — Program Ekranı Düzeltmeleri ve Gerçek E-posta Gönderimi (2026-08-18)
+
+Kullanıcı gerçek bir kongre programını (33. Ulusal Uygulamalı Girişimsel
+Kardiyoloji Kongresi, "Deneme" kongresi, 74 oturum/238 sunum) mobilde
+kullanırken somut sorunlar buldu: sunumlar rastgele sırada görünüyordu,
+gün seçici yoktu, "Tüm Salonlar" seçiliyken hangi güne bakıldığı
+belirsizdi, kahve arası gibi küçük etkinlikler tam oturum kartı gibi
+görünüyordu, sayfa geçişleri gereksiz animasyonluydu, kongre listesi
+kayıt tarihine göre sıralıydı ve doğrulama kodu e-postaları gerçekten
+gönderilmiyordu.
+
+### 1. Sunum sıralama BUG'ı — kök neden ve kanıt
+
+`program-imports.service.ts`'deki `approveImport` fonksiyonu
+`tx.presentation.create()` çağrısına staging'de zaten doğru duran dosya
+sırasını (`ProgramImportPresentation.rowOrder`) hiç YAZMIYORDU - tüm
+sunumlar varsayılan `displayOrder=0` ile oluşuyordu. `mobile.service.ts`
+`orderBy: displayOrder asc` ile sıraladığı için MySQL'in tanımsız dönüş
+sırasında kalıyorlardı. Aynı eksiklik `Session.displayOrder` için de
+vardı (`tx.session.create`). İkisi de düzeltildi, regresyon testleriyle
+kilitlendi (`program-imports.service.spec.ts`).
+
+**Kanıt** ("Deneme" kongresi, "PLAKLARIN DEĞERLENDİRİLMESİNDE ANATOMİ VE
+FİZYOLOJİNİN KOMBİNASYONU" oturumu, 15 sunum) - düzeltmeden önce tüm
+`displayOrder=0`, MySQL'in döndürdüğü sıra saatlerle hiç uyuşmuyordu
+(ör. "c- Ne Öğrendim?" 05:50'de, "a- Olgunun sunumu" 05:30'dan ÖNCE
+görünüyordu); `backend/scripts/fix-presentation-display-order.ts`
+çalıştırıldıktan sonra üç "Olgu" bloğu da (a→b→c→ne öğrendim sırası)
+tam olarak kronolojik ve mantıksal grupla örtüşüyor. Betik "Deneme"
+kongresinde 40 oturumda 221 sunumu düzeltti, ikinci çalıştırmada 0
+değişiklik üretti (idempotent).
+
+**Savunma derinliği:** `mobile.service.ts`'deki sunum sorgusu artık
+`orderBy: [{ startTime: { sort: 'asc', nulls: 'last' } }, { displayOrder:
+'asc' }]` kullanıyor - `displayOrder` her zaman doğru yazılsa bile,
+saati OLAN bir sunum her zaman saatine göre, saati OLMAYAN (ör.
+"Tartışma") en sona düşer.
+
+### 2. Gün seçici — neden `/mobile/program/days` uç noktası KULLANILMADI
+
+Talimat `GET /mobile/program/days`in tarih alanı döndürmesini istiyordu;
+bu uç güncellendi (artık `{label, date}[]` döner, `date` o etiketin ilk
+oturumunun `startTime`inden türetilir). **Ama mobil istemci bu ucu hâlâ
+çağırmıyor** - `mobile/lib/core/network/api_endpoints.dart`taki BİLEREK
+yorum, Faz 7'de gerçek cihazda yakalanan bir hatayı işaret ediyor: ayrı,
+bellek-içi bir önbelleğe bağlı gün listesi, uygulama yeniden kurulup
+çevrimdışı açıldığında BOŞ dönüyor, kalıcı önbellekteki TÜM program
+görünmez oluyordu. Bu fazda gün butonları yine `/mobile/program`ın
+zaten kalıcı önbelleklenmiş tam listesinden türetiliyor - yalnızca
+gruplama anahtarı değişti (aşağıya bkz.). `/mobile/program/days`
+güncellemesi başka bir istemci ihtiyaç duyarsa diye tutarlılık
+amaçlıdır, mobilde KULLANILMAZ.
+
+**Gruplama anahtarı `dayLabel` metninden gerçek takvim gününe taşındı.**
+Kanonik şemada `day.label` opsiyonel (bkz. "Faz 4d") - kullanıcının
+dosyasında hiç set edilmemiş olabilir. Önceden gün sekmeleri
+`session.dayLabel`e göre gruplanıyordu (`_deriveDayOrder`); artık
+`turkish_date_format.dart`taki yeni `dayKey(DateTime)` yardımcısıyla
+HER ZAMAN gerçek `startTime`in yerel takvim gününden türetiliyor
+("2026-04-09"). Bu hem talimatın "üretilmiş etikete bağlı kalma"
+isteğini karşılıyor hem de `dayLabel` hiç set edilmemiş olsa bile gün
+sekmelerinin çalışmasını garanti ediyor - `Session.startTime` asla
+null değil.
+
+**Gün buton biçimi:** iki satırlı pill - üstte kalın `DD.MM` (ör.
+"09.04", yıl YOK - kongre süresi tipik olarak tek yıl içinde geçtiği
+ve sekmeler dar bir yatay şeritte yan yana durduğu için yıl gereksiz
+kalabalık yaratır), altta küçük/soluk Türkçe gün adı (ör. "Perşembe").
+Seçili gün başlığı (liste üstünde, "Tüm Salonlar" dahil her zaman
+görünür) daha geniş yer olduğu için tam biçimi kullanır: "9 Nisan 2026
+· Perşembe". Varsayılan seçili gün: bugün kongre günleri arasındaysa
+bugün, değilse ilk gün (`ProgramPage._DayInfo` + `todayKey` mantığı).
+
+### 3. Salon adı ve sıralama
+
+Oturum kartlarında salon adı zaten HER ZAMAN gösteriliyordu (yalnızca
+"Tüm Salonlar" değil) - bu kısım için kod değişikliği gerekmedi.
+Sıralama artık `_filter()` içinde açıkça gün → saat → salon
+(`dayKey` → `startTime` → `hallName`) - tek bir güne filtrelenmiş
+durumda gün karşılaştırması no-op kalır ama arama modunda (tüm günler
+bir arada) da doğru sırayı garanti eder.
+
+### 4. Etkinlik türü ayrımı ve zaman çizelgesi çizgisi
+
+Referans: `ekranGörüntüleri/screen 2.png`. Kanonik şemanın `event.type`
+değerlerinden (bkz. "Faz 4d") `break`/`ceremony`/`other` olan kayıtlar
+(`Session.sessionType` bu değeri JSON/PDF-LLM içe aktarımında birebir
+taşır, bkz. `write-extraction-to-staging.ts` `sessionType: event.type`)
+artık `_MinorEventRow` ile gösteriliyor: ikonlu, sade, tek satır, arka
+plan `surfaceMuted`, **dokunma işleyicisi hiç bağlanmadı** (InkWell/
+GestureDetector yok) - "detay ekranı açılmasın" isteği kodun kendisiyle
+garanti edildi, bir `if` kontrolüyle değil. `live_case` bu listede
+BİLEREK yok - gerçek bilimsel içeriği var, tam karta hak kazanıyor.
+
+Zaman çizelgesi: `_TimelineIndicator`, saat sütunuyla kart arasında
+`IntrinsicHeight`/`stretch` kombinasyonuyla satırın tam yüksekliğine
+uzayan ince bir çizgi + her etkinlikte bir nokta çizer. Devam eden
+etkinlik (`_isOngoing`, `now` [start,end) aralığındaysa) daha büyük/
+dolgun bir nokta, kartta "Şimdi" rozeti ve kalın kenarlıkla işaretlenir.
+Çizgi listenin SON satırında çizilmez (`isLast`) - "son etkinlikte
+kesilsin" isteği böylece karşılanıyor. `series` alanı (Faz 4d'den beri
+DB'de var ama mobile hiç açılmamıştı) ilk kez `/mobile/program`
+yanıtına eklendi (`MOBILE_SESSION_SELECT`), doluysa kartta küçük bir üst
+etiket olarak gösteriliyor.
+
+### 5. Sayfa geçiş animasyonu kaldırıldı
+
+`go_router`ın kendi sağladığı `NoTransitionPage` (bkz. `go_router`
+paketi `pages/custom_transition_page.dart`) her `GoRoute`da `builder:`
+yerine `pageBuilder:` ile kullanıldı - hem üst seviye rotalarda hem
+`ShellRoute` içindeki 3 sekmede (alt sekme geçişleri de `context.go()`
+ile normal bir `GoRoute` navigasyonu olduğu için aynı mekanizmadan
+geçiyor). Geri navigasyon/sistem geri hareketi go_router'ın kendi yığın
+yönetimini kullanmaya devam ediyor - `NoTransitionPage` yalnızca GÖRSEL
+geçişi değiştiriyor, rota mantığına dokunmuyor.
+
+### 6. Kongre listesi sıralaması
+
+`auth.service.ts` `getCongressesForUser` artık `orderBy: { congress:
+{ startDate: { sort: 'desc', nulls: 'last' } } }` kullanıyor (önceden
+`registeredAt desc` - kullanıcının SON kayıt olduğu kongre, kongrenin
+KENDİ tarihiyle ilgisiz biçimde en üstte çıkıyordu). `startDate`i null
+olan kongreler listenin sonuna düşer. `/auth/login`, `/auth/me`,
+`/auth/my-congresses` hepsi aynı fonksiyonu paylaştığı için tek
+değişiklik üçünde de geçerli; mobil tarafta ek bir sıralama YAPILMADI
+(sunucudan gelen sıra korunuyor).
+
+### 7. Gerçek e-posta gönderimi
+
+**Sağlayıcı karşılaştırması** (Ağustos 2026 itibarıyla, kaynaklar final
+özette): Amazon SES (~$0.10/1000 e-posta, kredi kartı ZORUNLU, "sandbox"
+dışına çıkmak için 1-3 iş günü onay süreci), Resend (3.000/ay ÜCRETSİZ
+ama günde 100 tavan - kongre açılışındaki 500+ günlük patlama için
+YETERSİZ, kredi kartı gerektirmiyor, en kolay DKIM kurulumu), Brevo
+(300/gün ücretsiz, kredi kartı GEREKTİRMİYOR, DKIM/SPF otomatik
+algılanıp tek tıkla kuruluyor). **Öneri: Brevo** - kredi kartsız hemen
+başlanabilir, otomatik alan doğrulama en az sürtünmeli kurulum, günlük
+tavan aşılırsa ucuz bir ücretli kademeyle (Starter, ~$9/ay) kalkıyor.
+Hacim büyürse (kongre başına on binlerce e-posta) Amazon SES çok daha
+ucuz hale gelir - o zaman geçiş değerlendirilebilir, kod tarafında
+`SmtpMailSender` zaten sağlayıcıdan bağımsız (nodemailer/SMTP), tek
+değişen `.env`deki `SMTP_*` değerleri olur.
+
+**DNS gereksinimleri** (`photofocustr.com`): sağlayıcı seçildikten
+sonra o sağlayıcının panelinde üretilen SPF/DKIM TXT/CNAME kayıtları
+alan adının DNS panelinden eklenir; DMARC `p=none` (izleme modu) ile
+başlangıçta önerilir. Tam adımlar kullanıcıya final özette verildi.
+
+**İçerik iyileştirmesi:** `verification-code-email.ts` (yeni, SAF bir
+fonksiyon - nodemailer mock'lamadan test edilebilir, bkz.
+`verification-code-email.spec.ts`) konu satırını ("Kongre Beacon giriş
+kodunuz"), büyük/seçilebilir kod bloğunu, tek cümlelik açıklamayı,
+"bu isteği yapmadıysanız" cümlesini ve TEK RENKLİ/basit inline-stil HTML
++ düz metin alternatifini üretir. `SmtpMailSender` artık `replyTo`
+(yeni `MAIL_REPLY_TO` env değişkeni, boşsa `MAIL_FROM`a düşer) ile
+gönderiyor.
+
+**Hata görünürlüğü:** `issueVerificationCode`'da gönderim ARTIK DB
+güncellemesinden ÖNCE deneniyor (eski sırada: önce şifre hash'i
+değiştiriliyor, SONRA gönderiliyordu - SMTP hatası olursa kullanıcının
+ESKİ şifresi zaten geçersiz kılınmış ama yeni kod hiç ulaşmamış oluyor,
+kullanıcı KİLİTLENİYORDU). Gönderim başarısız olursa `Logger.error` ile
+(kod/şifre ASLA loglanmadan, yalnızca userId ve SMTP hatası) loglanır,
+`ServiceUnavailableException` ("Kod gönderilemedi, lütfen tekrar
+deneyin") döner, DB'ye hiç dokunulmaz.
+
+### Kapsam dışı bırakılanlar (bilerek)
+
+`BeaconObservationService`in ranging/duty-cycle/kuyruk mantığı (hiç
+dokunulmadı, git diff ile doğrulandı), Faz 9'un push/FCM kodu, favori
+oturum/takvime ekleme/bildirim tercihleri, panel arayüzü, ölü kod
+temizliği (Faz 11). Gerçek cihazda e-posta gönderimi (Gmail/Outlook'ta
+gelen kutusuna düştüğünü doğrulama) sağlayıcı/DNS kurulumu kullanıcı
+tarafından tamamlanana kadar YAPILAMADI - kod tarafı hazır, `.env`
+`MAIL_REPLY_TO` eklendi, `.env.prod.example`de `photofocustr.com`
+placeholder'ları güncellendi.

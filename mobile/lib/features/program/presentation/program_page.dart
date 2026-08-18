@@ -10,30 +10,57 @@ import '../../../core/widgets/async_content_view.dart';
 import '../../../models/mobile_content_models.dart';
 import '../application/program_provider.dart';
 
-/// Gun etiketlerini, zaten onbellekte olan program listesinden (KRONOLOJIK,
-/// gunun ilk oturumunun baslangic saatine gore) turetir - `/mobile/program/
-/// days` ucuna AYRI bir cagri YAPILMAZ. Bu bilincli bir tasarim: o uc
-/// yalnizca bellek-ici onbelleklenebilirdi (kucuk yanit, bkz. Faz 7 talimati
-/// §1), ama gun sekmeleri TAM PROGRAM listesini FILTRELEMEK icin kritik bir
-/// bagimlilik - uygulama yeniden kurulup CEVRIMDISI acildiginda bellek-ici
-/// onbellek BOS olurdu ve gun listesi bos donerdi, bu da kalici olarak
-/// onbelleklenmis (ve gercekte mevcut) TUM oturumlarin gorunmez olmasina
-/// yol acardi (gercek cihazda yakalanan bir hata). Siralama backend'in
-/// kendi algoritmasiyla (ilk oturumun baslangic saati) BIREBIR ayni.
-List<String> _deriveDayOrder(List<MobileSession> sessions) {
-  final firstStartByDay = <String, DateTime>{};
+/// Bir gunu temsil eder - `key` filtreleme/karsilastirma icin KULLANILAN
+/// gruplama anahtari (`dayKey`, "2026-04-09"), `date` yalnizca GORUNTULEME
+/// icindir (bkz. turkish_date_format.dart `dayKey`).
+class _DayInfo {
+  const _DayInfo(this.key, this.date);
+
+  final String key;
+  final DateTime date;
+}
+
+/// Gunleri, zaten onbellekte olan program listesinden (KRONOLOJIK, gercek
+/// takvim tarihine gore) turetir - `/mobile/program/days` ucuna AYRI bir
+/// cagri YAPILMAZ (bkz. Faz 7 talimati §1, `mobile/lib/core/network/
+/// api_endpoints.dart`taki BILEREK yorum - cevrimdisi soguk-baslangicta
+/// ayri bir bellek-ici onbellek BOS kalirdi). Faz 10: onceden gruplama
+/// anahtari `session.dayLabel` (opsiyonel, kanonik semada uretilmemis
+/// olabilir - bkz. docs/decisions.md "Faz 4d") idi; artik HER ZAMAN
+/// gercek `startTime`den turetilen takvim gunu kullanilir - `dayLabel`
+/// hic set edilmemis olsa bile dogru calisir.
+List<_DayInfo> _deriveDayOrder(List<MobileSession> sessions) {
+  final firstSeenByKey = <String, DateTime>{};
   for (final session in sessions) {
-    final day = session.dayLabel;
-    if (day == null) continue;
-    final existing = firstStartByDay[day];
-    if (existing == null || session.startTime.isBefore(existing)) {
-      firstStartByDay[day] = session.startTime;
-    }
+    final key = dayKey(session.startTime);
+    firstSeenByKey.putIfAbsent(key, () => session.startTime.toLocal());
   }
-  final days = firstStartByDay.keys.toList();
-  days.sort((a, b) => firstStartByDay[a]!.compareTo(firstStartByDay[b]!));
+  final days = [
+    for (final entry in firstSeenByKey.entries) _DayInfo(entry.key, entry.value),
+  ];
+  days.sort((a, b) => a.date.compareTo(b.date));
   return days;
 }
+
+bool _isOngoing(MobileSession session) {
+  final now = DateTime.now();
+  return !now.isBefore(session.startTime) && now.isBefore(session.endTime);
+}
+
+/// Kanonik semanin `event.type` degerlerinden (bkz. docs/decisions.md "Faz
+/// 4d") `break`/`ceremony`/`other` olanlar icerik tasimaz - program
+/// ekraninda kucuk, ikonlu, DOKUNULAMAZ bir satir olarak gosterilir (bkz.
+/// Faz 10 talimati §4, referans: ekranGörüntüleri/screen 2.png). `live_case`
+/// BILEREK bu listede DEGIL - gercek bir bilimsel icerigi var, tam karta
+/// hak kazanir.
+bool _isMinorEvent(String? sessionType) =>
+    sessionType == 'break' || sessionType == 'ceremony' || sessionType == 'other';
+
+IconData _minorEventIcon(String? sessionType) => switch (sessionType) {
+  'break' => Icons.local_cafe_outlined,
+  'ceremony' => Icons.emoji_events_outlined,
+  _ => Icons.info_outline_rounded,
+};
 
 /// Bilimsel Program sekmesi - arama TAMAMEN yerelde (bkz. Faz 7 talimati
 /// §3: "Program onbellekte oldugu icin aramayi yerelde yap, her tus
@@ -49,7 +76,7 @@ class ProgramPage extends ConsumerStatefulWidget {
 class _ProgramPageState extends ConsumerState<ProgramPage> {
   final _searchController = TextEditingController();
   String _query = '';
-  String? _selectedDay;
+  String? _selectedDayKey;
   String? _selectedHallId;
 
   @override
@@ -80,7 +107,16 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
       }
       return false;
     }).toList();
-    filtered.sort((a, b) => a.startTime.compareTo(b.startTime));
+    // Faz 10 §3: gun -> saat -> salon. Tek bir gune filtrelenmis durumda
+    // ilk karsilastirma her zaman esit cikar (no-op), ama arama modunda
+    // (TUM gunler listede) gun siralamasinin da dogru kalmasini saglar.
+    filtered.sort((a, b) {
+      final byDay = dayKey(a.startTime).compareTo(dayKey(b.startTime));
+      if (byDay != 0) return byDay;
+      final byTime = a.startTime.compareTo(b.startTime);
+      if (byTime != 0) return byTime;
+      return a.hallName.compareTo(b.hallName);
+    });
     return filtered;
   }
 
@@ -149,14 +185,25 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
                   };
 
                   final days = _deriveDayOrder(programData.sessions);
-                  final effectiveDay = isSearching
+                  final todayKey = dayKey(DateTime.now());
+                  final defaultDayKey = days.any((d) => d.key == todayKey)
+                      ? todayKey
+                      : (days.isNotEmpty ? days.first.key : null);
+                  final effectiveDayKey = isSearching
                       ? null
-                      : (_selectedDay ?? (days.isNotEmpty ? days.first : null));
+                      : (_selectedDayKey ?? defaultDayKey);
+                  _DayInfo? effectiveDayInfo;
+                  for (final day in days) {
+                    if (day.key == effectiveDayKey) {
+                      effectiveDayInfo = day;
+                      break;
+                    }
+                  }
 
                   final baseSessions = isSearching
                       ? programData.sessions
                       : programData.sessions
-                            .where((s) => s.dayLabel == effectiveDay)
+                            .where((s) => dayKey(s.startTime) == effectiveDayKey)
                             .toList();
                   final sessions = _filter(baseSessions);
 
@@ -178,8 +225,8 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
                       if (!isSearching && days.length > 1)
                         _DayTabs(
                           days: days,
-                          selectedDay: effectiveDay,
-                          onSelect: (day) => setState(() => _selectedDay = day),
+                          selectedDayKey: effectiveDayKey,
+                          onSelect: (key) => setState(() => _selectedDayKey = key),
                         ),
                       if (halls.length > 1)
                         _HallFilter(
@@ -188,6 +235,13 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
                           onSelect: (hallId) =>
                               setState(() => _selectedHallId = hallId),
                         ),
+                      // Faz 10 §3: "Tum Salonlar" secili oldugunda dahi
+                      // kullanicinin hangi gune baktigi HER ZAMAN belli
+                      // olsun diye sabit bir baslik - salon filtresinden
+                      // BAGIMSIZ, yalnizca arama modunda gizlenir (o zaman
+                      // zaten tum gunler bir arada listelenir).
+                      if (!isSearching && effectiveDayInfo != null)
+                        _SelectedDayHeader(day: effectiveDayInfo),
                       const SizedBox(height: AppSpacing.sm),
                       Expanded(
                         child: sessions.isEmpty
@@ -208,13 +262,13 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
                                 ),
                                 itemCount: sessions.length,
                                 separatorBuilder: (_, _) =>
-                                    const SizedBox(height: AppSpacing.sm),
+                                    const SizedBox(height: AppSpacing.xs),
                                 itemBuilder: (context, index) {
                                   final session = sessions[index];
                                   return _TimelineRow(
-                                    key: ValueKey(session.id),
                                     session: session,
                                     showDayLabel: isSearching,
+                                    isLast: index == sessions.length - 1,
                                     onTap: () =>
                                         context.push('/session/${session.id}'),
                                   );
@@ -231,21 +285,50 @@ class _ProgramPageState extends ConsumerState<ProgramPage> {
   }
 }
 
+class _SelectedDayHeader extends StatelessWidget {
+  const _SelectedDayHeader({required this.day});
+
+  final _DayInfo day;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        AppSpacing.sm,
+        AppSpacing.md,
+        0,
+      ),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          '${formatTurkishDate(day.date)} · ${formatTurkishWeekday(day.date)}',
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DayTabs extends StatelessWidget {
   const _DayTabs({
     required this.days,
-    required this.selectedDay,
+    required this.selectedDayKey,
     required this.onSelect,
   });
 
-  final List<String> days;
-  final String? selectedDay;
+  final List<_DayInfo> days;
+  final String? selectedDayKey;
   final ValueChanged<String> onSelect;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 40,
+      height: 52,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
@@ -253,18 +336,33 @@ class _DayTabs extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final day = days[index];
-          final isSelected = day == selectedDay;
+          final isSelected = day.key == selectedDayKey;
           return ChoiceChip(
-            key: WidgetKeys.programDayTab(day),
-            label: Text(day),
-            selected: isSelected,
-            onSelected: (_) => onSelect(day),
-            selectedColor: AppColors.primary,
-            labelStyle: TextStyle(
-              color: isSelected ? Colors.white : AppColors.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
+            key: WidgetKeys.programDayTab(day.key),
+            label: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  formatShortDate(day.date),
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+                Text(
+                  formatTurkishWeekday(day.date),
+                  style: TextStyle(
+                    color: isSelected ? Colors.white70 : AppColors.textFaint,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 10,
+                  ),
+                ),
+              ],
             ),
+            selected: isSelected,
+            onSelected: (_) => onSelect(day.key),
+            selectedColor: AppColors.primary,
             backgroundColor: AppColors.surface,
             side: BorderSide(
               color: isSelected ? AppColors.primary : AppColors.border,
@@ -332,72 +430,193 @@ class _HallFilter extends StatelessWidget {
   }
 }
 
+/// Zaman cizelgesi satiri: saat sutunu + dikey cizgi/nokta + icerik.
+/// `IntrinsicHeight`/`stretch` kombinasyonu, degisken yukseklikli
+/// kartlarin yaninda cizginin TAM olarak satirin yuksekligi kadar
+/// uzamasini saglar (bkz. Faz 10 talimati §4, referans:
+/// ekranGörüntüleri/screen 2.png).
 class _TimelineRow extends StatelessWidget {
   const _TimelineRow({
-    super.key,
     required this.session,
     required this.showDayLabel,
+    required this.isLast,
     required this.onTap,
   });
 
   final MobileSession session;
   final bool showDayLabel;
+  final bool isLast;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 52,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                formatTime(session.startTime),
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
-              ),
-              Text(
-                formatTime(session.endTime),
-                style: const TextStyle(
-                  color: AppColors.textFaint,
-                  fontSize: 12,
-                ),
-              ),
-              if (showDayLabel && session.dayLabel != null) ...[
-                const SizedBox(height: 2),
+    final isMinor = _isMinorEvent(session.sessionType);
+    final isOngoing = _isOngoing(session);
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 52,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  session.dayLabel!,
-                  style: const TextStyle(
-                    color: AppColors.textFaint,
-                    fontSize: 10,
+                  formatTime(session.startTime),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                    color: isOngoing ? AppColors.primary : AppColors.textPrimary,
                   ),
                 ),
+                Text(
+                  formatTime(session.endTime),
+                  style: const TextStyle(
+                    color: AppColors.textFaint,
+                    fontSize: 12,
+                  ),
+                ),
+                if (showDayLabel) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    formatShortDate(session.startTime),
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: _SessionCard(
-            key: WidgetKeys.programSessionCard(session.id),
-            session: session,
-            onTap: onTap,
+          _TimelineIndicator(isOngoing: isOngoing, isMinor: isMinor, isLast: isLast),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: isMinor
+                ? _MinorEventRow(session: session)
+                : _SessionCard(
+                    key: WidgetKeys.programSessionCard(session.id),
+                    session: session,
+                    isOngoing: isOngoing,
+                    onTap: onTap,
+                  ),
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TimelineIndicator extends StatelessWidget {
+  const _TimelineIndicator({
+    required this.isOngoing,
+    required this.isMinor,
+    required this.isLast,
+  });
+
+  final bool isOngoing;
+  final bool isMinor;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final dotColor = isOngoing
+        ? AppColors.primary
+        : (isMinor ? AppColors.textFaint : AppColors.accent);
+    final dotSize = isOngoing ? 12.0 : 8.0;
+
+    return SizedBox(
+      width: 16,
+      child: Column(
+        children: [
+          const SizedBox(height: 4),
+          Container(
+            width: dotSize,
+            height: dotSize,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: dotColor,
+              border: isOngoing
+                  ? Border.all(color: AppColors.primarySoft, width: 3)
+                  : null,
+            ),
+          ),
+          // Faz 10 §4: cizgi listenin SON etkinliginde KESILIR - `isLast`
+          // durumunda bosluk yine ayrilir (satir yuksekligini korumak
+          // icin) ama cizgi CIZILMEZ.
+          Expanded(
+            child: isLast
+                ? const SizedBox()
+                : Container(
+                    width: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 2),
+                    color: AppColors.border,
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// `break`/`ceremony`/`other` turundeki kucuk etkinlikler - icerikleri
+/// olmadigi icin dokunulamaz (onTap KASITLI olarak yok, InkWell/GestureDetector
+/// hic sarilmadi) ve normal oturum kartindan gorsel olarak ayrisir: daha
+/// alcak, daha sade, ikonlu tek satir (bkz. Faz 10 talimati §4, referans:
+/// ekranGörüntüleri/screen 2.png "Kahve Molası ve Sosyalleşme").
+class _MinorEventRow extends StatelessWidget {
+  const _MinorEventRow({required this.session});
+
+  final MobileSession session;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceMuted,
+        borderRadius: BorderRadius.circular(AppSpacing.sm),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            _minorEventIcon(session.sessionType),
+            size: 18,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              session.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _SessionCard extends StatelessWidget {
-  const _SessionCard({super.key, required this.session, required this.onTap});
+  const _SessionCard({
+    super.key,
+    required this.session,
+    required this.isOngoing,
+    required this.onTap,
+  });
 
   final MobileSession session;
+  final bool isOngoing;
   final VoidCallback onTap;
 
   @override
@@ -418,13 +637,51 @@ class _SessionCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.md),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(
+              color: isOngoing ? AppColors.primary : AppColors.border,
+              width: isOngoing ? 1.5 : 1,
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (session.series != null && session.series!.trim().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    session.series!,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textFaint,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 10.5,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
               Row(
                 children: [
+                  if (isOngoing)
+                    Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: const Text(
+                        'Şimdi',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                    ),
                   if (session.sessionType != null)
                     Container(
                       padding: const EdgeInsets.symmetric(

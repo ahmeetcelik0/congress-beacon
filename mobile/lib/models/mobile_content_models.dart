@@ -97,6 +97,7 @@ class MobileSession {
     required this.sessionType,
     required this.dayLabel,
     required this.keywords,
+    required this.series,
     required this.roles,
     required this.presentations,
   });
@@ -111,6 +112,9 @@ class MobileSession {
   final String? sessionType;
   final String? dayLabel;
   final String? keywords;
+  // Faz 4d'nin `event.series` alani - Faz 10'da ilk kez mobile'a acildi
+  // (bkz. docs/decisions.md "Faz 10").
+  final String? series;
   final List<MobileProgramRole> roles;
   final List<MobilePresentation> presentations;
 
@@ -127,6 +131,7 @@ class MobileSession {
       sessionType: json['sessionType'] as String?,
       dayLabel: json['dayLabel'] as String?,
       keywords: json['keywords'] as String?,
+      series: json['series'] as String?,
       roles: (json['roles'] as List<dynamic>)
           .map((e) => MobileProgramRole.fromJson(e as Map<String, dynamic>))
           .toList(),

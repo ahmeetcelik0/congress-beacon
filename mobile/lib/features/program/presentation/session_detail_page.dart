@@ -100,11 +100,15 @@ class SessionDetailPage extends ConsumerWidget {
                         icon: Icons.meeting_room_outlined,
                         text: session.hallName,
                       ),
-                      if (session.dayLabel != null)
-                        _MetaItem(
-                          icon: Icons.today_outlined,
-                          text: session.dayLabel!,
-                        ),
+                      // Faz 10: gorunen etiket HER ZAMAN gercek startTime'dan
+                      // turetilir, uretilmis (ve opsiyonel) `dayLabel`e
+                      // BAGLI KALINMAZ (bkz. docs/decisions.md "Faz 10").
+                      _MetaItem(
+                        icon: Icons.today_outlined,
+                        text:
+                            '${formatShortDate(session.startTime)} '
+                            '${formatTurkishWeekday(session.startTime)}',
+                      ),
                     ],
                   ),
                   if (session.description != null &&

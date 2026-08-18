@@ -23,7 +23,47 @@ const _turkishMonths = [
   'Aralık',
 ];
 
+// DateTime.weekday 1=Pazartesi..7=Pazar doner - index 0 buna gore kaydirilir.
+const _turkishWeekdays = [
+  'Pazartesi',
+  'Salı',
+  'Çarşamba',
+  'Perşembe',
+  'Cuma',
+  'Cumartesi',
+  'Pazar',
+];
+
 String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+/// Program ekranindaki gun sekmeleri icin KISA tarih - "09.04" (gun.ay,
+/// YIL YOK). Kongre suresi tipik olarak tek yil icinde gectigi ve sekmeler
+/// dar bir yatay serit icinde yan yana durdugu icin yil bilgisi gereksiz
+/// kalabalik yaratir (bkz. Faz 10 talimati, "hangisi dar ekranda daha
+/// okunur" degerlendirmesi - docs/decisions.md).
+String formatShortDate(DateTime date) {
+  final local = date.toLocal();
+  return '${_twoDigits(local.day)}.${_twoDigits(local.month)}';
+}
+
+/// "Perşembe"
+String formatTurkishWeekday(DateTime date) {
+  final local = date.toLocal();
+  return _turkishWeekdays[local.weekday - 1];
+}
+
+/// Bir DateTime'i GUN GRUPLAMA anahtarina cevirir - saat/dakika/saniye
+/// ATILIR, yalnizca YEREL takvim gunu kalir ("2026-04-09"). Program
+/// ekranindaki gun sekmeleri VE oturumlarin hangi sekmeye ait oldugunun
+/// filtrelenmesi AYNI anahtari kullanir (bkz. features/program/
+/// presentation/program_page.dart) - boylece kanonik semada OPSIYONEL olan
+/// `day.label`e (bkz. docs/decisions.md "Faz 4d") DEGIL, HER ZAMAN gercek
+/// `startTime`e dayanir; `day.label` hic set edilmemis olsa bile gun
+/// sekmeleri dogru calisir.
+String dayKey(DateTime dateTime) {
+  final local = dateTime.toLocal();
+  return '${local.year.toString().padLeft(4, '0')}-${_twoDigits(local.month)}-${_twoDigits(local.day)}';
+}
 
 /// "15 Mayıs 2026"
 String formatTurkishDate(DateTime date) {

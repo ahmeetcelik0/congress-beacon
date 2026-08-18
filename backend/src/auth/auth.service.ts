@@ -3,7 +3,9 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -78,6 +80,8 @@ export type MeResult = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
@@ -130,12 +134,27 @@ export class AuthService {
     const code = randomInt(100_000, 1_000_000).toString();
     const passwordHash = await hash(code, PASSWORD_HASH_ROUNDS);
 
+    // Faz 10: gonderim ONCE denenir, DB guncellemesi yalnizca BASARILI
+    // gonderimden SONRA yapilir. Eski sirada (once DB, sonra gonderim)
+    // SMTP hata verirse kullanicinin ESKI sifresi ZATEN gecersiz kilinmis
+    // ama yeni kod hic ULASMAMIS oluyordu - kullanici KILITLENIYORDU. Kod
+    // veya sifre hicbir zaman loglanmaz (bkz. asagidaki log satiri).
+    try {
+      await this.mailSender.sendVerificationCode(user.email, code);
+    } catch (error) {
+      this.logger.error(
+        `Dogrulama kodu e-postasi gonderilemedi (userId=${user.id})`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw new ServiceUnavailableException(
+        'Kod gönderilemedi, lütfen tekrar deneyin',
+      );
+    }
+
     await this.prisma.user.update({
       where: { id: user.id },
       data: { passwordHash, mustChangePassword: true },
     });
-
-    await this.mailSender.sendVerificationCode(user.email, code);
   }
 
   async login(dto: LoginDto): Promise<LoginResult> {
@@ -245,11 +264,18 @@ export class AuthService {
     return { accessToken };
   }
 
+  // Faz 10: onceden `registeredAt` (kayit tarihi) DESC kullaniyordu -
+  // kullanicinin en SON kayit oldugu kongre en ustte cikiyordu, kongrenin
+  // KENDI tarihiyle ILGISIZ bir sira. Artik kongrenin `startDate`ine gore
+  // GUNCELDEN ESKIYE siralaniyor (bkz. docs/decisions.md "Faz 10").
+  // `startDate` null olan kongreler `nulls: 'last'` ile listenin SONUNA
+  // duser - "tarihi girilmemis" bir kongre, tarihi belli en eski kongreden
+  // bile daha az bilgi tasidigi icin en dipte kalmasi dogru.
   async getCongressesForUser(userId: string): Promise<CongressSummary[]> {
     const registrations = await this.prisma.congressRegistration.findMany({
       where: { userId, isActive: true },
       include: { congress: true },
-      orderBy: { registeredAt: 'desc' },
+      orderBy: { congress: { startDate: { sort: 'desc', nulls: 'last' } } },
     });
 
     return registrations.map((registration) => ({

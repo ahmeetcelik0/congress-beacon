@@ -5766,6 +5766,7 @@ components:
         - sessionType
         - dayLabel
         - keywords
+        - series
         - hall
         - roles
         - presentations
@@ -5796,6 +5797,12 @@ components:
         keywords:
           type: string
           nullable: true
+        series:
+          type: string
+          nullable: true
+          description: >-
+            Faz 4d'nin `event.series` alani (bkz. docs/decisions.md) -
+            Faz 10'da ilk kez mobile'a acildi.
         hall:
           type: object
           required:
@@ -5842,8 +5849,23 @@ components:
         days:
           type: array
           items:
-            type: string
-          description: Program sirasina gore (kronolojik, alfabetik DEGIL).
+            type: object
+            required: [label, date]
+            properties:
+              label:
+                type: string
+              date:
+                type: string
+                format: date
+                description: >-
+                  O gun etiketinin ILK oturumunun baslangic tarihinden
+                  turetilir (bkz. Faz 10) - uretilmis `label`e degil,
+                  gercek tarihe dayanir.
+          description: >-
+            Program sirasina gore (kronolojik, alfabetik DEGIL). Faz 10
+            NOTU: mobil istemci bu ucu cagirmaz (bkz. Faz 7 mimari karari,
+            cevrimdisi soguk-baslangic hatasi) - gun butonlari `/mobile/
+            program`in kalici onbellegindeki tam listeden turetilir.
 
     MobileSessionDetailResponse:
       type: object

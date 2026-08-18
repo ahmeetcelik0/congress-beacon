@@ -1,6 +1,7 @@
 import 'package:beacon/core/network/api_client.dart';
 import 'package:beacon/core/network/api_endpoints.dart';
 import 'package:beacon/core/testing/widget_keys.dart';
+import 'package:beacon/core/utils/turkish_date_format.dart';
 import 'package:beacon/models/mobile_content_models.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -24,20 +25,21 @@ Future<MobileProgramResponse> _fetchProgramDirectly() async {
 
 /// `program_page.dart`taki `_deriveDayOrder` ile AYNI algoritmanin
 /// bagimsiz bir kopyasi - testin, uygulamanin kendi hesapladigi sirayi
-/// degil GERCEKTEN dogru sirayi dogrulayabilmesi icin.
+/// degil GERCEKTEN dogru sirayi dogrulayabilmesi icin. Faz 10: gruplama
+/// anahtari artik `dayLabel` DEGIL, gercek `startTime`den turetilen
+/// takvim gunu (`dayKey`) - bkz. docs/decisions.md "Faz 10".
 List<String> _deriveExpectedDayOrder(List<MobileSession> sessions) {
-  final firstStartByDay = <String, DateTime>{};
+  final firstStartByKey = <String, DateTime>{};
   for (final session in sessions) {
-    final day = session.dayLabel;
-    if (day == null) continue;
-    final existing = firstStartByDay[day];
+    final key = dayKey(session.startTime);
+    final existing = firstStartByKey[key];
     if (existing == null || session.startTime.isBefore(existing)) {
-      firstStartByDay[day] = session.startTime;
+      firstStartByKey[key] = session.startTime;
     }
   }
-  final days = firstStartByDay.keys.toList();
-  days.sort((a, b) => firstStartByDay[a]!.compareTo(firstStartByDay[b]!));
-  return days;
+  final keys = firstStartByKey.keys.toList();
+  keys.sort((a, b) => firstStartByKey[a]!.compareTo(firstStartByKey[b]!));
+  return keys;
 }
 
 /// `program_page.dart`taki `_filter`in arama kismi ile AYNI kural.
@@ -191,7 +193,7 @@ void main() {
     }
     final currentDay = expectedDayOrder.first;
     final daySessions = program.sessions
-        .where((s) => s.dayLabel == currentDay)
+        .where((s) => dayKey(s.startTime) == currentDay)
         .toList();
 
     final hallCounts = <String, int>{};

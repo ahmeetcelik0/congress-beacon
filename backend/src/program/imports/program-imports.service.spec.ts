@@ -329,6 +329,89 @@ describe('ProgramImportsService.approveImport', () => {
     });
   });
 
+  it('sessionRow/presentationRow uzerindeki rowOrder degerini displayOrder olarak canli tabloya aktarir', async () => {
+    // Regresyon: Faz 10'da mobilde sunumlarin RASTGELE sirada gorundugu
+    // bildirildi. Kok neden: staging'de dogru duran sira bilgisi
+    // (`ProgramImportPresentation.rowOrder`) `tx.presentation.create`
+    // cagrisina hic YAZILMIYORDU - tum sunumlar varsayilan displayOrder=0
+    // ile olusuyor, mobil `orderBy: displayOrder asc` MySQL'in tanimsiz
+    // donus sirasina dusuyordu (bkz. docs/decisions.md "Faz 10"). Ayni
+    // eksiklik `Session.displayOrder` icin de gecerliydi.
+    const { service, prisma } = buildService();
+    prisma.programImport.findUnique.mockResolvedValue({
+      id: 'imp-1',
+      status: ProgramImportStatus.DRAFT,
+      congressId: 'cong-1',
+    });
+
+    prisma.programImportSession.findMany.mockResolvedValue([
+      {
+        id: 'row-1',
+        rowOrder: 7,
+        title: 'Açılış Oturumu',
+        hallId: 'hall-1',
+        startTime: new Date(2026, 8, 10, 9, 0),
+        endTime: new Date(2026, 8, 10, 10, 30),
+        sessionType: 'session',
+        dayLabel: '1. Gün',
+        keywords: '',
+        titleEn: null,
+        series: null,
+        roles: [],
+        presentations: [
+          {
+            rowOrder: 0,
+            title: 'İlk Sunum',
+            startTime: new Date(2026, 8, 10, 9, 0),
+            endTime: new Date(2026, 8, 10, 9, 20),
+            titleEn: null,
+            code: null,
+            roles: [],
+          },
+          {
+            rowOrder: 1,
+            title: 'İkinci Sunum',
+            startTime: null,
+            endTime: null,
+            titleEn: null,
+            code: null,
+            roles: [],
+          },
+        ],
+      },
+    ]);
+
+    const tx = {
+      session: { create: jest.fn().mockResolvedValue({ id: 'session-1' }) },
+      programRole: { create: jest.fn().mockResolvedValue({ id: 'role-x' }) },
+      presentation: {
+        create: jest.fn().mockResolvedValue({ id: 'presentation-1' }),
+      },
+      programImport: { update: jest.fn().mockResolvedValue({}) },
+    };
+    prisma.$transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+      Promise.resolve(cb(tx)),
+    );
+
+    await service.approveImport('imp-1');
+
+    expect(tx.session.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ displayOrder: 7 }) as unknown,
+    });
+    expect(tx.presentation.create).toHaveBeenNthCalledWith(1, {
+      data: expect.objectContaining({
+        title: 'İlk Sunum',
+        displayOrder: 0,
+      }) as unknown,
+    });
+    expect(tx.presentation.create).toHaveBeenNthCalledWith(2, {
+      data: expect.objectContaining({
+        title: 'İkinci Sunum',
+        displayOrder: 1,
+      }) as unknown,
+    });
+  });
+
   it('ikinci onay denemesi 409 verir', async () => {
     const { service, prisma } = buildService();
     prisma.programImport.findUnique.mockResolvedValue({

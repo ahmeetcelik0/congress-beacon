@@ -210,6 +210,52 @@ describe('MobileService', () => {
       expect(call.where.hallId).toBe('hall-1');
       expect(call.where.OR).toBeDefined();
     });
+
+    it('sunumlari startTime once, sonra displayOrder ile siralar; bos startTime EN SONA duser (Faz 10 savunma derinligi)', async () => {
+      // Onay akisindaki `displayOrder` yazim hatasi (bkz. docs/decisions.md
+      // "Faz 10") duzeltildi, ama bu sorgu YINE DE `startTime`i birincil
+      // siralama anahtari yapar - saat bilgisi olmayan bir sunumun
+      // (`nulls: 'last'` olmadan MySQL/Prisma bunu EN KUCUK deger sayardi)
+      // saatli sunumlarin ONUNE gecmesini engeller.
+      const prisma = createFakePrisma();
+      const service = new MobileService(prisma as never);
+
+      await service.getProgram('congress-1', {});
+
+      const call = lastCallArg<{
+        select: {
+          presentations: { orderBy: unknown };
+        };
+      }>(prisma.session.findMany);
+      expect(call.select.presentations.orderBy).toEqual([
+        { startTime: { sort: 'asc', nulls: 'last' } },
+        { displayOrder: 'asc' },
+      ]);
+    });
+  });
+
+  describe('getProgramDays', () => {
+    it('her gun etiketi icin ILK oturumun baslangic tarihinden turetilmis date alani doner', async () => {
+      // Faz 10: `day.label` kanonik semada opsiyonel (bkz. docs/decisions.md
+      // "Faz 4d") - bu yuzden goruntulenen tarih HER ZAMAN gercek
+      // `startTime`den hesaplanir, uretilmis etikete guvenilmez. NOT: mobil
+      // istemci bu ucu cagirmiyor (bkz. mobile.service.ts yorumu), ama
+      // baska bir istemci icin dogru kalmali.
+      const prisma = createFakePrisma();
+      const service = new MobileService(prisma as never);
+      prisma.session.findMany.mockResolvedValue([
+        { dayLabel: '1. Gün', startTime: new Date('2026-09-10T06:00:00Z') },
+        { dayLabel: '1. Gün', startTime: new Date('2026-09-10T07:00:00Z') },
+        { dayLabel: '2. Gün', startTime: new Date('2026-09-11T06:00:00Z') },
+      ]);
+
+      const days = await service.getProgramDays('congress-1');
+
+      expect(days).toEqual([
+        { label: '1. Gün', date: '2026-09-10' },
+        { label: '2. Gün', date: '2026-09-11' },
+      ]);
+    });
   });
 
   describe('getVenues', () => {

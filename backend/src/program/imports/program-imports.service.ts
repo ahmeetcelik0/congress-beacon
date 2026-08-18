@@ -726,6 +726,13 @@ export class ProgramImportsService {
             keywords: sessionRow.keywords,
             titleEn: sessionRow.titleEn,
             series: sessionRow.series,
+            // Faz 10 BUG duzeltmesi: staging'deki dosya sirasi
+            // (rowOrder) buraya YAZILMIYORDU, tum oturumlar varsayilan
+            // displayOrder=0 ile olusuyordu. Sessions zaten `startTime`
+            // ile de siralaniyor (bkz. mobile.service.ts getProgram),
+            // bu yalnizca ayni saatte baslayan oturumlar icin sabit bir
+            // ikincil siralama saglar.
+            displayOrder: sessionRow.rowOrder,
           },
         });
         createdSessions++;
@@ -761,6 +768,13 @@ export class ProgramImportsService {
               endTime: presentationRow.endTime,
               titleEn: presentationRow.titleEn,
               code: presentationRow.code,
+              // Faz 10 BUG duzeltmesi (ana neden buradaydi): staging'deki
+              // `ProgramImportPresentation.rowOrder` (oturum icinde dosya
+              // sirasi) canliya YAZILMIYORDU - tum sunumlar varsayilan
+              // displayOrder=0 ile olusuyor, mobil `orderBy:
+              // displayOrder asc` MySQL'in tanimsiz donus sirasina
+              // dusuyordu (bkz. docs/decisions.md "Faz 10").
+              displayOrder: presentationRow.rowOrder,
             },
           });
           createdPresentations++;

@@ -59,27 +59,40 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       );
     },
     routes: [
-      GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
+      GoRoute(
+        path: '/splash',
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: SplashPage()),
+      ),
       GoRoute(
         path: '/permission',
-        builder: (context, state) => const PermissionGatePage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: PermissionGatePage()),
       ),
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/login',
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: LoginPage()),
+      ),
       GoRoute(
         path: '/register',
-        builder: (context, state) => const RegisterPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: RegisterPage()),
       ),
       GoRoute(
         path: '/forgot-password',
-        builder: (context, state) => const ForgotPasswordPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: ForgotPasswordPage()),
       ),
       GoRoute(
         path: '/change-password',
-        builder: (context, state) => const ChangePasswordPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: ChangePasswordPage()),
       ),
       GoRoute(
         path: '/select-congress',
-        builder: (context, state) => const SelectCongressPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: SelectCongressPage()),
       ),
       // Icerik alt ekranlari (Faz 7) - BILEREK ShellRoute DISINDA: tam
       // ekran + geri tusuyla acilirlar, sekme cubugu/izin seridi
@@ -87,37 +100,56 @@ final goRouterProvider = Provider<GoRouter>((ref) {
       // kurulmus desen).
       GoRoute(
         path: '/announcements',
-        builder: (context, state) => const AnnouncementsPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: AnnouncementsPage()),
       ),
       GoRoute(
         path: '/sponsors',
-        builder: (context, state) => const SponsorsPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: SponsorsPage()),
       ),
       GoRoute(
         path: '/speakers',
-        builder: (context, state) => const SpeakersPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: SpeakersPage()),
       ),
-      GoRoute(path: '/venues', builder: (context, state) => const VenuesPage()),
+      GoRoute(
+        path: '/venues',
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: VenuesPage()),
+      ),
       GoRoute(
         path: '/info-sections',
-        builder: (context, state) => const InfoSectionsPage(),
+        pageBuilder: (context, state) =>
+            const NoTransitionPage(child: InfoSectionsPage()),
       ),
       GoRoute(
         path: '/session/:id',
-        builder: (context, state) =>
-            SessionDetailPage(sessionId: state.pathParameters['id']!),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: SessionDetailPage(sessionId: state.pathParameters['id']!),
+        ),
       ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
-          GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+          // Faz 10: alt sekmeler ARASINDA da kayma animasyonu OLMASIN diye
+          // (bkz. docs/decisions.md "Faz 10") - `builder:` yerine
+          // `pageBuilder:` ile `NoTransitionPage` kullanilir (go_router'in
+          // kendi sagladigi, animasyonsuz `CustomTransitionPage` varyanti).
+          GoRoute(
+            path: '/home',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: HomePage()),
+          ),
           GoRoute(
             path: '/program',
-            builder: (context, state) => const ProgramPage(),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProgramPage()),
           ),
           GoRoute(
             path: '/profile',
-            builder: (context, state) => const ProfilePage(),
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProfilePage()),
           ),
         ],
       ),

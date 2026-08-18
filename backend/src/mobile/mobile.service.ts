@@ -35,6 +35,18 @@ const MOBILE_PRESENTATION_SELECT = {
   },
 } as const;
 
+// Faz 10: savunma derinligi - onay akisindaki `displayOrder` yazim
+// hatasi (bkz. docs/decisions.md "Faz 10") duzeltildi, ama sorgu YINE DE
+// `startTime`i birincil siralama anahtari yapar: dolu `startTime`i olan
+// sunumlar saatlerine gore, bos olanlar dosya sirasina (`displayOrder`)
+// gore siralanir. `nulls: 'last'` olmadan MySQL/Prisma NULL'lari EN
+// KUCUK deger sayip basa alirdi - bu, saat bilgisi olmayan bir sunumun
+// (ör. "Tartisma") saatli sunumlarin ONUNE gecmesine yol acardi.
+const MOBILE_PRESENTATION_ORDER_BY = [
+  { startTime: { sort: 'asc' as const, nulls: 'last' as const } },
+  { displayOrder: 'asc' as const },
+];
+
 const MOBILE_SESSION_SELECT = {
   id: true,
   hallId: true,
@@ -45,13 +57,18 @@ const MOBILE_SESSION_SELECT = {
   sessionType: true,
   dayLabel: true,
   keywords: true,
+  // Faz 10: Faz 4d'de eklenen `series` alani ilk kez mobile'a acildi -
+  // dolu oldugunda program ekranindaki oturum kartinda kucuk bir ust
+  // etiket olarak gosterilir (bkz. program_page.dart, docs/decisions.md
+  // "Faz 10").
+  series: true,
   hall: { select: { id: true, name: true } },
   roles: {
     orderBy: { displayOrder: 'asc' as const },
     select: MOBILE_PROGRAM_ROLE_SELECT,
   },
   presentations: {
-    orderBy: { displayOrder: 'asc' as const },
+    orderBy: MOBILE_PRESENTATION_ORDER_BY,
     select: MOBILE_PRESENTATION_SELECT,
   },
 } as const;
@@ -276,20 +293,38 @@ export class MobileService {
   // siralamayla yapmak yerine, tum oturumlari zaten hafif olan (yalnizca 2
   // alan) bir sorguyla zaman sirasiyla cekip ILK GORULEN sirayla JS'te
   // dedup edilir - hem basit hem dogru.
-  async getProgramDays(congressId: string): Promise<string[]> {
+  //
+  // Faz 10: NOT - mobil uygulama bu ucu CAGIRMAZ (bkz. mobile/lib/core/
+  // network/api_endpoints.dart'daki BILEREK yorum, Faz 7'de gercek
+  // cihazda yakalanan cevrimdisi soguk-baslangic hatasi). Gun butonlari
+  // mobilde `/mobile/program`in zaten KALICI onbelleklenmis tam liste-
+  // sinden turetilir. Bu uc yine de tutarlilik icin `date` alani
+  // eklenerek guncellenir (baska bir istemci ileride kullanabilir),
+  // ama mobil tarafta KULLANILMAZ.
+  async getProgramDays(
+    congressId: string,
+  ): Promise<{ label: string; date: string }[]> {
     const sessions = await this.prisma.session.findMany({
       where: { congressId, dayLabel: { not: null } },
-      select: { dayLabel: true },
+      select: { dayLabel: true, startTime: true },
       orderBy: { startTime: 'asc' },
     });
 
     const seen = new Set<string>();
-    const days: string[] = [];
+    const days: { label: string; date: string }[] = [];
     for (const session of sessions) {
       const label = session.dayLabel;
       if (label && !seen.has(label)) {
         seen.add(label);
-        days.push(label);
+        days.push({
+          label,
+          // Gunun takvim tarihi, o etiketin ILK oturumunun baslangic
+          // saatinden turetilir - kanonik semada `day.date` zorunlu ama
+          // `day.label` opsiyonel oldugu icin (bkz. docs/decisions.md
+          // "Faz 4d"), gercek tarih HER ZAMAN bundan hesaplanir, uretilmis
+          // etikete guvenilmez.
+          date: session.startTime.toISOString().slice(0, 10),
+        });
       }
     }
     return days;

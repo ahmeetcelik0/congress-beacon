@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthService, JwtPayload } from './auth.service';
@@ -127,12 +128,23 @@ function createFakePrisma(
         const matched = registrations.filter(
           (r) => r.userId === where.userId && r.isActive === where.isActive,
         );
-        return Promise.resolve(
-          matched.map((r) => ({
-            ...r,
-            congress: congressMap.get(r.congressId),
-          })),
-        );
+        const withCongress = matched.map((r) => ({
+          ...r,
+          congress: congressMap.get(r.congressId),
+        }));
+        // Gercek Prisma `orderBy: { congress: { startDate: { sort:
+        // 'desc', nulls: 'last' } } }` davranisini taklit eder (bkz.
+        // auth.service.ts, Faz 10) - null startDate'ler HER ZAMAN sona
+        // duser, geri kalani tarihe gore GUNCELDEN ESKIYE siralanir.
+        withCongress.sort((a, b) => {
+          const aTime = a.congress?.startDate?.getTime();
+          const bTime = b.congress?.startDate?.getTime();
+          if (aTime === undefined && bTime === undefined) return 0;
+          if (aTime === undefined) return 1;
+          if (bTime === undefined) return -1;
+          return bTime - aTime;
+        });
+        return Promise.resolve(withCongress);
       },
       findFirst: ({
         where,
@@ -265,6 +277,45 @@ describe('AuthService', () => {
       ).rejects.toBeInstanceOf(NotFoundException);
     });
 
+    it('e-posta gonderimi basarisiz olursa 503 doner VE kullanicinin sifresi DEGISTIRILMEZ', async () => {
+      // Faz 10: eski sirada (once DB guncelle, sonra gonder) SMTP hatasi
+      // kullaniciyi KILITLIYORDU - eski sifre gecersiz kilinmis ama yeni kod
+      // hic ULASMAMIS oluyordu. Artik gonderim ONCE denenir, basarisiz
+      // olursa DB'ye HIC dokunulmaz (bkz. auth.service.ts, docs/decisions.md
+      // "Faz 10").
+      const user = makeUser({
+        email: 'fatma@example.com',
+        phone: '+905324444444',
+      });
+      const originalPasswordHash = user.passwordHash;
+      const { prisma, users } = createFakePrisma(
+        [user],
+        [
+          {
+            id: 'reg-1',
+            userId: user.id,
+            congressId: 'cong-1',
+            isActive: true,
+            registeredAt: new Date(),
+          },
+        ],
+        [],
+      );
+      const failingMailSender = {
+        sendVerificationCode: () =>
+          Promise.reject(new Error('SMTP baglantisi kurulamadi')),
+      };
+      const service = buildService(prisma, failingMailSender);
+
+      await expect(
+        service.registerRequest({ emailOrPhone: 'fatma@example.com' }),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+
+      const stillUser = users.get(user.id)!;
+      expect(stillUser.passwordHash).toBe(originalPasswordHash);
+      expect(stillUser.mustChangePassword).toBe(false);
+    });
+
     it('kullanicinin e-postasi yoksa 409 doner', async () => {
       const user = makeUser({ email: null, phone: '+905323333333' });
       const { prisma } = createFakePrisma(
@@ -344,6 +395,84 @@ describe('AuthService', () => {
       expect(payload.activeCongressId).toBeNull();
 
       expect(users.get(user.id)!.lastLoginAt).not.toBeNull();
+    });
+
+    it('birden fazla kongre kayitliysa kongre BASLANGIC tarihine gore GUNCELDEN ESKIYE siralar, tarihsiz kongre en sona duser', async () => {
+      // Faz 10: onceden `registeredAt` (kayit tarihi) DESC kullaniliyordu -
+      // kullanicinin EN SON kayit oldugu kongre en ustte cikiyordu, bu da
+      // kongrenin kendi tarihiyle ILGISIZDI (bkz. docs/decisions.md
+      // "Faz 10"). Kasitli olarak kayit sirasini (registeredAt) ve
+      // startDate sirasini BIRBIRINDEN FARKLI kurguluyoruz ki eski
+      // (registeredAt bazli) davranisa donulmus olsa test YAKALASIN.
+      const passwordHash = await hash('Test1234!', 10);
+      const user = makeUser({
+        email: 'ali@example.com',
+        passwordHash,
+        mustChangePassword: false,
+      });
+      const congresses: FakeCongress[] = [
+        {
+          id: 'cong-eski',
+          name: 'Eski Kongre 2025',
+          code: 'ESKI',
+          startDate: new Date('2025-03-01'),
+          endDate: new Date('2025-03-03'),
+        },
+        {
+          id: 'cong-tarihsiz',
+          name: 'Tarihsiz Kongre',
+          code: 'TARIHSIZ',
+          startDate: null,
+          endDate: null,
+        },
+        {
+          id: 'cong-yeni',
+          name: 'Yeni Kongre 2026',
+          code: 'YENI',
+          startDate: new Date('2026-09-10'),
+          endDate: new Date('2026-09-12'),
+        },
+      ];
+      // Kayit sirasi (registeredAt) BILEREK startDate sirasiyla TERS -
+      // en ONCE kayit olunan en YENI kongre (cong-yeni), en SON kayit
+      // olunan en ESKI kongre (cong-eski).
+      const registrations: FakeRegistration[] = [
+        {
+          id: 'reg-yeni',
+          userId: user.id,
+          congressId: 'cong-yeni',
+          isActive: true,
+          registeredAt: new Date('2026-01-01'),
+        },
+        {
+          id: 'reg-tarihsiz',
+          userId: user.id,
+          congressId: 'cong-tarihsiz',
+          isActive: true,
+          registeredAt: new Date('2026-01-02'),
+        },
+        {
+          id: 'reg-eski',
+          userId: user.id,
+          congressId: 'cong-eski',
+          isActive: true,
+          registeredAt: new Date('2026-01-03'),
+        },
+      ];
+      const { prisma } = createFakePrisma([user], registrations, congresses);
+      const { sender } = createFakeMailSender();
+      const service = buildService(prisma, sender);
+
+      const result = await service.login({
+        emailOrPhone: 'ali@example.com',
+        password: 'Test1234!',
+      });
+
+      expect(result.congresses.map((c) => c.id)).toEqual([
+        'cong-yeni',
+        'cong-eski',
+        'cong-tarihsiz',
+      ]);
     });
 
     it('yanlis sifreyle 401 doner', async () => {
