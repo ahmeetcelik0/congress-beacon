@@ -44,6 +44,26 @@ services:
       REDIS_URL: redis://redis:6379
       API_PREFIX: api
       PORT: 3001
+      # Asagidaki degiskenler oncesinde .env.prod'da TANIMLIYDI ama bu
+      # servise HIC GECIRILMIYORDU - process.env.X okuyan kod container
+      # icinde daima bos gorup ilgili ozelligi (e-posta/push/LLM cikarimi/
+      # mutlak gorsel URL'leri) sessizce devre disi birakiyordu, hicbir
+      # hata vermeden (bkz. docs/KURULUM.md "Onemli" notu, docs/KARARLAR.md
+      # "Prod hazirlik"). `${VAR}` bos ise Docker Compose bunu container'a
+      # BOS STRING olarak geçirir - kod tarafi zaten bos/tanimsiz stringi
+      # "yapilandirilmamis" sayacak sekilde yazildigi icin bu davranis
+      # NIYET EDILEN "zarif dusme" ile birebir tutarlidir.
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      MAIL_FROM: ${MAIL_FROM}
+      MAIL_REPLY_TO: ${MAIL_REPLY_TO}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      ANTHROPIC_MAX_OUTPUT_TOKENS: ${ANTHROPIC_MAX_OUTPUT_TOKENS}
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL}
+      FIREBASE_SERVICE_ACCOUNT_JSON: ${FIREBASE_SERVICE_ACCOUNT_JSON}
     # Yuklenen gorseller (Faz 3, backend/src/uploads) konteyner icinde
     # /app/uploads'a yaziliyor (Dockerfile WORKDIR /app). Bu volume OLMADAN
     # her `up -d --build backend` (yeniden deploy) konteyneri SIFIRDAN

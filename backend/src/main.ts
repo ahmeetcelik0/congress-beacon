@@ -3,6 +3,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { UPLOADS_ROOT } from './uploads/uploads.service';
+import { logStartupConfigReport } from './common/startup-config-report';
 
 async function bootstrap() {
   // Faz 8'de gercek cihazda HTTP 413 alindi: Express'in varsayilan JSON govde
@@ -45,6 +46,7 @@ async function bootstrap() {
       transform: true,
     }),
   );
+  logStartupConfigReport();
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

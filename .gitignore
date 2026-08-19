@@ -35,6 +35,10 @@ coverage/
 # Ajan hafıza dosyaları (agent-memory) - hicbir yerde commit edilmemeli
 **/.claude/agent-memory/
 
+# Baska bir AI aracinin (Codex CLI) ajan tanimlari - .claude/agents/ ile
+# ayni ruhta, kisisel/arac-ozel yapilandirma, repo icin gerekli degil.
+/.codex/
+
 # Yerel ekran görüntüleri - GitHub'a asla pushlanmayacak
 /ekranGörüntüleri/
 
@@ -54,3 +58,9 @@ backend/uploads/
 /docs/33-ulusal-uygulamali-girisimsel-kardiyoloji-kongresi-programi.json
 /docs/test-verileri-2026-07-21.xlsx
 /docs/test2-veri-analizi-2026-07-23.xlsx
+
+# Firebase servis hesabi JSON'u - Faz 9 kurulumunda gecici olarak docs/'a
+# konulup elle silinmisti (repoya hic girmedi). Genel desen: benzer bir
+# indirme tekrar buraya dusarse yanlislikla commit edilmesin.
+/docs/*firebase*adminsdk*.json
+/docs/*service-account*.json
