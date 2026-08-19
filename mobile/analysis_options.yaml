@@ -9,6 +9,18 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+# Faz 9: `firebase_core`/`firebase_messaging` macOS hedefi icin Swift
+# Package Manager kaynaklarini `build/macos/SourcePackages/...` altina
+# VENDOR EDIYOR - bu, o paketlerin KENDI test suite'lerini (mockito'ya
+# bagimli, bu projenin bir bagimliligi DEGIL) de icine aliyor ve
+# `flutter analyze` bunlari YANLISLIKLA projenin bir parcasi sanip
+# tarıyordu (176 sahte hata). `build/` zaten uretilen/gecici bir dizin -
+# analiz disi birakilmasi dogru cozum, `flutter clean` bile bunu
+# ONLEMEZ (yeniden calistirmada tekrar olusuyor).
+analyzer:
+  exclude:
+    - build/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`

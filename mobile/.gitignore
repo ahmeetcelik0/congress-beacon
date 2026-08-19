@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Faz 9 - push bildirimleri (FCM). Proje kimlik bilgisi icerir, ASLA commit
+# edilmez (bkz. Faz 9 talimati onkosul §3).
+ios/Runner/GoogleService-Info.plist
+android/app/google-services.json

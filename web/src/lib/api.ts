@@ -6,6 +6,11 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    // Backend'in mesaj disinda ek yapisal veri dondurdugu hatalar icin (ör.
+    // program-imports approve: `{ message, sessions: [...] }` - hangi
+    // oturumlarda salon eksik oldugunu listeler). Cogu cagiran bunu yok
+    // sayar, sadece `message`i kullanir.
+    public details?: unknown,
   ) {
     super(message);
   }
@@ -14,11 +19,18 @@ export class ApiError extends Error {
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await getAdminToken();
 
+  // Dosya yukleme (katilimci Excel/CSV importu) icin `body` bir FormData
+  // olabilir - bu durumda 'Content-Type' ELLE eklenmez: tarayici/fetch
+  // multipart boundary'sini kendisi uretip header'i otomatik ekler. Elle
+  // 'application/json' eklersek backend govdeyi hic parse edemez. JSON
+  // govdeli tum diger cagrilar (buyuk cogunluk) davranis olarak AYNEN korunur.
+  const isFormData = typeof FormData !== 'undefined' && init?.body instanceof FormData;
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     cache: 'no-store',
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -26,7 +38,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const body = await response.json().catch(() => null);
-    throw new ApiError(body?.message ?? `İstek başarısız (${response.status})`, response.status);
+    throw new ApiError(body?.message ?? `İstek başarısız (${response.status})`, response.status, body);
   }
 
   if (response.status === 204) {
@@ -59,6 +71,14 @@ export type Congress = {
   observationIntervalSeconds: number;
   createdAt: string;
   updatedAt: string;
+  // Kongre içerik yönetimi (mobil ana ekran kart/tanıtım alanları) — hepsi
+  // opsiyonel, PATCH ile ayrı ayrı güncellenebilir (bkz. `updateCongress`).
+  fullName: string | null;
+  description: string | null;
+  coverImageUrl: string | null;
+  websiteUrl: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
 } & AlgorithmTuning;
 
 export type Hall = {
@@ -105,18 +125,261 @@ export type HallOccupancy = {
   count: number;
 };
 
+// ===== Bilimsel program modeli (Faz 4a) =====
+// Backend sozlesmesi `backend/src/session/**` ve `backend/src/program/**`
+// altinda dogrulandi (curl ile uctan uca test edildi, `feature/bilimsel-
+// program-modeli` dali) - burada birebir eslenir.
+
+export type Presentation = {
+  id: string;
+  sessionId: string;
+  title: string;
+  startTime: string | null;
+  endTime: string | null;
+  abstract: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  roles: ProgramRole[];
+};
+
+export type ProgramRoleType = 'MODERATOR' | 'SPEAKER' | 'DISCUSSANT';
+export type RoleMatchStatus = 'MATCHED' | 'AMBIGUOUS' | 'UNMATCHED' | 'MANUAL' | 'IGNORED';
+
+export type ProgramRoleUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+};
+
+export type ProgramRole = {
+  id: string;
+  sessionId: string | null;
+  presentationId: string | null;
+  type: ProgramRoleType;
+  // Yetkiliye HER ZAMAN gosterilecek ham isim (unvan temizlenmemis) -
+  // eslestirme icin kullanilan `searchName` DEGIL.
+  rawName: string;
+  searchName: string;
+  userId: string | null;
+  matchStatus: RoleMatchStatus;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  user: ProgramRoleUser | null;
+};
+
+export type ProgramRoleMatch = ProgramRole & {
+  session: { id: string; title: string; congressId: string } | null;
+  presentation: { id: string; title: string; session: { id: string; title: string; congressId: string } } | null;
+};
+
+export type ProgramRoleMatchesPage = {
+  items: ProgramRoleMatch[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type RematchSummary = {
+  matched: number;
+  ambiguous: number;
+  unmatched: number;
+  skipped: number;
+};
+
+// Faz 4c §4: onay sonrasi gorunurluk raporu - User kaydi OTOMATIK
+// OLUSTURULMAZ (bkz. `getUnmatchedProgramRoleNames` yorumu), bu yuzden ayni
+// kisinin (searchName) birden fazla oturum/sunumdaki gorunumleri TEK bir
+// grupta toplanir.
+export type UnmatchedNameOccurrence = {
+  roleId: string;
+  type: ProgramRoleType;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  presentationId: string | null;
+  presentationTitle: string | null;
+};
+
+export type UnmatchedNameGroup = {
+  searchName: string;
+  rawName: string;
+  occurrences: UnmatchedNameOccurrence[];
+};
+
+export type ProgramRoleCandidate = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+};
+
 export type Session = {
   id: string;
   congressId: string;
   hallId: string;
   title: string;
+  // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
+  // eklenir (bkz. asagisi) - yeni formda kullanilmaz, yalnizca eski veri icin
+  // korunur.
   speaker: string | null;
   startTime: string;
   endTime: string;
   description: string | null;
+  // --- iki seviyeli bilimsel program alanlari ---
+  sessionType: string | null;
+  dayLabel: string | null;
+  keywords: string | null;
+  displayOrder: number;
+  presentations: Presentation[];
+  roles: ProgramRole[];
   createdAt: string;
   updatedAt: string;
   hall?: Hall;
+};
+
+// ===== Program dosyası içe aktarma / staging (Faz 4b) =====
+// Backend sozlesmesi `backend/src/program/imports/**` altinda dogrulandi
+// (controller + service + `shared/openapi.yaml` uctan uca okundu) - burada
+// birebir eslenir. PDF/Excel (100-150 sayfa) Claude API ile yapisal JSON'a
+// cevrilip bu STAGING tablolarina yazilir; hicbir sey onaylanmadan canli
+// Session/Presentation/ProgramRole tablolarina YAZILMAZ (bkz.
+// `approveProgramImport`).
+
+export type ProgramSourceType = 'PDF' | 'EXCEL' | 'JSON';
+export type ProgramImportStatus =
+  | 'PENDING'
+  | 'EXTRACTING'
+  | 'DRAFT'
+  | 'APPROVED'
+  | 'CANCELLED'
+  | 'FAILED';
+// Pratikte yalnizca NEW/INVALID/EXCLUDED uretilir (MATCHED/DUPLICATE bu
+// modelde KULLANILMAZ - tip, backend enum'unu tam sozlesme icin birebir
+// yansitir).
+export type ProgramImportRowStatus = 'NEW' | 'MATCHED' | 'DUPLICATE' | 'INVALID' | 'EXCLUDED';
+
+// Para HARCAMAYAN tek uc nokta (yalnizca token sayar) - gercek cikarim
+// baslamadan ONCE gosterilir, kullanicinin ACIK onayi olmadan
+// `createProgramImport` cagrilmaz (Anthropic kredisi sinirli, bkz. gorev
+// tanimi).
+export type ProgramImportEstimate = {
+  model: string;
+  inputTokens: number;
+  // Girdi token sayisina dayali KABA bir tahmin - panelde HER ZAMAN "tahmini"
+  // etiketiyle sunulur, kesin bir taahhut degildir.
+  estimatedOutputTokens: number;
+  estimatedCostUsd: number | null;
+  // Yalnizca PDF icin best-effort sayim, Excel'de her zaman null.
+  pageCount: number | null;
+};
+
+export type ProgramImport = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  sourceType: ProgramSourceType;
+  status: ProgramImportStatus;
+  model: string | null;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostUsd: number | null;
+  pageCount: number | null;
+  errorMessage: string | null;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  adminUser?: { name: string; email: string };
+};
+
+export type ProgramImportRole = {
+  id: string;
+  importSessionId: string | null;
+  importPresentationId: string | null;
+  type: ProgramRoleType;
+  rawName: string;
+  searchName: string;
+  previewMatchStatus: RoleMatchStatus;
+  previewUserId: string | null;
+};
+
+export type ProgramImportPresentation = {
+  id: string;
+  importSessionId: string;
+  rowOrder: number;
+  title: string | null;
+  rawStartTime: string | null;
+  rawEndTime: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  abstract: string | null;
+  // Sunum/rol seviyesinde ayrica bir `status` alani YOK, yalnizca bu - dolu
+  // ise satir islenebilir ama dikkat gerektirir (sari gosterim).
+  warning: string | null;
+  roles: ProgramImportRole[];
+};
+
+export type ProgramImportSession = {
+  id: string;
+  importId: string;
+  rowOrder: number;
+  title: string | null;
+  rawHallName: string | null;
+  hallId: string | null;
+  dayLabel: string | null;
+  rawDate: string | null;
+  rawStartTime: string | null;
+  rawEndTime: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  sessionType: string | null;
+  keywords: string | null;
+  status: ProgramImportRowStatus;
+  // Dolu ise satir INVALID'i aciklar (kirmizi gosterim, ornegin "Baslik
+  // zorunludur").
+  message: string | null;
+  // Dolu ise satir islenebilir (status NEW) ama dikkat gerektirir (sari
+  // gosterim, ornegin "Salon secilmedi").
+  warning: string | null;
+  presentations: ProgramImportPresentation[];
+  roles: ProgramImportRole[];
+};
+
+export type ProgramImportDetail = {
+  import: ProgramImport;
+  sessions: ProgramImportSession[];
+  total: number;
+  page: number;
+  pageSize: number;
+  // Anahtarlar sirasiyla ProgramImportRowStatus/RoleMatchStatus degerleridir;
+  // yalnizca importun TUMU uzerinden (sayfalamadan BAGIMSIZ) hesaplanir.
+  summary: {
+    sessionsByStatus: Record<string, number>;
+    rolesByMatchStatus: Record<string, number>;
+    presentationCount: number;
+    // Faz 4c: onayda otomatik olusturulacak salon adaylari (farkli yazim
+    // varyasyonlari backend'de zaten TEK adaya birlestirilmis) - yalnizca
+    // status=DRAFT iken anlamlidir.
+    hallsToCreate: string[];
+  };
+};
+
+export type ProgramImportApproveSummary = {
+  createdSessions: number;
+  createdPresentations: number;
+  createdRoles: number;
+  // Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi (Presentation.title
+  // semada NOT NULL, bkz. backend yorumu).
+  skippedPresentations: number;
+  // Faz 4c: onayda otomatik olusturulan salonlar - bunlara HENUZ beacon
+  // atanmamistir, panelde belirgin bir uyari gerekir (bkz. `ApprovePanel`).
+  createdHalls: { id: string; name: string }[];
 };
 
 export type HallDurationStats = {
@@ -144,6 +407,11 @@ export type DataQualityReport = {
   matchedObservations: number;
   unmatchedObservations: number;
   matchedRatio: number | null;
+  // Faz 6.2: "veri geliyor ama hiçbir beacon'a bağlanmıyor" durumunun
+  // sebebini doğrudan gösterir (bkz. backend `reports.service.ts`).
+  topUnmatchedBeacons: { uuid: string; major: number; minor: number; count: number }[];
+  mismatchedBeaconCount: number;
+  consistencyWarning: string | null;
 };
 
 export type BeaconHealthItem = {
@@ -157,6 +425,34 @@ export type BeaconHealthItem = {
   lastSeenAt: string | null;
   averageRssi: number | null;
   usersSeenCount: number;
+};
+
+// Faz 9: kongre bazinda gonderilen/acilan bildirim ozeti + son gonderimler
+// listesi. Backend sozlesmesi `backend/src/reports/reports.service.ts`
+// (`getNotificationSummary`) ve `shared/openapi.yaml` (`NotificationSummary`/
+// `RecentNotification`) altinda dogrulandi - burada birebir eslenir.
+export type NotificationDeliveryStatus = 'SENT' | 'FAILED' | 'SKIPPED';
+
+export type RecentNotification = {
+  id: string;
+  title: string;
+  body: string;
+  status: NotificationDeliveryStatus;
+  sentAt: string;
+  openedAt: string | null;
+  userName: string;
+};
+
+export type NotificationSummary = {
+  sentCount: number;
+  openedCount: number;
+  failedCount: number;
+  // Saatlik gonderim sinirini asip ATLANAN bildirim sayisi.
+  skippedCount: number;
+  openedRatio: number | null;
+  // En yeni 20 kayit, en yeniden en eskiye - sayfalama YOK (bkz. backend
+  // `RECENT_NOTIFICATIONS_LIMIT`).
+  recent: RecentNotification[];
 };
 
 export type HallVisitSummary = {
@@ -307,6 +603,236 @@ export type ObservationPage = {
   pageSize: number;
 };
 
+// ===== Katılımcı yönetimi (Faz 2) =====
+// Backend sozlesmesi `backend/src/registrations/**` altinda tam olarak
+// dogrulanmis (curl ile uctan uca test edilmis) - burada birebir eslenir.
+
+export type RegistrationSource = 'API' | 'IMPORT' | 'MANUAL' | 'PILOT';
+
+export type CongressRegistrationListItem = {
+  registrationId: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  // E.164 normalize edilmis telefon. Normalize edilemeyen numaralarda null
+  // olur ama `phoneRaw` her zaman doludur - panelde biri dolu her zaman
+  // gosterilmeli (bkz. registrations-table.tsx).
+  phone: string | null;
+  phoneRaw: string | null;
+  source: RegistrationSource;
+  isActive: boolean;
+  registeredAt: string;
+  hasPassword: boolean;
+  lastLoginAt: string | null;
+};
+
+export type CongressRegistrationPage = {
+  items: CongressRegistrationListItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+// POST/deactivate/reactivate ham CongressRegistration kaydini doner (liste
+// satiri SEKLINDE DEGIL) - panel bu donen degeri dogrudan goruntulemez,
+// basari/hata sinyali olarak kullanip listeyi yeniden ceker.
+export type CongressRegistrationRecord = {
+  id: string;
+  userId: string;
+  congressId: string;
+  source: RegistrationSource;
+  externalId: string | null;
+  isActive: boolean;
+  registeredAt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// PATCH /admin/registrations/:id ham User kaydini doner.
+export type UpdatedRegistrationUser = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  phone: string | null;
+  phoneRaw: string | null;
+  phoneLast4: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RegistrationImportCounts = {
+  new: number;
+  matched: number;
+  duplicate: number;
+  invalid: number;
+  warnings: number;
+};
+
+export type RegistrationImportUploadResult = {
+  importId: string;
+  totalRows: number;
+  counts: RegistrationImportCounts;
+  recognizedColumns: string[];
+  unrecognizedColumns: string[];
+};
+
+export type RegistrationImportStatus = 'DRAFT' | 'APPROVED' | 'CANCELLED';
+
+export type RegistrationImportListItem = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  status: RegistrationImportStatus;
+  totalRows: number;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  adminUser: { name: string; email: string };
+};
+
+// GET /admin/registrations/imports/:id icindeki `import` alani - liste
+// uc noktasindan farkli olarak `adminUser` ILISKISI GELMEZ.
+export type RegistrationImportRef = {
+  id: string;
+  congressId: string;
+  adminUserId: string;
+  fileName: string;
+  status: RegistrationImportStatus;
+  totalRows: number;
+  approvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RegistrationImportRowStatus = 'NEW' | 'MATCHED' | 'DUPLICATE' | 'INVALID' | 'EXCLUDED';
+
+export type RegistrationImportRow = {
+  id: string;
+  importId: string;
+  rowNumber: number;
+  rawFirstName: string | null;
+  rawLastName: string | null;
+  rawEmail: string | null;
+  rawPhone: string | null;
+  normalizedEmail: string | null;
+  normalizedPhone: string | null;
+  externalId: string | null;
+  status: RegistrationImportRowStatus;
+  // Dolu ise satir INVALID'i aciklar (kirmizi gosterim).
+  message: string | null;
+  // Dolu ise satir islenebilir ama dikkat gerektirir (sari gosterim).
+  warning: string | null;
+  matchedUserId: string | null;
+};
+
+export type RegistrationImportDetail = {
+  import: RegistrationImportRef;
+  rows: RegistrationImportRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  // Anahtarlar ImportRowStatus degerleridir; yalnizca o importta GORULEN
+  // durumlar icin anahtar olusur (ornegin hic DUPLICATE yoksa anahtar hic
+  // gelmeyebilir) - okurken `counts.NEW ?? 0` gibi guvenli erisim gerekir.
+  // Bu sayim SAYFALAMADAN BAGIMSIZ, importun TUMU uzerinden hesaplanir.
+  counts: Partial<Record<RegistrationImportRowStatus, number>>;
+};
+
+export type RegistrationImportApproveResult = {
+  createdUsers: number;
+  updatedUsers: number;
+  createdRegistrations: number;
+  skipped: number;
+};
+
+// ===== Kongre içerik yönetimi (Faz: kongre içerik yönetimi) =====
+// Backend sozlesmesi `backend/src/content/**` altinda tamamlanip test edildi
+// (`feature/kongre-icerik-yonetimi` dali) - burada birebir eslenir. Bes tur
+// de AYNI CRUD+reorder desenini izler (bkz. `api` nesnesindeki fonksiyonlar);
+// liste uc noktalari zaten `displayOrder`'a gore SIRALI doner (sponsors:
+// once tier sonra displayOrder; announcements: once isPinned sonra
+// publishedAt desc), panel tarafinda EKSTRA siralama YAPILMAZ.
+
+export type CongressInfoSection = {
+  id: string;
+  congressId: string;
+  title: string;
+  body: string;
+  displayOrder: number;
+  isPublished: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type VenueType = 'MAIN' | 'HOTEL';
+
+export type Venue = {
+  id: string;
+  congressId: string;
+  type: VenueType;
+  name: string;
+  address: string | null;
+  city: string | null;
+  phone: string | null;
+  websiteUrl: string | null;
+  mapUrl: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  description: string | null;
+  imageUrl: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type Announcement = {
+  id: string;
+  congressId: string;
+  title: string;
+  body: string;
+  isPinned: boolean;
+  // null = taslak, dolu = yayinda. Create/update DTO'sunda YOK - yalnizca
+  // `publishAnnouncement`/`unpublishAnnouncement` uc noktalariyla degisir.
+  publishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SponsorTier = 'PLATINUM' | 'GOLD' | 'SILVER' | 'BRONZE' | 'SUPPORTER';
+
+export type Sponsor = {
+  id: string;
+  congressId: string;
+  name: string;
+  tier: SponsorTier;
+  logoUrl: string | null;
+  websiteUrl: string | null;
+  description: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KeynoteSpeaker = {
+  id: string;
+  congressId: string;
+  fullName: string;
+  title: string | null;
+  institution: string | null;
+  country: string | null;
+  bio: string | null;
+  photoUrl: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UploadPurpose = 'cover' | 'venue' | 'sponsor' | 'speaker';
+
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -334,8 +860,27 @@ export const api = {
   }) => request<Congress>('/congresses', { method: 'POST', body: JSON.stringify(data) }),
   updateCongress: (
     id: string,
-    data: Partial<{ observationIntervalSeconds: number } & AlgorithmTuning>,
-  ) => request<Congress>(`/congresses/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    data: Partial<
+      { observationIntervalSeconds: number } & AlgorithmTuning & {
+        fullName: string;
+        description: string;
+        coverImageUrl: string;
+        websiteUrl: string;
+        contactEmail: string;
+        contactPhone: string;
+        // Faz 6.2: beaconUuid değişikliği, kongrede zaten beacon varsa
+        // onaysız 409 döner (bkz. backend `congress.service.ts`).
+        // migrateExistingBeacons: true, bu beacon'ların hepsinin uuid'sini
+        // de tek transaction'da yeni değerle günceller.
+        beaconUuid: string;
+        migrateExistingBeacons: boolean;
+      }
+    >,
+  ) =>
+    request<Congress & { beaconsUpdated?: number }>(`/congresses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
   deleteCongress: (id: string) => request<void>(`/congresses/${id}`, { method: 'DELETE' }),
 
   listHalls: (congressId: string) =>
@@ -358,7 +903,13 @@ export const api = {
     major: number;
     minor: number;
     label?: string;
-  }) => request<Beacon>('/beacons', { method: 'POST', body: JSON.stringify(data) }),
+  }) =>
+    // Faz 6.2: kongrenin beaconUuid'i bu istekle otomatik benimsendiyse
+    // (yalnızca o kongreye eklenen İLK beacon için) yanıt bunu belirtir.
+    request<Beacon & { congressBeaconUuidAutoSet: boolean }>('/beacons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   deleteBeacon: (id: string) => request<void>(`/beacons/${id}`, { method: 'DELETE' }),
 
   listActiveHallBeacons: (hallId: string) =>
@@ -412,6 +963,13 @@ export const api = {
   getBeaconHealthReport: (congressId: string) =>
     request<BeaconHealthItem[]>(`/reports/beacon-health${buildQuery({ congressId })}`),
 
+  getNotificationSummaryReport: (congressId: string) =>
+    request<NotificationSummary>(`/reports/notifications${buildQuery({ congressId })}`),
+
+  // `GET /sessions` sunumlari ve rolleri IC ICE doner, sunucuda zaten
+  // `dayLabel -> startTime -> displayOrder` sirali - panel EKSTRA siralama
+  // yapmaz, gun/salon filtresi istemci tarafinda uygulanir (bkz. sessions
+  // sayfasi gorev tanimi).
   listSessions: (congressId: string) =>
     request<Session[]>(`/sessions${buildQuery({ congressId })}`),
   createSession: (data: {
@@ -422,6 +980,9 @@ export const api = {
     startTime: string;
     endTime: string;
     description?: string;
+    sessionType?: string;
+    dayLabel?: string;
+    keywords?: string;
   }) => request<Session>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
   updateSession: (
     id: string,
@@ -432,7 +993,462 @@ export const api = {
       startTime: string;
       endTime: string;
       description: string;
+      sessionType: string;
+      dayLabel: string;
+      keywords: string;
     }>,
   ) => request<Session>(`/sessions/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSession: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
+  // Yalnizca GORUNEN (ornegin gun/salon filtresiyle filtrelenmis) listedeki
+  // id'leri gonder - sunucu SADECE gonderilen id'lerin displayOrder'ini 0'dan
+  // yeniden yazar, filtre disindaki oturumlara dokunmaz (bkz. api sozlesmesi).
+  reorderSessions: (ids: string[]) =>
+    request<void>('/sessions/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // ===== Sunumlar (bir oturumun ic ice sunum listesi) =====
+  // `GET /sessions` sunumlari zaten ic ice dondurdugu icin bu fonksiyon
+  // yalnizca create/update/delete/reorder sonrasi kullanilir, ilk yuklemede
+  // AYRICA cagrilmaz.
+  listPresentations: (sessionId: string) =>
+    request<Presentation[]>(`/admin/presentations${buildQuery({ sessionId })}`),
+  createPresentation: (data: {
+    sessionId: string;
+    title: string;
+    startTime?: string;
+    endTime?: string;
+    abstract?: string;
+  }) => request<Presentation>('/admin/presentations', { method: 'POST', body: JSON.stringify(data) }),
+  updatePresentation: (
+    id: string,
+    data: Partial<{ title: string; startTime: string; endTime: string; abstract: string }>,
+  ) =>
+    request<Presentation>(`/admin/presentations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deletePresentation: (id: string) => request<void>(`/admin/presentations/${id}`, { method: 'DELETE' }),
+  reorderPresentations: (ids: string[]) =>
+    request<void>('/admin/presentations/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // ===== Program rolleri (moderator/konusmaci/tartismaci + katilimci eslestirme) =====
+  createProgramRole: (data: {
+    sessionId?: string;
+    presentationId?: string;
+    type: ProgramRoleType;
+    rawName: string;
+  }) => request<ProgramRole>('/admin/program-roles', { method: 'POST', body: JSON.stringify(data) }),
+  updateProgramRole: (id: string, data: Partial<{ type: ProgramRoleType; rawName: string }>) =>
+    request<ProgramRole>(`/admin/program-roles/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProgramRole: (id: string) => request<void>(`/admin/program-roles/${id}`, { method: 'DELETE' }),
+  linkProgramRole: (id: string, userId: string) =>
+    request<ProgramRole>(`/admin/program-roles/${id}/link`, {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+  ignoreProgramRole: (id: string) =>
+    request<ProgramRole>(`/admin/program-roles/${id}/ignore`, { method: 'POST' }),
+  // MANUAL/IGNORED durumundaki roller asla degistirilmez (skipped sayisina
+  // girer) - yalnizca diger durumlar (ozellikle katilimci listesi sonradan
+  // guncellendigi icin artik eslesebilecek UNMATCHED kayitlar) yeniden hesaplanir.
+  rematchProgramRoles: (congressId: string) =>
+    request<RematchSummary>('/admin/program-roles/rematch', {
+      method: 'POST',
+      body: JSON.stringify({ congressId }),
+    }),
+  listProgramRoleMatches: (params: {
+    congressId: string;
+    status?: RoleMatchStatus;
+    page?: number;
+    pageSize?: number;
+  }) => request<ProgramRoleMatchesPage>(`/admin/program-roles/matches${buildQuery(params)}`),
+  // AMBIGUOUS'ta birebir isim eslesenler, UNMATCHED'te gevsek kelime-arama
+  // sonucu doner - iki durumda da otomatik atama YOK, yetkili elle secer.
+  getProgramRoleCandidates: (id: string) =>
+    request<ProgramRoleCandidate[]>(`/admin/program-roles/${id}/candidates`),
+  // Faz 4c §4: program isimlerinden User kaydi OTOMATIK OLUSTURULMAZ (e-posta
+  // yok - giris yapamaz, kongre kaydi olmaz, Faz 2'nin gercek katilimci
+  // listesiyle CARPISIP belirsiz eslesme uretebilir). Bunun yerine onay
+  // sonrasi gorunurluk raporu - katilimci sonradan elle eklenirse
+  // `rematchProgramRoles` bu isimleri otomatik yeniden eslestirir.
+  getUnmatchedProgramRoleNames: (congressId: string) =>
+    request<UnmatchedNameGroup[]>(
+      `/admin/program-roles/unmatched-names${buildQuery({ congressId })}`,
+    ),
+
+  // ===== Program dosyası içe aktarma / staging (Faz 4b) =====
+  // Dosya-yukleyen iki fonksiyon FormData kullanir - `request()` Content-Type
+  // header'ini FormData govdesinde ELLE eklemez (bkz. yukarisi,
+  // `uploadRegistrationImport` ile ayni desen).
+  estimateProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<ProgramImportEstimate>('/admin/program-imports/estimate', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  createProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<{ importId: string; status: ProgramImportStatus }>('/admin/program-imports', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  // Faz 4c: LLM cagrisi yok, maliyet tahmini adimi da yok - dosya secilir,
+  // dogrudan yuklenir. `congressId` govdeye DEGIL sorgu parametresine gider
+  // (govdenin TAMAMI ExtractionResult JSON'unun kendisi olabildigi icin,
+  // bkz. backend `createJsonImport`).
+  createJsonProgramImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('file', file);
+    return request<{ importId: string; status: ProgramImportStatus }>(
+      `/admin/program-imports/json${buildQuery({ congressId })}`,
+      { method: 'POST', body: formData },
+    );
+  },
+
+  getProgramImportJsonTemplate: () =>
+    request<unknown>('/admin/program-imports/template.json'),
+
+  excludeHallToCreate: (importId: string, hallName: string) =>
+    request<{ excludedSessionCount: number }>(
+      `/admin/program-imports/${importId}/halls-to-create/exclude`,
+      { method: 'POST', body: JSON.stringify({ hallName }) },
+    ),
+
+  listProgramImports: (congressId: string) =>
+    request<{ imports: ProgramImport[]; totalSpendUsd: number }>(
+      `/admin/program-imports${buildQuery({ congressId })}`,
+    ),
+
+  getProgramImport: (id: string, params: { page?: number; pageSize?: number } = {}) =>
+    request<ProgramImportDetail>(`/admin/program-imports/${id}${buildQuery(params)}`),
+
+  updateProgramImportSession: (
+    importId: string,
+    sessionId: string,
+    data: Partial<{
+      title: string;
+      hallId: string;
+      startTime: string;
+      endTime: string;
+      sessionType: string;
+      dayLabel: string;
+      keywords: string;
+    }>,
+  ) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // Kalici SILME DEGIL - satiri EXCLUDED yapar, geri alma uc noktasi yok.
+  excludeProgramImportSession: (importId: string, sessionId: string) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions/${sessionId}`, {
+      method: 'DELETE',
+    }),
+
+  createProgramImportSession: (
+    importId: string,
+    data: {
+      title: string;
+      hallId?: string;
+      startTime?: string;
+      endTime?: string;
+      sessionType?: string;
+      dayLabel?: string;
+      keywords?: string;
+    },
+  ) =>
+    request<ProgramImportSession>(`/admin/program-imports/${importId}/sessions`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateProgramImportPresentation: (
+    importId: string,
+    presentationId: string,
+    data: Partial<{ title: string; startTime: string; endTime: string }>,
+  ) =>
+    request<ProgramImportPresentation>(
+      `/admin/program-imports/${importId}/presentations/${presentationId}`,
+      { method: 'PATCH', body: JSON.stringify(data) },
+    ),
+
+  // KALICI silme - rolleri de cascade siler, geri alinamaz.
+  deleteProgramImportPresentation: (importId: string, presentationId: string) =>
+    request<{ deleted: true }>(
+      `/admin/program-imports/${importId}/presentations/${presentationId}`,
+      { method: 'DELETE' },
+    ),
+
+  createProgramImportPresentation: (
+    importId: string,
+    data: { importSessionId: string; title: string; startTime?: string; endTime?: string },
+  ) =>
+    request<ProgramImportPresentation>(`/admin/program-imports/${importId}/presentations`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // rawName duzeltilince searchName + previewMatchStatus/previewUserId
+  // backend'de OTOMATIK yeniden hesaplanir (tur DEGISTIRILEMEZ).
+  updateProgramImportRole: (importId: string, roleId: string, data: { rawName: string }) =>
+    request<ProgramImportRole>(`/admin/program-imports/${importId}/roles/${roleId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  // KALICI silme, geri alinamaz.
+  deleteProgramImportRole: (importId: string, roleId: string) =>
+    request<{ deleted: true }>(`/admin/program-imports/${importId}/roles/${roleId}`, {
+      method: 'DELETE',
+    }),
+
+  // importSessionId/importPresentationId'nin TAM OLARAK biri dolu olmali,
+  // ikisi de dolu/bos gelirse backend 400 doner.
+  createProgramImportRole: (
+    importId: string,
+    data: {
+      importSessionId?: string;
+      importPresentationId?: string;
+      type: ProgramRoleType;
+      rawName: string;
+    },
+  ) =>
+    request<ProgramImportRole>(`/admin/program-imports/${importId}/roles`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  approveProgramImport: (importId: string) =>
+    request<ProgramImportApproveSummary>(`/admin/program-imports/${importId}/approve`, {
+      method: 'POST',
+    }),
+
+  cancelProgramImport: (importId: string) =>
+    request<ProgramImport>(`/admin/program-imports/${importId}/cancel`, { method: 'POST' }),
+
+  // ===== Katılımcı yönetimi (Faz 2) =====
+  listRegistrations: (params: {
+    congressId: string;
+    search?: string;
+    source?: RegistrationSource;
+    isActive?: boolean;
+    page?: number;
+    pageSize?: number;
+  }) => request<CongressRegistrationPage>(`/admin/registrations${buildQuery(params)}`),
+
+  createRegistration: (data: {
+    congressId: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    phone?: string;
+  }) =>
+    request<CongressRegistrationRecord>('/admin/registrations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  // Alanlar PATCH semantigiyle - gonderilmeyen (undefined) alan degismez,
+  // gonderilen bos string ('') o alani BOSALTIR (bkz. update-registration.dto.ts
+  // yorumu). Cagiran taraf bir alani "dokunulmadi" birakmak istiyorsa o
+  // anahtari objeden TAMAMEN cikarmali, '' GONDERMEMELI.
+  updateRegistration: (
+    id: string,
+    data: Partial<{ firstName: string; lastName: string; email: string; phone: string }>,
+  ) =>
+    request<UpdatedRegistrationUser>(`/admin/registrations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  deactivateRegistration: (id: string) =>
+    request<CongressRegistrationRecord>(`/admin/registrations/${id}/deactivate`, { method: 'POST' }),
+  reactivateRegistration: (id: string) =>
+    request<CongressRegistrationRecord>(`/admin/registrations/${id}/reactivate`, { method: 'POST' }),
+
+  // multipart/form-data - `request()` FormData govdesini oldugu gibi gecirir,
+  // Content-Type header'ini ELLE eklemez (bkz. yukarisi).
+  uploadRegistrationImport: (congressId: string, file: File) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    formData.set('file', file);
+    return request<RegistrationImportUploadResult>('/admin/registrations/imports', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  listRegistrationImports: (congressId: string) =>
+    request<RegistrationImportListItem[]>(`/admin/registrations/imports${buildQuery({ congressId })}`),
+
+  getRegistrationImport: (
+    id: string,
+    params: { status?: RegistrationImportRowStatus; page?: number; pageSize?: number } = {},
+  ) => request<RegistrationImportDetail>(`/admin/registrations/imports/${id}${buildQuery(params)}`),
+
+  updateRegistrationImportRow: (
+    importId: string,
+    rowId: string,
+    data: Partial<{ firstName: string; lastName: string; email: string; phone: string }>,
+  ) =>
+    request<RegistrationImportRow>(`/admin/registrations/imports/${importId}/rows/${rowId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  excludeRegistrationImportRow: (importId: string, rowId: string) =>
+    request<RegistrationImportRow>(
+      `/admin/registrations/imports/${importId}/rows/${rowId}/exclude`,
+      { method: 'POST' },
+    ),
+
+  approveRegistrationImport: (importId: string) =>
+    request<RegistrationImportApproveResult>(`/admin/registrations/imports/${importId}/approve`, {
+      method: 'POST',
+    }),
+
+  cancelRegistrationImport: (importId: string) =>
+    request<RegistrationImportRef>(`/admin/registrations/imports/${importId}/cancel`, {
+      method: 'POST',
+    }),
+
+  // ===== Kongre içerik yönetimi =====
+  listInfoSections: (congressId: string) =>
+    request<CongressInfoSection[]>(`/admin/info-sections${buildQuery({ congressId })}`),
+  createInfoSection: (data: { congressId: string; title: string; body: string; isPublished?: boolean }) =>
+    request<CongressInfoSection>('/admin/info-sections', { method: 'POST', body: JSON.stringify(data) }),
+  updateInfoSection: (
+    id: string,
+    data: Partial<{ title: string; body: string; isPublished: boolean }>,
+  ) =>
+    request<CongressInfoSection>(`/admin/info-sections/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteInfoSection: (id: string) => request<void>(`/admin/info-sections/${id}`, { method: 'DELETE' }),
+  reorderInfoSections: (ids: string[]) =>
+    request<void>('/admin/info-sections/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listVenues: (congressId: string) => request<Venue[]>(`/admin/venues${buildQuery({ congressId })}`),
+  createVenue: (data: {
+    congressId: string;
+    name: string;
+    type?: VenueType;
+    address?: string;
+    city?: string;
+    phone?: string;
+    websiteUrl?: string;
+    mapUrl?: string;
+    latitude?: number;
+    longitude?: number;
+    description?: string;
+    imageUrl?: string;
+  }) => request<Venue>('/admin/venues', { method: 'POST', body: JSON.stringify(data) }),
+  updateVenue: (
+    id: string,
+    data: Partial<{
+      type: VenueType;
+      name: string;
+      address: string;
+      city: string;
+      phone: string;
+      websiteUrl: string;
+      mapUrl: string;
+      latitude: number;
+      longitude: number;
+      description: string;
+      imageUrl: string;
+    }>,
+  ) => request<Venue>(`/admin/venues/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteVenue: (id: string) => request<void>(`/admin/venues/${id}`, { method: 'DELETE' }),
+  reorderVenues: (ids: string[]) =>
+    request<void>('/admin/venues/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listAnnouncements: (congressId: string) =>
+    request<Announcement[]>(`/admin/announcements${buildQuery({ congressId })}`),
+  createAnnouncement: (data: { congressId: string; title: string; body: string; isPinned?: boolean }) =>
+    request<Announcement>('/admin/announcements', { method: 'POST', body: JSON.stringify(data) }),
+  updateAnnouncement: (id: string, data: Partial<{ title: string; body: string; isPinned: boolean }>) =>
+    request<Announcement>(`/admin/announcements/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteAnnouncement: (id: string) => request<void>(`/admin/announcements/${id}`, { method: 'DELETE' }),
+  reorderAnnouncements: (ids: string[]) =>
+    request<void>('/admin/announcements/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+  publishAnnouncement: (id: string) =>
+    request<Announcement>(`/admin/announcements/${id}/publish`, { method: 'POST' }),
+  unpublishAnnouncement: (id: string) =>
+    request<Announcement>(`/admin/announcements/${id}/unpublish`, { method: 'POST' }),
+
+  listSponsors: (congressId: string) => request<Sponsor[]>(`/admin/sponsors${buildQuery({ congressId })}`),
+  createSponsor: (data: {
+    congressId: string;
+    name: string;
+    tier?: SponsorTier;
+    logoUrl?: string;
+    websiteUrl?: string;
+    description?: string;
+  }) => request<Sponsor>('/admin/sponsors', { method: 'POST', body: JSON.stringify(data) }),
+  updateSponsor: (
+    id: string,
+    data: Partial<{
+      name: string;
+      tier: SponsorTier;
+      logoUrl: string;
+      websiteUrl: string;
+      description: string;
+    }>,
+  ) => request<Sponsor>(`/admin/sponsors/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSponsor: (id: string) => request<void>(`/admin/sponsors/${id}`, { method: 'DELETE' }),
+  reorderSponsors: (ids: string[]) =>
+    request<void>('/admin/sponsors/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  listKeynoteSpeakers: (congressId: string) =>
+    request<KeynoteSpeaker[]>(`/admin/keynote-speakers${buildQuery({ congressId })}`),
+  createKeynoteSpeaker: (data: {
+    congressId: string;
+    fullName: string;
+    title?: string;
+    institution?: string;
+    country?: string;
+    bio?: string;
+    photoUrl?: string;
+  }) => request<KeynoteSpeaker>('/admin/keynote-speakers', { method: 'POST', body: JSON.stringify(data) }),
+  updateKeynoteSpeaker: (
+    id: string,
+    data: Partial<{
+      fullName: string;
+      title: string;
+      institution: string;
+      country: string;
+      bio: string;
+      photoUrl: string;
+    }>,
+  ) =>
+    request<KeynoteSpeaker>(`/admin/keynote-speakers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  deleteKeynoteSpeaker: (id: string) =>
+    request<void>(`/admin/keynote-speakers/${id}`, { method: 'DELETE' }),
+  reorderKeynoteSpeakers: (ids: string[]) =>
+    request<void>('/admin/keynote-speakers/reorder', { method: 'POST', body: JSON.stringify({ ids }) }),
+
+  // Gorsel yukleme (kapak/mekan/sponsor logosu/konusmaci fotografi) - ortak
+  // uc nokta, `purpose` yalnizca backend tarafinda dosyalama/etiketleme icin
+  // kullanilir. `request()` FormData govdesini oldugu gibi gecirir (bkz.
+  // yukarisi, `uploadRegistrationImport` ile ayni desen).
+  uploadFile: (congressId: string, file: File, purpose?: UploadPurpose) => {
+    const formData = new FormData();
+    formData.set('congressId', congressId);
+    if (purpose) formData.set('purpose', purpose);
+    formData.set('file', file);
+    return request<{ url: string }>('/admin/uploads', { method: 'POST', body: formData });
+  },
 };

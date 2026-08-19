@@ -14,7 +14,7 @@ export class LoggingNotificationSender implements NotificationSender {
 
   send(payload: NotificationPayload): Promise<boolean> {
     this.logger.log(
-      `[DEV] Bildirim gonderilecekti -> token=${payload.pushToken.slice(0, 12)}... baslik="${payload.title}" govde="${payload.body}"`,
+      `[DEV] Bildirim gonderilecekti -> token=${payload.pushToken.slice(0, 12)}... baslik="${payload.title}" govde="${payload.body}" data=${JSON.stringify(payload.data ?? {})}`,
     );
     return Promise.resolve(true);
   }

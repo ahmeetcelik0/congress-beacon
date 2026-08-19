@@ -70,6 +70,228 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /auth/register-request:
+    post:
+      summary: Ilk giristen once dogrulama kodu iste
+      description: >-
+        emailOrPhone icin aktif bir CongressRegistration'i olan bir kullanici
+        aranir; varsa 6 haneli bir kod uretilip GECICI SIFRE olarak kaydedilir
+        (mustChangePassword=true) ve e-postaya gonderilir. IP+hedef basina
+        dakikada 1, saatte 5 istekle sinirlidir.
+      operationId: registerRequest
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailOrPhoneRequest'
+      responses:
+        '201':
+          description: Kod uretildi ve gonderildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Bu bilgiyle kayitli aktif bir kongre kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Kayitta e-posta adresi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/login:
+    post:
+      summary: E-posta/telefon + sifre ile giris
+      description: >-
+        Basarili giriste activeCongressId NULL olan bir token doner;
+        kullanici /auth/select-congress ile kongre secmeli. IP basina
+        dakikada 10 istekle sinirlidir.
+      operationId: login
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '201':
+          description: Giris basarili.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: E-posta/telefon veya sifre hatali.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/me:
+    get:
+      summary: Giris yapmis kullanicinin profili ve kongre listesi
+      description: >-
+        Mobil uygulama her acilista bunu cagirip token'in gecerliligini
+        dogrular ve profil/kongre listesini tazeler.
+      operationId: getMe
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profil bilgisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/change-password:
+    post:
+      summary: Sifre degistir
+      description: >-
+        Basarili degisiklikte tum diger oturumlar duser (tokenVersion artar);
+        bu istekten donen YENI accessToken ayni aktif kongre secimini tasir.
+      operationId: changePassword
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '201':
+          description: Sifre degisti, yeni token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Token gecersiz veya mevcut sifre hatali.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/forgot-password:
+    post:
+      summary: Sifremi unuttum - dogrulama kodu iste
+      description: /auth/register-request ile ayni akis ve limitler.
+      operationId: forgotPassword
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmailOrPhoneRequest'
+      responses:
+        '201':
+          description: Kod uretildi ve gonderildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '404':
+          description: Bu bilgiyle kayitli aktif bir kongre kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Kayitta e-posta adresi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Istek sinirini asti.
+
+  /auth/my-congresses:
+    get:
+      summary: Kullanicinin aktif kayitli oldugu kongreler
+      operationId: getMyCongresses
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Kongre listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MyCongressesResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/select-congress:
+    post:
+      summary: Aktif kongreyi sec
+      description: >-
+        Kullanicinin o kongrede aktif bir CongressRegistration'i olmali.
+        Eski token gecerliligini korur (tokenVersion artmaz), yalnizca yeni
+        secim yeni bir token'a tasinir.
+      operationId: selectCongress
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectCongressRequest'
+      responses:
+        '201':
+          description: Kongre secildi, yeni token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '403':
+          description: Kullanicinin bu kongrede aktif kaydi yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /devices/register:
     post:
       summary: Mobil cihazi giris yapmis kullaniciya kaydet
@@ -245,6 +467,29 @@ paths:
                 items:
                   $ref: '#/components/schemas/BeaconHealthItem'
 
+  /reports/notifications:
+    get:
+      summary: Kongre bazinda gonderilen/acilan bildirim sayilari ve son gonderimler (Faz 9)
+      operationId: getNotificationSummaryReport
+      tags:
+        - Reports
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bildirim ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSummary'
+
   /reports/hall-visits.csv:
     get:
       summary: Salon ziyaretlerini CSV olarak disa aktar
@@ -333,6 +578,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Session'
 
+  /sessions/reorder:
+    post:
+      summary: Oturumlarin gosterim sirasini topluca degistir
+      description: >-
+        Govdedeki ids dizisinin sirasina gore displayOrder degerleri 0'dan
+        baslayarak yeniden yazilir. Yalnizca gonderilen id'ler etkilenir -
+        panel gun/salon filtresi uygulanmis GORUNEN listeyi gonderebilir,
+        filtre disindaki oturumlara dokunulmaz.
+      operationId: reorderSessions
+      tags:
+        - Sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
   /sessions/{id}:
     patch:
       summary: Oturumu guncelle (bildirim zamanlamasi yeniden hesaplanir)
@@ -363,6 +631,9 @@ paths:
                 $ref: '#/components/schemas/Session'
     delete:
       summary: Oturumu sil (zamanlanmis bildirimi de iptal eder)
+      description: >-
+        Cascade: altindaki tum sunumlar VE o sunumlarin/oturumun rolleri de
+        silinir.
       operationId: deleteSession
       tags:
         - Sessions
@@ -378,6 +649,1106 @@ paths:
       responses:
         '204':
           description: Silindi.
+
+  /admin/presentations:
+    get:
+      summary: Bir oturumun sunumlarini listele
+      operationId: listPresentations
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: sessionId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: displayOrder'a gore sirali sunum listesi (roller dahil).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Presentation'
+    post:
+      summary: Oturuma yeni sunum ekle
+      operationId: createPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationCreate'
+      responses:
+        '201':
+          description: Sunum olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presentation'
+        '404':
+          description: sessionId ile eslesen oturum bulunamadi.
+
+  /admin/presentations/reorder:
+    post:
+      summary: Bir oturumdaki sunumlarin sirasini topluca degistir
+      operationId: reorderPresentations
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/presentations/{id}:
+    patch:
+      summary: Sunumu guncelle
+      operationId: updatePresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PresentationUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presentation'
+        '404':
+          description: Sunum bulunamadi.
+    delete:
+      summary: Sunumu sil
+      description: Cascade - bagli roller de silinir.
+      operationId: deletePresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Sunum bulunamadi.
+
+  /admin/program-roles:
+    post:
+      summary: Yeni oturum/sunum rolu ekle (moderator/konusmaci/tartismaci)
+      description: >-
+        sessionId/presentationId'den TAM OLARAK biri gonderilmelidir - ikisi
+        de dolu ya da ikisi de bos gelirse 400. Eslesme (matchStatus/userId)
+        `rawName` uzerinden OTOMATIK hesaplanir, istekte gonderilmez.
+      operationId: createProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRoleCreate'
+      responses:
+        '201':
+          description: Rol olusturuldu, otomatik eslestirme uygulanmis halde doner.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '400':
+          description: sessionId/presentationId ikisi birden dolu veya ikisi birden bos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/program-roles/rematch:
+    post:
+      summary: Bir kongredeki tum rolleri yeniden eslestir
+      description: >-
+        `MANUAL` ve `IGNORED` durumundaki roller ASLA degistirilmez (yetkilinin
+        elle verdigi karar otomatik hesaplamayla ezilmez) - bu rollerin sayisi
+        `skipped` alaninda doner. Katilimci listesi guncellendiginde (Faz 2
+        akisiyla yeni kayit eklendiginde) calistirilir.
+      operationId: rematchProgramRoles
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - congressId
+              properties:
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Yeniden eslestirme ozeti.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RematchSummary'
+
+  /admin/program-roles/matches:
+    get:
+      summary: Bir kongredeki tum rollerin eslesme durumu denetim listesi
+      operationId: listProgramRoleMatches
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RoleMatchStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        '200':
+          description: Sayfalanmis rol listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRoleMatchesPage'
+
+  /admin/program-roles/{id}:
+    patch:
+      summary: Rolu guncelle
+      description: >-
+        `rawName` degisirse `searchName`/`matchStatus`/`userId` OTOMATIK
+        yeniden hesaplanir.
+      operationId: updateProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramRoleUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol bulunamadi.
+    delete:
+      summary: Rolu sil
+      operationId: deleteProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Rol bulunamadi.
+
+  /admin/program-roles/{id}/link:
+    post:
+      summary: Rolu elle bir katilimciya bagla (matchStatus = MANUAL olur)
+      operationId: linkProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+              properties:
+                userId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Baglandi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol veya katilimci bulunamadi.
+
+  /admin/program-roles/{id}/ignore:
+    post:
+      summary: Rolu "katilimci degil" olarak isaretle (matchStatus = IGNORED olur)
+      operationId: ignoreProgramRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramRole'
+        '404':
+          description: Rol bulunamadi.
+
+  /admin/program-roles/{id}/candidates:
+    get:
+      summary: Bir rol icin aday katilimci listesi
+      description: >-
+        AMBIGUOUS'ta birebir searchName eslesen adaylar, UNMATCHED'te daha
+        gevsek kelime-icerir aramasinin sonucu doner. Otomatik atama YAPMAZ -
+        yalnizca yetkiliye secenek sunar (bkz. /link).
+      operationId: getProgramRoleCandidates
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Aday katilimci listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgramRoleCandidate'
+        '404':
+          description: Rol bulunamadi.
+
+  /admin/program-roles/unmatched-names:
+    get:
+      summary: Eslesmeyen (UNMATCHED) rolleri isim bazinda gruplanmis rapor
+      description: >-
+        Faz 4c §4 - onay sonrasi gorunurluk raporu. Bu isimler icin User
+        kaydi OTOMATIK OLUSTURULMAZ (e-posta yok, Faz 2'nin gercek katilimci
+        listesiyle carpisip belirsiz eslesme uretebilir). Ayni kisi (searchName)
+        birden fazla oturum/sunumda geciyorsa hepsi TEK grupta doner. Katilimci
+        sonradan elle eklenirse POST /admin/program-roles/rematch bu isimleri
+        otomatik yeniden eslestirir.
+      operationId: getUnmatchedProgramRoleNames
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Gruplanmis eslesmeyen isim listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UnmatchedNameGroup'
+
+  /admin/program-imports/json:
+    post:
+      summary: Hazir bir ExtractionResult JSON'unu yukle (LLM cagrisi YOK, ucretsiz)
+      description: >-
+        Faz 4c §2 (Faz 4d'de kanonik semaya tasindi) - Faz 4b'nin LLM adimini
+        atlayan ikinci giris noktasi. Ayni `writeExtractionToStaging`
+        fonksiyonuna gider, ayni staging tablolarina yazar, ayni onizleme/onay
+        akisindan gecer. Govde YA bir multipart dosya (`file` alani, JSON
+        metin) YA DA dogrudan `application/json` govdesi olabilir - her iki
+        durumda da govdenin TAMAMI ExtractionResult'in (gun -> salon ->
+        etkinlik -> oge hiyerarsisi) kendisidir (congressId asla govdeye
+        karismaz, her zaman sorgu parametresidir). Islem TAMAMEN senkron -
+        BullMQ kuyruguna girmez. model/inputTokens/outputTokens/
+        estimatedCostUsd hep null kalir.
+      operationId: createJsonProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExtractionResultInput'
+      responses:
+        '201':
+          description: Staging'e yazildi, DRAFT durumunda.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [importId, status]
+                properties:
+                  importId:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: '#/components/schemas/ProgramImportStatus'
+        '400':
+          description: >-
+            Govde kanonik semaya uymuyor - `errors` dizisi Turkce, konumlu
+            hata mesajlari icerir (ör. "1. gün, 3. salon (Ankara Salonu),
+            6. etkinlikte 'startTime' biçimi geçersiz").
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, errors]
+                properties:
+                  message:
+                    type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+
+  /admin/program-imports/template.json:
+    get:
+      summary: Ornek/sablon bir ExtractionResult JSON'u indir
+      description: >-
+        JSON yukleme akisi icin doldurulmus, gercekci bir ornek (2 gun, 3
+        salon, oturum-baskanli/panelistli bir oturum, bildiri kodlu ve
+        cok ogeli bir oturum, tek konusmacili bir davetli konusma, bos
+        `items` dizili bir kahve arasi).
+      operationId: getProgramImportJsonTemplate
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ornek ExtractionResult.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExtractionResultInput'
+
+  /admin/program-imports/estimate:
+    post:
+      summary: PDF/Excel program dosyasi icin token/maliyet tahmini (para harcamaz)
+      description: >-
+        Yalnizca girdi token sayisini olcer (Anthropic'in countTokens'i
+        ucretsizdir) ve tahmini cikti/maliyeti hesaplar - hicbir LLM cikarimi
+        YAPMAZ. Panel bu tahmini gosterip acik onay almadan cikarimi
+        baslatmaz.
+      operationId: estimateProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '200':
+          description: Tahmin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportEstimate'
+        '400':
+          description: Desteklenmeyen format (.pdf/.xlsx/.xls disi).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+        '503':
+          description: ANTHROPIC_API_KEY yapilandirilmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/program-imports:
+    post:
+      summary: PDF/Excel program dosyasi yukle, cikarimi kuyruga al
+      description: >-
+        En fazla 32 MB. Dosya asenkron olarak islenir (BullMQ) - bu uc nokta
+        aninda PENDING doner, LLM cagrisini BEKLEMEZ. Ilerleme
+        GET /admin/program-imports/{id} ile sorgulanir.
+      operationId: createProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Kuyruga alindi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [importId, status]
+                properties:
+                  importId:
+                    type: string
+                    format: uuid
+                  status:
+                    $ref: '#/components/schemas/ProgramImportStatus'
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+        '503':
+          description: ANTHROPIC_API_KEY yapilandirilmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: Bir kongrenin program yuklemeleri (gecmis + durum)
+      operationId: listProgramImports
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Yukleme listesi + kongre bazinda toplam LLM harcamasi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [imports, totalSpendUsd]
+                properties:
+                  imports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProgramImport'
+                  totalSpendUsd:
+                    type: number
+
+  /admin/program-imports/{id}:
+    get:
+      summary: Bir yuklemenin staging agacini getir (oturum->sunum->rol, sayfali)
+      operationId: getProgramImportDetail
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Staging agaci + ozet sayimlar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportDetail'
+        '404':
+          description: Yukleme bulunamadi.
+
+  /admin/program-imports/{id}/sessions/{sessionId}:
+    patch:
+      summary: Staging oturum satirini duzelt (salon/saat/baslik/tur)
+      description: Duzeltme sonrasi status/warning MEVCUT alan degerlerinden yeniden hesaplanir.
+      operationId: updateProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportSessionUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil, duzenlenemez.
+    delete:
+      summary: Staging oturum satirini disarida birak (EXCLUDED, kalici silme degil)
+      operationId: excludeProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: EXCLUDED olarak isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/sessions:
+    post:
+      summary: Staging'e elle oturum ekle (LLM bir oturumu atladiysa)
+      operationId: createProgramImportSession
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportSessionCreate'
+      responses:
+        '201':
+          description: Olusturuldu (status=NEW).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportSession'
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/presentations/{presentationId}:
+    patch:
+      summary: Staging sunum satirini duzelt
+      operationId: updateProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: presentationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportPresentationUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportPresentation'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+    delete:
+      summary: Staging sunum satirini kalici olarak sil (rolleri de cascade silinir)
+      operationId: deleteProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: presentationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Silindi.
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/presentations:
+    post:
+      summary: Bir staging oturumuna elle sunum ekle
+      operationId: createProgramImportPresentation
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportPresentationCreate'
+      responses:
+        '201':
+          description: Olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportPresentation'
+        '404':
+          description: importSessionId ile eslesen bir satir yok.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/roles/{roleId}:
+    patch:
+      summary: Staging rol satirinin rawName'ini duzelt, yeniden eslestir
+      description: rawName degisince searchName + previewMatchStatus/previewUserId Faz 4a'nin matchRole() servisiyle YENIDEN hesaplanir.
+      operationId: updateProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportRoleUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportRole'
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+    delete:
+      summary: Staging rol satirini kalici olarak sil
+      operationId: deleteProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: roleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Silindi.
+        '404':
+          description: Satir bulunamadi.
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/roles:
+    post:
+      summary: Bir staging oturumuna/sunuma elle rol ekle
+      description: importSessionId/importPresentationId'nin TAM OLARAK biri dolu olmalidir.
+      operationId: createProgramImportRole
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramImportRoleCreate'
+      responses:
+        '201':
+          description: Olusturuldu (eslestirme calisir).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportRole'
+        '400':
+          description: sessionId/presentationId'nin ikisi de dolu veya ikisi de bos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Yukleme artik DRAFT durumunda degil.
+
+  /admin/program-imports/{id}/halls-to-create/exclude:
+    post:
+      summary: Bir salon otomatik-olusturma adayini onizlemeden kaldir
+      description: >-
+        Faz 4c §3 - `hallName` `GET /admin/program-imports/{id}`'nin
+        `summary.hallsToCreate` listesindeki bir isimle BIREBIR eslesmeli
+        (farkli yazim varyasyonlari zaten TEK adaya birlesmis haldedir).
+        Eslesen TUM NEW satirlarin `hallAutoCreateExcluded` bayragini true
+        yapar - bu satirlarin hallId'si null kalir, onayda mevcut "salon
+        secilmemis" engeline duser (elle salon secimi gerekir).
+      operationId: excludeHallToCreate
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hallName]
+              properties:
+                hallName:
+                  type: string
+      responses:
+        '200':
+          description: Kac satirin isaretlendigi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [excludedSessionCount]
+                properties:
+                  excludedSessionCount:
+                    type: integer
+        '404':
+          description: Bu isimde bir salon adayi bulunamadi.
+
+  /admin/program-imports/{id}/approve:
+    post:
+      summary: Staging'i tek transaction'da canli programa isle
+      description: >-
+        INVALID/EXCLUDED satirlar atlanir. Basliksiz sunumlar atlanir
+        (Presentation.title NOT NULL). Mevcut programin UZERINE YAZMAZ,
+        yanina ekler. hallId'si olmayan ama rawHallName'i olan (ve
+        hallAutoCreateExcluded=false) satirlar icin Faz 4c §3 geregi AYNI
+        transaction icinde otomatik Hall olusturulur (yaniti bkz.
+        ProgramImportApproveSummary.createdHalls) - digerleri (salon adi
+        hic yoktu YA DA admin adayi kaldirdi) icin 400 ile hangi
+        oturumlarin eksik oldugu listelenir, transaction hic BASLAMAZ.
+      operationId: approveProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Canliya islendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImportApproveSummary'
+        '400':
+          description: Salon secilmemis oturumlar var.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  sessions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          format: uuid
+                        title:
+                          type: string
+                          nullable: true
+                        rowOrder:
+                          type: integer
+        '404':
+          description: Yukleme bulunamadi.
+        '409':
+          description: Yukleme zaten sonuclandirilmis (ikinci onay).
+
+  /admin/program-imports/{id}/cancel:
+    post:
+      summary: Yuklemeyi iptal et
+      operationId: cancelProgramImport
+      tags:
+        - Program
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: CANCELLED olarak isaretlendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProgramImport'
+        '404':
+          description: Yukleme bulunamadi.
+        '409':
+          description: Yukleme zaten sonuclandirilmis.
 
   /devices/push-token:
     put:
@@ -654,6 +2025,352 @@ paths:
         '404':
           description: Kongre bulunamadi.
 
+  /mobile/home:
+    get:
+      summary: Ana sayfa - kongre karti, icerik sayaclari, siradaki sunumum
+      description: >-
+        Mobil ana sayfanin TEK istekte ihtiyac duydugu her sey. congressId
+        istemciden ALINMAZ, token'daki activeCongressId kullanilir - katilimci
+        baska bir kongrenin verisini isteyemez (bkz. docs/decisions.md, Faz 5).
+      operationId: getMobileHome
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Ana sayfa verisi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileHomeResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program:
+    get:
+      summary: Bilimsel program - oturum/sunum/rol agaci, filtrelenebilir
+      description: >-
+        Filtresiz cagrida kongrenin TUM programi doner (mobil cevrimdisi
+        onbellekleyebilsin diye). `search` oturum/sunum basligi, salon adi ve
+        konusmaci adinda (rawName) arar. ETag/If-None-Match destekler - program
+        kongre boyunca nadiren degistigi icin mobil, ayni ETag'i tekrar
+        gonderirse govde yeniden indirilmez, `304` doner (bkz.
+        docs/decisions.md, Faz 5).
+      operationId: getMobileProgram
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: day
+          in: query
+          required: false
+          description: Session.dayLabel ile birebir eslesir.
+          schema:
+            type: string
+        - name: hallId
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: If-None-Match
+          in: header
+          required: false
+          description: Onceki cagridan alinan ETag - degismediyse 304 doner.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Program agaci.
+          headers:
+            ETag:
+              description: Bu program icerigi icin surum etiketi.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProgramResponse'
+        '304':
+          description: Program If-None-Match'teki ETag'den beri degismedi, govde yok.
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program/days:
+    get:
+      summary: Program sekmesindeki gun etiketleri, program sirasina gore
+      description: >-
+        Alfabetik DEGIL, ilk oturumun baslangic saatine gore kronolojik
+        sirayla doner ("2. Gun" "1. Gun"den once gelmez).
+      operationId: getMobileProgramDays
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Gun etiketleri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileProgramDaysResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/program/sessions/{id}:
+    get:
+      summary: Tek bir oturumun detayi (sunumlar, roller, salon, saat)
+      description: >-
+        Oturum, katilimcinin aktif kongresine ait DEGILSE (baska bir
+        kongrenin ID'si tahmin edilip denenirse) 404 doner - veri sizmaz.
+      operationId: getMobileProgramSessionDetail
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Oturum detayi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSessionDetailResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Oturum bulunamadi (veya baska bir kongreye ait).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/my-program:
+    get:
+      summary: Katilimcinin kendi konusmaci/moderator/tartismaci oldugu program
+      description: >-
+        `ProgramRole.userId` = giris yapan katilimci VE `matchStatus`
+        MATCHED/MANUAL olan tum oturum/sunumlar, kronolojik sirada.
+      operationId: getMobileMyProgram
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Katilimcinin kisisel programi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileMyProgramResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/announcements:
+    get:
+      summary: Yayinlanmis duyurular (sabitlenmis once, sonra en yeni)
+      description: Taslak (publishedAt=null) duyurular ASLA donmez.
+      operationId: getMobileAnnouncements
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Duyuru listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileAnnouncementsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/sponsors:
+    get:
+      summary: Sponsor listesi (prestij sirasi, sonra displayOrder)
+      operationId: getMobileSponsors
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sponsor listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSponsorsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/speakers:
+    get:
+      summary: Ana konusmaci vitrin listesi
+      operationId: getMobileSpeakers
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Konusmaci listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileSpeakersResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/venues:
+    get:
+      summary: Mekan listesi (ana mekan once, sonra oteller)
+      operationId: getMobileVenues
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Mekan listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileVenuesResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mobile/info-sections:
+    get:
+      summary: Genel bilgi bolumleri (yalnizca yayinlanmislar)
+      description: isPublished=false olan bolumler ASLA donmez.
+      operationId: getMobileInfoSections
+      tags:
+        - Mobile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Genel bilgi bolumleri.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MobileInfoSectionsResponse'
+        '401':
+          description: Token eksik, gecersiz veya suresi dolmus.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Kongre secilmemis veya zorunlu sifre degisikligi tamamlanmamis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /congresses:
     post:
       summary: Yeni kongre olustur
@@ -722,13 +2439,25 @@ paths:
               $ref: '#/components/schemas/CongressUpdate'
       responses:
         '200':
-          description: Kongre guncellendi.
+          description: >-
+            Kongre guncellendi. `beaconUuid` degistiyse ve kongrede zaten
+            beacon kayitliysa (bkz. asagidaki 409), yanit `beaconsUpdated`
+            alanini da icerir (kac beacon'in uuid'si de birlikte guncellendi).
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Congress'
+                $ref: '#/components/schemas/CongressUpdateResponse'
+        '400':
+          description: Giris/cikis esigi veya tarih tutarsizligi.
         '404':
           description: Kongre bulunamadi.
+        '409':
+          description: >-
+            (Faz 6.2) `beaconUuid` degistirilmek isteniyor ama kongrede
+            zaten beacon kayitli ve `migrateExistingBeacons: true`
+            gonderilmedi. Devam etmek icin ayni istegi `migrateExistingBeacons:
+            true` ile tekrarlayin - bu, kongrenin TUM beacon'larinin
+            uuid'sini de yeni degerle birlikte gunceller (tek transaction).
     delete:
       summary: Kongreyi sil
       operationId: deleteCongress
@@ -857,9 +2586,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Beacon'
+                $ref: '#/components/schemas/BeaconCreateResponse'
         '400':
-          description: Gecersiz istek govdesi.
+          description: >-
+            Gecersiz istek govdesi VEYA (Faz 6.2) `uuid`, kongrenin kendi
+            `beaconUuid`'i ile eslesmiyor (kongre zaten bos olmayan bir
+            beaconUuid'e sahipse). Karsilastirma buyuk/kucuk harf duyarsizdir.
         '404':
           description: congressId ile eslesen kongre bulunamadi.
         '409':
@@ -923,6 +2655,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Beacon'
+        '400':
+          description: >-
+            (Faz 6.2) `uuid` gonderildi ve kongrenin kendi `beaconUuid`'i ile
+            eslesmiyor. Karsilastirma buyuk/kucuk harf duyarsizdir.
         '404':
           description: Beacon bulunamadi.
         '409':
@@ -1006,6 +2742,1189 @@ paths:
                 $ref: '#/components/schemas/HallBeacon'
         '404':
           description: Bu salon icin aktif bir atama bulunamadi.
+
+  /admin/registrations/template.xlsx:
+    get:
+      summary: Katilimci import sablonu (xlsx) indir
+      description: >-
+        Basliklar + biri yurt disi numarali iki ornek satir icerir. Diger
+        indirme uc noktalarinda oldugu gibi (/reports/hall-visits.csv)
+        tarayici indirme linkleri icin Authorization basligi yerine
+        ?token= query string de kabul edilir.
+      operationId: getRegistrationTemplate
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: xlsx dosyasi.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+
+  /admin/registrations/imports:
+    post:
+      summary: Katilimci Excel/CSV dosyasi yukle (taslak olusturur)
+      description: >-
+        .xlsx/.xls/.csv - en fazla 5 MB, en fazla 10.000 satir. Dosya
+        ayristirilir, RegistrationImport (DRAFT) + satirlar kaydedilir;
+        henuz hicbir User/CongressRegistration OLUSTURULMAZ - bunun icin
+        onizleme sonrasi /approve cagrilmali.
+      operationId: uploadRegistrationImport
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+      responses:
+        '201':
+          description: Dosya ayristirildi, taslak olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImportSummary'
+        '400':
+          description: Dosya okunamadi/desteklenmeyen format/satir siniri asildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: congressId ile eslesen bir kongre yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      summary: Bir kongrenin taslak/gecmis yuklemeleri
+      operationId: listRegistrationImports
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Yukleme listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RegistrationImport'
+
+  /admin/registrations/imports/{id}:
+    get:
+      summary: Bir yuklemenin satirlarini getir (sayfali, durum filtreli)
+      operationId: getRegistrationImportDetail
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ImportRowStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Yukleme detayi + satirlar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImportDetail'
+        '404':
+          description: Yukleme bulunamadi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/imports/{id}/rows/{rowId}:
+    patch:
+      summary: Bir import satirini duzelt
+      description: >-
+        Yalnizca DRAFT durumundaki yuklemelerde. Kaydedince durum (INVALID/
+        NEW/DUPLICATE/MATCHED) ve uyari yeniden hesaplanir.
+      operationId: updateRegistrationImportRow
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: rowId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegistrationImportRowRequest'
+      responses:
+        '200':
+          description: Guncellenmis satir.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImportRow'
+        '409':
+          description: Yukleme artik DRAFT degil, duzenlenemez.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/imports/{id}/rows/{rowId}/exclude:
+    post:
+      summary: Satiri onaydan haric tut
+      operationId: excludeRegistrationImportRow
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: rowId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Satir EXCLUDED oldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImportRow'
+        '409':
+          description: Yukleme artik DRAFT degil.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/imports/{id}/approve:
+    post:
+      summary: Yuklemeyi onayla, NEW/MATCHED satirlari kayitlara isle
+      description: >-
+        Tek transaction icinde calisir. DUPLICATE/INVALID/EXCLUDED satirlar
+        atlanir. Onay sirasinda (parse ile onay arasinda DB degismisse)
+        olusabilecek email/telefon cakismalari o satiri DUPLICATE'e cevirip
+        atlar, transaction'i BOZMAZ.
+      operationId: approveRegistrationImport
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Onay tamamlandi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImportApproveResult'
+        '409':
+          description: Yukleme zaten sonuclandirilmis (DRAFT degil).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/imports/{id}/cancel:
+    post:
+      summary: Taslak yuklemeyi iptal et
+      operationId: cancelRegistrationImport
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Yukleme CANCELLED oldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationImport'
+        '409':
+          description: Yukleme zaten sonuclandirilmis.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations:
+    get:
+      summary: Bir kongrenin katilimci listesi
+      operationId: listRegistrations
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: search
+          in: query
+          required: false
+          description: Ad, soyad, e-posta, phone (E.164) ve phoneRaw uzerinde arar.
+          schema:
+            type: string
+        - name: source
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/RegistrationSource'
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 20
+      responses:
+        '200':
+          description: Sayfalanmis katilimci listesi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegistrationPage'
+    post:
+      summary: Katilimciyi manuel ekle
+      description: >-
+        E-posta veya telefondan en az biri zorunlu. Mevcut kullaniciyla
+        (e-posta sonra telefon) eslesirse YENI KULLANICI OLUSTURULMAZ,
+        yalnizca kayit eklenir/yeniden aktiflestirilir.
+      operationId: createRegistration
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRegistrationRequest'
+      responses:
+        '201':
+          description: Kayit olusturuldu/yeniden aktiflestirildi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        '400':
+          description: E-posta ve telefon ikisi de eksik.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Kullanici zaten bu kongreye aktif kayitli.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/{id}:
+    patch:
+      summary: Katilimcinin ad/soyad/e-posta/telefon bilgisini duzenle
+      description: id, CongressRegistration.id'dir (User.id degil).
+      operationId: updateRegistration
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRegistrationRequest'
+      responses:
+        '200':
+          description: Guncellenmis kullanici.
+        '409':
+          description: E-posta/telefon baska bir kullaniciya ait.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /admin/registrations/{id}/deactivate:
+    post:
+      summary: Kaydi pasiflestir (isActive=false) - SILME degil
+      operationId: deactivateRegistration
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Kayit pasiflestirildi.
+
+  /admin/registrations/{id}/reactivate:
+    post:
+      summary: Kaydi yeniden aktiflestir (isActive=true)
+      operationId: reactivateRegistration
+      tags:
+        - Registrations
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: Kayit aktiflestirildi.
+
+  /admin/uploads:
+    post:
+      summary: Gorsel yukle (kapak, mekan, sponsor logosu, konusmaci fotografi)
+      description: >-
+        JPEG/PNG/WEBP, en fazla 2 MB. Dosya turu magic-byte imzasindan
+        dogrulanir, uzantiya/istemcinin gonderdigi Content-Type'a GUVENILMEZ.
+        Donen url sunucuda auth GEREKTIRMEDEN statik olarak sunulur
+        (ornek: GET {serverUrl}/uploads/<congressId>/<uuid>.png).
+      operationId: uploadFile
+      tags:
+        - Uploads
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+                - congressId
+              properties:
+                file:
+                  type: string
+                  format: binary
+                congressId:
+                  type: string
+                  format: uuid
+                purpose:
+                  type: string
+                  enum: [cover, venue, sponsor, speaker]
+      responses:
+        '201':
+          description: Yuklendi.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - url
+                properties:
+                  url:
+                    type: string
+                    example: /uploads/3537dc2a-6e96-4a03-bf6d-37447d11a1dd/9b1f...png
+        '400':
+          description: >-
+            Desteklenmeyen format (magic-byte kontrolu basarisiz) veya
+            congressId ile eslesen kongre yok.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: Dosya 2 MB siniri asiyor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    delete:
+      summary: Yuklenen bir gorseli diskten sil
+      description: >-
+        Normalde ELLE cagirmaya gerek yoktur - bir icerik kaydi
+        silindiginde/gorsel alani degistirildiginde backend eski dosyayi
+        kendisi siler. Bu uc nokta cogunlukla yarim kalan (kaydedilmemis)
+        yuklemeleri temizlemek icindir.
+      operationId: deleteUpload
+      tags:
+        - Uploads
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - url
+              properties:
+                url:
+                  type: string
+      responses:
+        '200':
+          description: Silme denendi (dosya zaten yoksa da basarili sayilir).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  deleted:
+                    type: boolean
+
+  /admin/venues:
+    get:
+      summary: Bir kongrenin mekanlarini (otel/ana mekan) listele
+      description: displayOrder alanina gore artan sirada doner.
+      operationId: listVenues
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Mekan listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Venue'
+    post:
+      summary: Yeni mekan olustur
+      operationId: createVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueCreate'
+      responses:
+        '201':
+          description: Mekan olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/venues/reorder:
+    post:
+      summary: Mekanlarin gosterim sirasini topluca degistir
+      description: >-
+        Govdedeki ids dizisinin sirasina gore displayOrder degerleri 0'dan
+        baslayarak yeniden yazilir. Tek istekte tum sira gonderilir (satir
+        satir PATCH yerine) - yaris durumunu onlemek icin.
+      operationId: reorderVenues
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/venues/{id}:
+    patch:
+      summary: Mekani guncelle
+      operationId: updateVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VenueUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Venue'
+        '404':
+          description: Mekan bulunamadi.
+    delete:
+      summary: Mekani sil
+      description: Gorseli varsa diskten de silinir.
+      operationId: deleteVenue
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Mekan bulunamadi.
+
+  /admin/announcements:
+    get:
+      summary: Bir kongrenin duyurularini listele
+      description: >-
+        Once isPinned=true olanlar, sonra publishedAt azalan sirada doner.
+        publishedAt=null olan kayitlar TASLAKTIR (mobilde gorunmez).
+      operationId: listAnnouncements
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Duyuru listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Announcement'
+    post:
+      summary: Yeni duyuru olustur (taslak olarak baslar)
+      operationId: createAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreate'
+      responses:
+        '201':
+          description: Duyuru olusturuldu (publishedAt=null, taslak).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/announcements/reorder:
+    post:
+      summary: Duyurularin gosterim sirasini topluca degistir
+      operationId: reorderAnnouncements
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/announcements/{id}:
+    patch:
+      summary: Duyuruyu guncelle
+      description: publishedAt bu uc noktadan degistirilemez, publish/unpublish kullanilir.
+      operationId: updateAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+    delete:
+      summary: Duyuruyu sil
+      operationId: deleteAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/announcements/{id}/publish:
+    post:
+      summary: Duyuruyu yayinla (publishedAt = simdi)
+      operationId: publishAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Yayinlandi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/announcements/{id}/unpublish:
+    post:
+      summary: Duyuruyu taslaga dondur (publishedAt = null)
+      operationId: unpublishAnnouncement
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Taslaga donduruldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+        '404':
+          description: Duyuru bulunamadi.
+
+  /admin/sponsors:
+    get:
+      summary: Bir kongrenin sponsorlarini listele
+      description: Once tier (PLATINUM..SUPPORTER prestij sirasi), sonra displayOrder ile doner.
+      operationId: listSponsors
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Sponsor listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sponsor'
+    post:
+      summary: Yeni sponsor olustur
+      operationId: createSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorCreate'
+      responses:
+        '201':
+          description: Sponsor olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sponsor'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/sponsors/reorder:
+    post:
+      summary: Sponsorlarin gosterim sirasini topluca degistir
+      operationId: reorderSponsors
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/sponsors/{id}:
+    patch:
+      summary: Sponsoru guncelle
+      operationId: updateSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SponsorUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sponsor'
+        '404':
+          description: Sponsor bulunamadi.
+    delete:
+      summary: Sponsoru sil
+      description: Logosu varsa diskten de silinir.
+      operationId: deleteSponsor
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Sponsor bulunamadi.
+
+  /admin/keynote-speakers:
+    get:
+      summary: Bir kongrenin ana konusmacilarini (vitrin listesi) listele
+      description: >-
+        displayOrder alanina gore artan sirada doner. Bilimsel program
+        (/sessions) konusmaci alanlariyla ILISKILI DEGILDIR, ayri elle
+        yonetilen bir listedir.
+      operationId: listKeynoteSpeakers
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Konusmaci listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/KeynoteSpeaker'
+    post:
+      summary: Yeni ana konusmaci olustur
+      operationId: createKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeynoteSpeakerCreate'
+      responses:
+        '201':
+          description: Konusmaci olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeynoteSpeaker'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/keynote-speakers/reorder:
+    post:
+      summary: Konusmacilarin gosterim sirasini topluca degistir
+      operationId: reorderKeynoteSpeakers
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/keynote-speakers/{id}:
+    patch:
+      summary: Konusmaciyi guncelle
+      operationId: updateKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/KeynoteSpeakerUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/KeynoteSpeaker'
+        '404':
+          description: Konusmaci bulunamadi.
+    delete:
+      summary: Konusmaciyi sil
+      description: Fotografi varsa diskten de silinir.
+      operationId: deleteKeynoteSpeaker
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Konusmaci bulunamadi.
+
+  /admin/info-sections:
+    get:
+      summary: Bir kongrenin genel bilgi bolumlerini listele
+      description: >-
+        displayOrder alanina gore artan sirada doner. body alani Markdown
+        icerir, mobilde render edilir.
+      operationId: listInfoSections
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: congressId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Bolum listesi.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CongressInfoSection'
+    post:
+      summary: Yeni genel bilgi bolumu olustur
+      operationId: createInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressInfoSectionCreate'
+      responses:
+        '201':
+          description: Bolum olusturuldu.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CongressInfoSection'
+        '404':
+          description: congressId ile eslesen kongre bulunamadi.
+
+  /admin/info-sections/reorder:
+    post:
+      summary: Bolumlerin gosterim sirasini topluca degistir
+      operationId: reorderInfoSections
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReorderRequest'
+      responses:
+        '204':
+          description: Sira guncellendi.
+
+  /admin/info-sections/{id}:
+    patch:
+      summary: Genel bilgi bolumunu guncelle
+      operationId: updateInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CongressInfoSectionUpdate'
+      responses:
+        '200':
+          description: Guncellendi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CongressInfoSection'
+        '404':
+          description: Bolum bulunamadi.
+    delete:
+      summary: Genel bilgi bolumunu sil
+      operationId: deleteInfoSection
+      tags:
+        - Content
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Silindi.
+        '404':
+          description: Bolum bulunamadi.
 
 components:
   securitySchemes:
@@ -1157,6 +4076,9 @@ components:
         - matchedObservations
         - unmatchedObservations
         - matchedRatio
+        - topUnmatchedBeacons
+        - mismatchedBeaconCount
+        - consistencyWarning
       properties:
         totalObservations:
           type: integer
@@ -1167,6 +4089,39 @@ components:
         matchedRatio:
           type: number
           nullable: true
+        topUnmatchedBeacons:
+          type: array
+          description: >-
+            (Faz 6.2) Hicbir Beacon'a eslenemeyen gozlemlerin en cok
+            gorulen 10 UUID/major/minor uclusu, azalan sirada. "Veri geliyor
+            ama hicbir beacon'a baglanmiyor" durumunun sebebini dogrudan
+            gosterir.
+          items:
+            type: object
+            required: [uuid, major, minor, count]
+            properties:
+              uuid:
+                type: string
+                format: uuid
+              major:
+                type: integer
+              minor:
+                type: integer
+              count:
+                type: integer
+        mismatchedBeaconCount:
+          type: integer
+          description: >-
+            (Faz 6.2) Bu kongrenin kendi beaconUuid'i ile eslesmeyen Beacon
+            kaydi sayisi (normalde 0 - beacon.service.ts artik yeni kayitlarda
+            bunu engelliyor, ama elle yazilmis eski veri hala boyle olabilir).
+        consistencyWarning:
+          type: string
+          nullable: true
+          description: >-
+            (Faz 6.2) `mismatchedBeaconCount > 0` ise veya eslesmeyen gozlem
+            orani yuksekse (>= %20, en az 20 gozlemlik ornekte) Turkce, panelde
+            dogrudan gosterilebilir bir uyari metni. Her sey tutarliysa null.
 
     BeaconHealthItem:
       type: object
@@ -1211,6 +4166,64 @@ components:
           description: Bu beacon'i goren farkli katilimci sayisi (kapsama gostergesi).
           type: integer
 
+    NotificationSummary:
+      type: object
+      required:
+        - sentCount
+        - openedCount
+        - failedCount
+        - skippedCount
+        - openedRatio
+        - recent
+      properties:
+        sentCount:
+          type: integer
+        openedCount:
+          type: integer
+        failedCount:
+          type: integer
+        skippedCount:
+          description: Saatlik gonderim sinirini asip ATLANAN bildirim sayisi (bkz. Faz 9).
+          type: integer
+        openedRatio:
+          type: number
+          nullable: true
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecentNotification'
+
+    RecentNotification:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - status
+        - sentAt
+        - openedAt
+        - userName
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        status:
+          type: string
+          enum: [SENT, FAILED, SKIPPED]
+        sentAt:
+          type: string
+          format: date-time
+        openedAt:
+          type: string
+          format: date-time
+          nullable: true
+        userName:
+          type: string
+
     Session:
       type: object
       required:
@@ -1222,6 +4235,10 @@ components:
         - startTime
         - endTime
         - description
+        - sessionType
+        - dayLabel
+        - keywords
+        - displayOrder
         - createdAt
         - updatedAt
       properties:
@@ -1239,6 +4256,11 @@ components:
         speaker:
           type: string
           nullable: true
+          deprecated: true
+          description: >-
+            DEPRECATED (Faz 4a) - yeni programlarda moderator/konusmaci
+            ProgramRole uzerinden eklenir. Yalnizca eski veri/panel gorunumu
+            icin korunuyor, yeni yazimlarda kullanilmasi beklenmiyor.
         startTime:
           type: string
           format: date-time
@@ -1248,12 +4270,39 @@ components:
         description:
           type: string
           nullable: true
+        sessionType:
+          type: string
+          nullable: true
+          description: 'Serbest metin, ornek: "Panel", "Sempozyum", "Kurs", "Ana Konusma", "Uydu Sempozyumu".'
+        dayLabel:
+          type: string
+          nullable: true
+          description: 'Programdaki gun etiketi, ornek: "1. Gun", "Calistaylar".'
+        keywords:
+          type: string
+          nullable: true
+          description: >-
+            Virgulle ayrilmis anahtar kelimeler. Faz 9 (bildirimler) icin
+            hazirlik - bu fazda kullanilmiyor.
+        displayOrder:
+          type: integer
+          description: 'Siralama: dayLabel -> startTime -> displayOrder (esitlik bozucu).'
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+        presentations:
+          type: array
+          description: GET /sessions listesinde HER ZAMAN dolu doner (bos dizi olabilir).
+          items:
+            $ref: '#/components/schemas/Presentation'
+        roles:
+          type: array
+          description: Dogrudan bu oturuma bagli roller (ornek moderator).
+          items:
+            $ref: '#/components/schemas/ProgramRole'
 
     SessionCreate:
       type: object
@@ -1274,6 +4323,7 @@ components:
           type: string
         speaker:
           type: string
+          deprecated: true
         startTime:
           type: string
           format: date-time
@@ -1282,6 +4332,15 @@ components:
           format: date-time
         description:
           type: string
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+        displayOrder:
+          type: integer
+          minimum: 0
 
     SessionUpdate:
       allOf:
@@ -1878,6 +4937,168 @@ components:
               type: string
               format: uuid
 
+    AuthUserSummary:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+        - email
+        - phone
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+
+    AuthCongressSummary:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - startDate
+        - endDate
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+          nullable: true
+        endDate:
+          type: string
+          format: date-time
+          nullable: true
+
+    EmailOrPhoneRequest:
+      type: object
+      required:
+        - emailOrPhone
+      properties:
+        emailOrPhone:
+          type: string
+          minLength: 3
+          description: >-
+            E-posta adresi veya telefon numarasi (yerel ya da E.164 format
+            ikisi de kabul edilir).
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+
+    LoginRequest:
+      type: object
+      required:
+        - emailOrPhone
+        - password
+      properties:
+        emailOrPhone:
+          type: string
+        password:
+          type: string
+
+    LoginResponse:
+      type: object
+      required:
+        - accessToken
+        - mustChangePassword
+        - user
+        - congresses
+      properties:
+        accessToken:
+          type: string
+          description: >-
+            JWT. activeCongressId bu asamada NULL'dur - /auth/select-congress
+            ile bir kongre secilene kadar ActiveCongressGuard korumali
+            uc noktalar 403 doner.
+        mustChangePassword:
+          type: boolean
+        user:
+          $ref: '#/components/schemas/AuthUserSummary'
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
+
+    MeResponse:
+      type: object
+      required:
+        - user
+        - activeCongressId
+        - mustChangePassword
+        - congresses
+      properties:
+        user:
+          $ref: '#/components/schemas/AuthUserSummary'
+        activeCongressId:
+          type: string
+          format: uuid
+          nullable: true
+        mustChangePassword:
+          type: boolean
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
+
+    ChangePasswordRequest:
+      type: object
+      required:
+        - currentPassword
+        - newPassword
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 8
+
+    TokenResponse:
+      type: object
+      required:
+        - accessToken
+      properties:
+        accessToken:
+          type: string
+
+    SelectCongressRequest:
+      type: object
+      required:
+        - congressId
+      properties:
+        congressId:
+          type: string
+          format: uuid
+
+    MyCongressesResponse:
+      type: object
+      required:
+        - congresses
+      properties:
+        congresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuthCongressSummary'
+
     ErrorResponse:
       type: object
       description: NestJS varsayilan hata govdesi formati.
@@ -1974,6 +5195,30 @@ components:
             ortalamasina dahil edilmeye devam edecegi. Tek beacon'li bir
             salonun kisa sureli sinyal kesintisinde rakip salona sahte
             gecisi (aninda EXIT+ENTRY) onlemek icin eklendi.
+        fullName:
+          type: string
+          nullable: true
+          description: Mobil ana sayfa kongre karti icin acik/tam kongre adi (Faz 3).
+        description:
+          type: string
+          nullable: true
+          description: Mobil ana sayfa kongre karti icin serbest metin aciklama.
+        coverImageUrl:
+          type: string
+          nullable: true
+          description: >-
+            /admin/uploads ile yuklenen kapak gorselinin goreli yolu (ornek:
+            /uploads/<congressId>/<uuid>.png). API_URL ile birlestirilerek
+            kullanilir.
+        websiteUrl:
+          type: string
+          nullable: true
+        contactEmail:
+          type: string
+          nullable: true
+        contactPhone:
+          type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2001,6 +5246,18 @@ components:
         beaconUuid:
           type: string
           format: uuid
+        fullName:
+          type: string
+        description:
+          type: string
+        coverImageUrl:
+          type: string
+        websiteUrl:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
         startDate:
           type: string
           format: date-time
@@ -2069,6 +5326,18 @@ components:
         beaconUuid:
           type: string
           format: uuid
+        fullName:
+          type: string
+        description:
+          type: string
+        coverImageUrl:
+          type: string
+        websiteUrl:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
         startDate:
           type: string
           format: date-time
@@ -2111,6 +5380,26 @@ components:
           type: number
           minimum: 0
           maximum: 60
+        migrateExistingBeacons:
+          type: boolean
+          description: >-
+            (Faz 6.2) Yalnizca `beaconUuid` GERCEKTEN degisiyorsa VE kongrede
+            zaten beacon kayitliysa anlamli. `true` gonderilmezse ve beacon
+            varsa istek 409 doner (bkz. /congresses/{id} PATCH). `true` ise
+            kongrenin TUM beacon'larinin uuid'si de yeni degerle birlikte,
+            tek transaction'da guncellenir.
+
+    CongressUpdateResponse:
+      description: '`Congress` + (yalnizca beacon migrasyonu tetiklendiyse) `beaconsUpdated`.'
+      allOf:
+        - $ref: '#/components/schemas/Congress'
+        - type: object
+          properties:
+            beaconsUpdated:
+              type: integer
+              description: >-
+                migrateExistingBeacons:true ile kac beacon'in uuid'si de
+                birlikte guncellendi. Migrasyon tetiklenmediyse alan yoktur.
 
     Hall:
       type: object
@@ -2214,7 +5503,11 @@ components:
         uuid:
           type: string
           format: uuid
-          description: Fiziksel beacon cihazinin iBeacon UUID'i.
+          description: >-
+            Fiziksel beacon cihazinin iBeacon UUID'i - HER ZAMAN buyuk harfle
+            depolanir (Faz 6.2), ve kongrenin kendi `beaconUuid`'i ile ayni
+            olmak ZORUNDADIR (bkz. docs/decisions.md "Beacon Standardi" -
+            "ayni kongredeki tum beacon cihazlari ortak UUID kullanir").
         major:
           type: integer
           minimum: 0
@@ -2232,6 +5525,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+
+    BeaconCreateResponse:
+      description: >-
+        `Beacon` + kongrenin beaconUuid'inin bu istekle otomatik
+        benimsenip benimsenmedigi (yalnizca kongreye eklenen ILK beacon icin,
+        kongrenin beaconUuid'i o ana kadar bos oldugunda gerceklesir).
+      allOf:
+        - $ref: '#/components/schemas/Beacon'
+        - type: object
+          required:
+            - congressBeaconUuidAutoSet
+          properties:
+            congressBeaconUuidAutoSet:
+              type: boolean
 
     BeaconCreate:
       type: object
@@ -2388,3 +5695,2293 @@ components:
                       type: integer
                     minor:
                       type: integer
+
+    MobileProgramRole:
+      type: object
+      description: >-
+        ProgramRole'un mobil-guvenli izdusumu - eslesen katilimcinin
+        iletisim bilgisi (email/phone/searchName) ASLA icermez, yalnizca
+        userId doner (bkz. docs/decisions.md, Faz 5).
+      required:
+        - id
+        - type
+        - rawName
+        - userId
+        - matchStatus
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        matchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+
+    MobilePresentation:
+      type: object
+      required:
+        - id
+        - title
+        - startTime
+        - endTime
+        - abstract
+        - roles
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProgramRole'
+
+    MobileSession:
+      type: object
+      required:
+        - id
+        - hallId
+        - title
+        - startTime
+        - endTime
+        - description
+        - sessionType
+        - dayLabel
+        - keywords
+        - series
+        - hall
+        - roles
+        - presentations
+      properties:
+        id:
+          type: string
+          format: uuid
+        hallId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        description:
+          type: string
+          nullable: true
+        sessionType:
+          type: string
+          nullable: true
+        dayLabel:
+          type: string
+          nullable: true
+        keywords:
+          type: string
+          nullable: true
+        series:
+          type: string
+          nullable: true
+          description: >-
+            Faz 4d'nin `event.series` alani (bkz. docs/decisions.md) -
+            Faz 10'da ilk kez mobile'a acildi.
+        hall:
+          type: object
+          required:
+            - id
+            - name
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileProgramRole'
+        presentations:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobilePresentation'
+
+    MobileProgramResponse:
+      type: object
+      required:
+        - generatedAt
+        - sessions
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSession'
+
+    MobileProgramDaysResponse:
+      type: object
+      required:
+        - generatedAt
+        - days
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        days:
+          type: array
+          items:
+            type: object
+            required: [label, date]
+            properties:
+              label:
+                type: string
+              date:
+                type: string
+                format: date
+                description: >-
+                  O gun etiketinin ILK oturumunun baslangic tarihinden
+                  turetilir (bkz. Faz 10) - uretilmis `label`e degil,
+                  gercek tarihe dayanir.
+          description: >-
+            Program sirasina gore (kronolojik, alfabetik DEGIL). Faz 10
+            NOTU: mobil istemci bu ucu cagirmaz (bkz. Faz 7 mimari karari,
+            cevrimdisi soguk-baslangic hatasi) - gun butonlari `/mobile/
+            program`in kalici onbellegindeki tam listeden turetilir.
+
+    MobileSessionDetailResponse:
+      type: object
+      required:
+        - generatedAt
+        - session
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        session:
+          $ref: '#/components/schemas/MobileSession'
+
+    MobileNextSession:
+      type: object
+      description: >-
+        Katilimcinin kendi programindaki SUREGELEN (varsa) veya en yakin
+        GELECEK oturum/sunum. `isOngoing:true` ise startTime<=simdi<=endTime.
+      required:
+        - sessionId
+        - presentationId
+        - title
+        - hallName
+        - startTime
+        - endTime
+        - roleType
+        - isOngoing
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Dolu ise bu bir SUNUM rolu, bos ise dogrudan bir OTURUM rolu.
+        title:
+          type: string
+        hallName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        roleType:
+          $ref: '#/components/schemas/ProgramRoleType'
+        isOngoing:
+          type: boolean
+
+    MobileMyProgramItem:
+      type: object
+      required:
+        - sessionId
+        - presentationId
+        - title
+        - hallName
+        - startTime
+        - endTime
+        - roleType
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+        hallName:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        roleType:
+          $ref: '#/components/schemas/ProgramRoleType'
+
+    MobileMyProgramResponse:
+      type: object
+      required:
+        - generatedAt
+        - items
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileMyProgramItem'
+          description: Kronolojik sirada (startTime asc).
+
+    MobileHomeResponse:
+      type: object
+      required:
+        - generatedAt
+        - congress
+        - counts
+        - announcements
+        - myNextSession
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        congress:
+          type: object
+          required:
+            - id
+            - name
+            - fullName
+            - startDate
+            - endDate
+            - description
+            - coverImageUrl
+            - mainVenueName
+          properties:
+            id:
+              type: string
+              format: uuid
+            name:
+              type: string
+            fullName:
+              type: string
+              nullable: true
+              description: Mobil kartta gosterilen resmi tam ad (kisa `name` degil).
+            startDate:
+              type: string
+              format: date-time
+              nullable: true
+            endDate:
+              type: string
+              format: date-time
+              nullable: true
+            description:
+              type: string
+              nullable: true
+            coverImageUrl:
+              type: string
+              nullable: true
+              description: Mutlak URL (APP_PUBLIC_URL ile birlestirilmis, bkz. Faz 5).
+            mainVenueName:
+              type: string
+              nullable: true
+              description: VenueType=MAIN olan mekanin adi, yoksa null.
+        counts:
+          type: object
+          description: Ana sayfa butonlarindaki rozetler icin.
+          required:
+            - announcements
+            - sponsors
+            - speakers
+            - venues
+            - infoSections
+            - sessions
+          properties:
+            announcements:
+              type: integer
+              description: Yalnizca YAYINLANMIS duyurular sayilir.
+            sponsors:
+              type: integer
+            speakers:
+              type: integer
+            venues:
+              type: integer
+            infoSections:
+              type: integer
+              description: Yalnizca isPublished=true bolumler sayilir.
+            sessions:
+              type: integer
+        announcements:
+          type: object
+          description: >-
+            "Okunmamis" durumu SUNUCUDA tutulmaz (ayri bir okuma-durumu
+            tablosu bu fazin kapsaminda degil) - mobil, latestPublishedAt'i
+            kendi yerel "son goruleni" ile kiyaslayarak rozet gosterip
+            gostermeyecegine kendi karar verir (bkz. docs/decisions.md, Faz 5).
+          required:
+            - hasPinned
+            - latestPublishedAt
+          properties:
+            hasPinned:
+              type: boolean
+            latestPublishedAt:
+              type: string
+              format: date-time
+              nullable: true
+        myNextSession:
+          allOf:
+            - $ref: '#/components/schemas/MobileNextSession'
+          nullable: true
+
+    MobileAnnouncement:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - isPinned
+        - publishedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        isPinned:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          description: Bu uc nokta yalnizca yayinlanmis duyurulari dondugu icin her zaman doludur.
+
+    MobileAnnouncementsResponse:
+      type: object
+      required:
+        - generatedAt
+        - announcements
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        announcements:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileAnnouncement'
+
+    MobileSponsor:
+      type: object
+      required:
+        - id
+        - name
+        - tier
+        - logoUrl
+        - websiteUrl
+        - description
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+        websiteUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+
+    MobileSponsorsResponse:
+      type: object
+      required:
+        - generatedAt
+        - sponsors
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        sponsors:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSponsor'
+
+    MobileSpeaker:
+      type: object
+      required:
+        - id
+        - fullName
+        - title
+        - institution
+        - country
+        - bio
+        - photoUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: 'Unvanli tam hali: "Prof. Dr. Ahmet Yilmaz".'
+        title:
+          type: string
+          nullable: true
+        institution:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+
+    MobileSpeakersResponse:
+      type: object
+      required:
+        - generatedAt
+        - speakers
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        speakers:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileSpeaker'
+
+    MobileVenue:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - address
+        - city
+        - phone
+        - websiteUrl
+        - mapUrl
+        - latitude
+        - longitude
+        - description
+        - imageUrl
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+          description: Google Maps baglantisi.
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+          description: Mutlak URL.
+
+    MobileVenuesResponse:
+      type: object
+      required:
+        - generatedAt
+        - venues
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        venues:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileVenue'
+          description: MAIN once, sonra HOTEL'ler (VenueType.type asc siralamasi).
+
+    MobileInfoSection:
+      type: object
+      required:
+        - id
+        - title
+        - body
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+          description: Markdown formatinda, mobil tarafta render edilir.
+
+    MobileInfoSectionsResponse:
+      type: object
+      required:
+        - generatedAt
+        - infoSections
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        infoSections:
+          type: array
+          items:
+            $ref: '#/components/schemas/MobileInfoSection'
+
+    RegistrationSource:
+      type: string
+      enum: [API, IMPORT, MANUAL, PILOT]
+      description: >-
+        API: dernek kayit sitesinden (Faz 2'de yalnizca arayuz/no-op).
+        IMPORT: Excel/CSV yuklemesi. MANUAL: panelden elle eklenen. PILOT:
+        eski pilot-login akisinin otomatik olusturdugu.
+
+    ImportStatus:
+      type: string
+      enum: [DRAFT, APPROVED, CANCELLED]
+
+    ImportRowStatus:
+      type: string
+      enum: [NEW, MATCHED, DUPLICATE, INVALID, EXCLUDED]
+
+    RegistrationImportSummary:
+      type: object
+      required:
+        - importId
+        - totalRows
+        - counts
+        - recognizedColumns
+        - unrecognizedColumns
+      properties:
+        importId:
+          type: string
+          format: uuid
+        totalRows:
+          type: integer
+        counts:
+          type: object
+          required: [new, matched, duplicate, invalid, warnings]
+          properties:
+            new:
+              type: integer
+            matched:
+              type: integer
+            duplicate:
+              type: integer
+            invalid:
+              type: integer
+            warnings:
+              type: integer
+        recognizedColumns:
+          type: array
+          items:
+            type: string
+        unrecognizedColumns:
+          type: array
+          items:
+            type: string
+
+    RegistrationImport:
+      type: object
+      required:
+        - id
+        - congressId
+        - adminUserId
+        - fileName
+        - status
+        - totalRows
+        - approvedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        adminUserId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        status:
+          $ref: '#/components/schemas/ImportStatus'
+        totalRows:
+          type: integer
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        adminUser:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+
+    RegistrationImportRow:
+      type: object
+      required:
+        - id
+        - importId
+        - rowNumber
+        - rawFirstName
+        - rawLastName
+        - rawEmail
+        - rawPhone
+        - normalizedEmail
+        - normalizedPhone
+        - externalId
+        - status
+        - message
+        - warning
+        - matchedUserId
+      properties:
+        id:
+          type: string
+          format: uuid
+        importId:
+          type: string
+          format: uuid
+        rowNumber:
+          type: integer
+          description: Dosyadaki gercek satir numarasi (1. satir baslik).
+        rawFirstName:
+          type: string
+          nullable: true
+        rawLastName:
+          type: string
+          nullable: true
+        rawEmail:
+          type: string
+          nullable: true
+        rawPhone:
+          type: string
+          nullable: true
+        normalizedEmail:
+          type: string
+          nullable: true
+        normalizedPhone:
+          type: string
+          nullable: true
+          description: E.164; telefon normalize edilemediyse null (rawPhone yine dolu).
+        externalId:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ImportRowStatus'
+        message:
+          type: string
+          nullable: true
+          description: Doluysa satiri BLOKE eden hata (INVALID).
+        warning:
+          type: string
+          nullable: true
+          description: Doluysa satir islenebilir ama dikkat gerektirir.
+        matchedUserId:
+          type: string
+          format: uuid
+          nullable: true
+
+    RegistrationImportDetail:
+      type: object
+      required:
+        - import
+        - rows
+        - total
+        - page
+        - pageSize
+        - counts
+      properties:
+        import:
+          $ref: '#/components/schemas/RegistrationImport'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegistrationImportRow'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        counts:
+          type: object
+          additionalProperties:
+            type: integer
+          description: "Ornek: { \"NEW\": 3, \"INVALID\": 1 }"
+
+    UpdateRegistrationImportRowRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+
+    RegistrationImportApproveResult:
+      type: object
+      required:
+        - createdUsers
+        - updatedUsers
+        - createdRegistrations
+        - skipped
+      properties:
+        createdUsers:
+          type: integer
+        updatedUsers:
+          type: integer
+        createdRegistrations:
+          type: integer
+        skipped:
+          type: integer
+          description: Onay sirasindaki e-posta/telefon cakismasi nedeniyle atlanan satir sayisi.
+
+    Registration:
+      type: object
+      required:
+        - registrationId
+        - userId
+        - firstName
+        - lastName
+        - email
+        - phone
+        - phoneRaw
+        - source
+        - isActive
+        - registeredAt
+        - hasPassword
+        - lastLoginAt
+      properties:
+        registrationId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+          description: E.164. null ise phoneRaw'a bakin.
+        phoneRaw:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/RegistrationSource'
+        isActive:
+          type: boolean
+        registeredAt:
+          type: string
+          format: date-time
+        hasPassword:
+          type: boolean
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    RegistrationPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Registration'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    CreateRegistrationRequest:
+      type: object
+      required:
+        - congressId
+        - firstName
+        - lastName
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+
+    UpdateRegistrationRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+
+    # ===== Kongre icerik yonetimi (Faz 3) =====
+
+    ReorderRequest:
+      type: object
+      description: >-
+        Yeni nihai siradaki TUM id'ler bu diziye konur; displayOrder
+        degerleri 0'dan baslayarak dizideki sıraya gore yeniden yazilir.
+      required:
+        - ids
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+
+    VenueType:
+      type: string
+      enum: [MAIN, HOTEL]
+      description: MAIN = kongre merkezi/ana mekan, HOTEL = konaklama oteli.
+
+    Venue:
+      type: object
+      required:
+        - id
+        - congressId
+        - type
+        - name
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        mapUrl:
+          type: string
+          nullable: true
+          description: Google Maps baglantisi.
+        latitude:
+          type: number
+          nullable: true
+        longitude:
+          type: number
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        imageUrl:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VenueCreate:
+      type: object
+      required:
+        - congressId
+        - name
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+          minLength: 1
+        address:
+          type: string
+        city:
+          type: string
+        phone:
+          type: string
+        websiteUrl:
+          type: string
+        mapUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+
+    VenueUpdate:
+      type: object
+      description: VenueCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        type:
+          $ref: '#/components/schemas/VenueType'
+        name:
+          type: string
+          minLength: 1
+        address:
+          type: string
+        city:
+          type: string
+        phone:
+          type: string
+        websiteUrl:
+          type: string
+        mapUrl:
+          type: string
+        latitude:
+          type: number
+        longitude:
+          type: number
+        description:
+          type: string
+        imageUrl:
+          type: string
+
+    Announcement:
+      type: object
+      required:
+        - id
+        - congressId
+        - title
+        - body
+        - isPinned
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        body:
+          type: string
+        isPinned:
+          type: boolean
+        publishedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = taslak (mobilde gorunmez). publish/unpublish uc noktalariyla degisir.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AnnouncementCreate:
+      type: object
+      required:
+        - congressId
+        - title
+        - body
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPinned:
+          type: boolean
+
+    AnnouncementUpdate:
+      type: object
+      description: >-
+        AnnouncementCreate ile ayni alanlar (congressId haric), hepsi
+        opsiyonel (PATCH). publishedAt burada YOKTUR, publish/unpublish
+        uc noktalari kullanilir.
+      properties:
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPinned:
+          type: boolean
+
+    SponsorTier:
+      type: string
+      enum: [PLATINUM, GOLD, SILVER, BRONZE, SUPPORTER]
+      description: >-
+        Bildirilen sirayla prestij sirasidir (MySQL ENUM bildirim sirasina
+        gore siralanir) - liste varsayilan olarak bu sirayla doner.
+
+    Sponsor:
+      type: object
+      required:
+        - id
+        - congressId
+        - name
+        - tier
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+          nullable: true
+        websiteUrl:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    SponsorCreate:
+      type: object
+      required:
+        - congressId
+        - name
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+        websiteUrl:
+          type: string
+        description:
+          type: string
+
+    SponsorUpdate:
+      type: object
+      description: SponsorCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        name:
+          type: string
+          minLength: 1
+        tier:
+          $ref: '#/components/schemas/SponsorTier'
+        logoUrl:
+          type: string
+        websiteUrl:
+          type: string
+        description:
+          type: string
+
+    KeynoteSpeaker:
+      type: object
+      required:
+        - id
+        - congressId
+        - fullName
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          description: 'Unvanli tam hali, ornek: "Prof. Dr. Ahmet Yilmaz".'
+        title:
+          type: string
+          nullable: true
+          description: 'Ornek: "Kardiyoloji Profesoru".'
+        institution:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        bio:
+          type: string
+          nullable: true
+        photoUrl:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    KeynoteSpeakerCreate:
+      type: object
+      required:
+        - congressId
+        - fullName
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+          minLength: 1
+        title:
+          type: string
+        institution:
+          type: string
+        country:
+          type: string
+        bio:
+          type: string
+        photoUrl:
+          type: string
+
+    KeynoteSpeakerUpdate:
+      type: object
+      description: KeynoteSpeakerCreate ile ayni alanlar (congressId haric), hepsi opsiyonel (PATCH).
+      properties:
+        fullName:
+          type: string
+          minLength: 1
+        title:
+          type: string
+        institution:
+          type: string
+        country:
+          type: string
+        bio:
+          type: string
+        photoUrl:
+          type: string
+
+    CongressInfoSection:
+      type: object
+      required:
+        - id
+        - congressId
+        - title
+        - body
+        - displayOrder
+        - isPublished
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          description: 'Ornek: "Kongre Hakkinda", "Ulasim", "Kayit Bilgileri".'
+        body:
+          type: string
+          description: Markdown olarak saklanir, mobilde render edilir.
+        displayOrder:
+          type: integer
+        isPublished:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CongressInfoSectionCreate:
+      type: object
+      required:
+        - congressId
+        - title
+        - body
+      properties:
+        congressId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPublished:
+          type: boolean
+
+    CongressInfoSectionUpdate:
+      type: object
+      description: >-
+        CongressInfoSectionCreate ile ayni alanlar (congressId haric),
+        hepsi opsiyonel (PATCH).
+      properties:
+        title:
+          type: string
+          minLength: 1
+        body:
+          type: string
+          minLength: 1
+        isPublished:
+          type: boolean
+
+    # ===== Bilimsel program - iki seviyeli model ve konusmaci eslestirme (Faz 4a) =====
+
+    Presentation:
+      type: object
+      required:
+        - id
+        - sessionId
+        - title
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramRole'
+
+    PresentationCreate:
+      type: object
+      required:
+        - sessionId
+        - title
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+          minLength: 1
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        abstract:
+          type: string
+
+    PresentationUpdate:
+      type: object
+      description: PresentationCreate ile ayni alanlar (sessionId haric), hepsi opsiyonel (PATCH).
+      properties:
+        title:
+          type: string
+          minLength: 1
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        abstract:
+          type: string
+
+    ProgramRoleType:
+      type: string
+      enum: [MODERATOR, SPEAKER, DISCUSSANT]
+      description: MODERATOR = oturum baskani, SPEAKER = konusmaci, DISCUSSANT = tartismaci.
+
+    RoleMatchStatus:
+      type: string
+      enum: [MATCHED, AMBIGUOUS, UNMATCHED, MANUAL, IGNORED]
+      description: >-
+        MATCHED = otomatik eslesti (tek aday). AMBIGUOUS = birden fazla aday,
+        yetkili secmeli. UNMATCHED = aday yok. MANUAL = yetkili elle bagladi.
+        IGNORED = yetkili "bu kisi katilimci degil" dedi. MANUAL ve IGNORED
+        rematch ile ASLA degistirilmez.
+
+    ProgramRoleUser:
+      type: object
+      description: Rolun eslestigi katilimcinin panelde gosterilecek asgari alanlari.
+      required:
+        - id
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phoneRaw:
+          type: string
+          nullable: true
+
+    ProgramRole:
+      type: object
+      required:
+        - id
+        - sessionId
+        - presentationId
+        - type
+        - rawName
+        - searchName
+        - userId
+        - matchStatus
+        - displayOrder
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        sessionId:
+          type: string
+          format: uuid
+          nullable: true
+        presentationId:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          description: 'Programda yazdigi hali, ornek: "Prof. Dr. Ahmet Yilmaz".'
+        searchName:
+          type: string
+          description: normalizeTurkishName(rawName) - unvansiz, ASCII, kucuk harf.
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        matchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+        displayOrder:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        user:
+          allOf:
+            - $ref: '#/components/schemas/ProgramRoleUser'
+          nullable: true
+
+    ProgramRoleCreate:
+      type: object
+      description: >-
+        sessionId/presentationId'den TAM OLARAK biri gonderilmelidir - ikisi
+        de dolu ya da ikisi de bos gelirse 400.
+      required:
+        - type
+        - rawName
+      properties:
+        sessionId:
+          type: string
+          format: uuid
+        presentationId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          minLength: 1
+
+    ProgramRoleUpdate:
+      type: object
+      description: >-
+        sessionId/presentationId burada YOK (bir rolun bagli oldugu
+        oturum/sunum degistirilemez). rawName degisirse eslesme otomatik
+        yeniden hesaplanir.
+      properties:
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+          minLength: 1
+
+    ProgramRoleMatch:
+      description: ProgramRole + ait oldugu oturum/sunumun ozet bilgisi (matches listesinde).
+      allOf:
+        - $ref: '#/components/schemas/ProgramRole'
+        - type: object
+          properties:
+            session:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                congressId:
+                  type: string
+                  format: uuid
+            presentation:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: string
+                  format: uuid
+                title:
+                  type: string
+                session:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                      format: uuid
+                    title:
+                      type: string
+                    congressId:
+                      type: string
+                      format: uuid
+
+    ProgramRoleMatchesPage:
+      type: object
+      required:
+        - items
+        - total
+        - page
+        - pageSize
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramRoleMatch'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+    RematchSummary:
+      type: object
+      required:
+        - matched
+        - ambiguous
+        - unmatched
+        - skipped
+      properties:
+        matched:
+          type: integer
+        ambiguous:
+          type: integer
+        unmatched:
+          type: integer
+        skipped:
+          type: integer
+          description: MANUAL veya IGNORED oldugu icin dokunulmadan atlanan rol sayisi.
+
+    ProgramRoleCandidate:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+        phoneRaw:
+          type: string
+          nullable: true
+
+    ProgramSourceType:
+      type: string
+      enum: [PDF, EXCEL, JSON]
+
+    ProgramImportStatus:
+      type: string
+      enum: [PENDING, EXTRACTING, DRAFT, APPROVED, CANCELLED, FAILED]
+
+    ProgramImportEstimate:
+      type: object
+      required:
+        - model
+        - inputTokens
+        - estimatedOutputTokens
+        - estimatedCostUsd
+        - pageCount
+      properties:
+        model:
+          type: string
+        inputTokens:
+          type: integer
+        estimatedOutputTokens:
+          type: integer
+          description: Girdi token sayisina dayali KABA bir tahmin - kesin bir taahhut degildir.
+        estimatedCostUsd:
+          type: number
+          nullable: true
+        pageCount:
+          type: integer
+          nullable: true
+          description: PDF icin en iyi-caba (best-effort) sayfa sayimi. Excel icin daima null.
+
+    ProgramImport:
+      type: object
+      required:
+        - id
+        - congressId
+        - adminUserId
+        - fileName
+        - sourceType
+        - status
+        - model
+        - inputTokens
+        - outputTokens
+        - estimatedCostUsd
+        - pageCount
+        - errorMessage
+        - approvedAt
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        congressId:
+          type: string
+          format: uuid
+        adminUserId:
+          type: string
+          format: uuid
+        fileName:
+          type: string
+        sourceType:
+          $ref: '#/components/schemas/ProgramSourceType'
+        status:
+          $ref: '#/components/schemas/ProgramImportStatus'
+        model:
+          type: string
+          nullable: true
+        inputTokens:
+          type: integer
+          nullable: true
+        outputTokens:
+          type: integer
+          nullable: true
+        estimatedCostUsd:
+          type: number
+          nullable: true
+        pageCount:
+          type: integer
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+        approvedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        adminUser:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+
+    ProgramImportRole:
+      type: object
+      required:
+        - id
+        - importSessionId
+        - importPresentationId
+        - type
+        - rawName
+        - searchName
+        - previewMatchStatus
+        - previewUserId
+      properties:
+        id:
+          type: string
+          format: uuid
+        importSessionId:
+          type: string
+          format: uuid
+          nullable: true
+        importPresentationId:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+        searchName:
+          type: string
+        previewMatchStatus:
+          $ref: '#/components/schemas/RoleMatchStatus'
+        previewUserId:
+          type: string
+          format: uuid
+          nullable: true
+
+    ProgramImportRoleCreate:
+      type: object
+      required:
+        - type
+        - rawName
+      properties:
+        importSessionId:
+          type: string
+          format: uuid
+        importPresentationId:
+          type: string
+          format: uuid
+        type:
+          $ref: '#/components/schemas/ProgramRoleType'
+        rawName:
+          type: string
+
+    ProgramImportRoleUpdate:
+      type: object
+      required:
+        - rawName
+      properties:
+        rawName:
+          type: string
+
+    ProgramImportPresentation:
+      type: object
+      required:
+        - id
+        - importSessionId
+        - rowOrder
+        - title
+        - rawStartTime
+        - rawEndTime
+        - startTime
+        - endTime
+        - abstract
+        - warning
+      properties:
+        id:
+          type: string
+          format: uuid
+        importSessionId:
+          type: string
+          format: uuid
+        rowOrder:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        rawStartTime:
+          type: string
+          nullable: true
+        rawEndTime:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        abstract:
+          type: string
+          nullable: true
+        warning:
+          type: string
+          nullable: true
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportRole'
+
+    ProgramImportPresentationCreate:
+      type: object
+      required:
+        - importSessionId
+        - title
+      properties:
+        importSessionId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    ProgramImportPresentationUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+
+    ProgramImportSession:
+      type: object
+      required:
+        - id
+        - importId
+        - rowOrder
+        - title
+        - rawHallName
+        - hallId
+        - dayLabel
+        - rawDate
+        - rawStartTime
+        - rawEndTime
+        - startTime
+        - endTime
+        - sessionType
+        - keywords
+        - status
+        - message
+        - warning
+      properties:
+        id:
+          type: string
+          format: uuid
+        importId:
+          type: string
+          format: uuid
+        rowOrder:
+          type: integer
+        title:
+          type: string
+          nullable: true
+        rawHallName:
+          type: string
+          nullable: true
+        hallId:
+          type: string
+          format: uuid
+          nullable: true
+        dayLabel:
+          type: string
+          nullable: true
+        rawDate:
+          type: string
+          nullable: true
+        rawStartTime:
+          type: string
+          nullable: true
+        rawEndTime:
+          type: string
+          nullable: true
+        startTime:
+          type: string
+          format: date-time
+          nullable: true
+        endTime:
+          type: string
+          format: date-time
+          nullable: true
+        sessionType:
+          type: string
+          nullable: true
+        keywords:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ImportRowStatus'
+        message:
+          type: string
+          nullable: true
+        warning:
+          type: string
+          nullable: true
+        presentations:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportPresentation'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportRole'
+
+    ProgramImportSessionCreate:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+
+    ProgramImportSessionUpdate:
+      type: object
+      properties:
+        title:
+          type: string
+        hallId:
+          type: string
+          format: uuid
+        startTime:
+          type: string
+          format: date-time
+        endTime:
+          type: string
+          format: date-time
+        sessionType:
+          type: string
+        dayLabel:
+          type: string
+        keywords:
+          type: string
+
+    ProgramImportDetail:
+      type: object
+      required:
+        - import
+        - sessions
+        - total
+        - page
+        - pageSize
+        - summary
+      properties:
+        import:
+          $ref: '#/components/schemas/ProgramImport'
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgramImportSession'
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+        summary:
+          type: object
+          required: [sessionsByStatus, rolesByMatchStatus, presentationCount, hallsToCreate]
+          properties:
+            sessionsByStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            rolesByMatchStatus:
+              type: object
+              additionalProperties:
+                type: integer
+            presentationCount:
+              type: integer
+            hallsToCreate:
+              type: array
+              description: >-
+                Faz 4c §3 - onayda otomatik olusturulacak salon adaylari
+                (farkli yazim varyasyonlari zaten TEK adaya birlestirilmis).
+                Yalnizca status=DRAFT iken anlamlidir.
+              items:
+                type: string
+
+    ProgramImportApproveSummary:
+      type: object
+      required:
+        - createdSessions
+        - createdPresentations
+        - createdRoles
+        - skippedPresentations
+        - createdHalls
+      properties:
+        createdSessions:
+          type: integer
+        createdPresentations:
+          type: integer
+        createdRoles:
+          type: integer
+        skippedPresentations:
+          type: integer
+          description: Basliksiz oldugu icin canliya YAZILMAYAN sunum sayisi.
+        createdHalls:
+          type: array
+          description: >-
+            Faz 4c §3 - onayda otomatik olusturulan salonlar. Bunlara HENUZ
+            beacon atanmamistir, panelde belirgin bir uyari gerekir.
+          items:
+            type: object
+            required: [id, name]
+            properties:
+              id:
+                type: string
+                format: uuid
+              name:
+                type: string
+
+    ExtractionResultInput:
+      type: object
+      description: >-
+        Faz 4d - kanonik program semasi. PDF/Excel LLM cikarimi
+        (`output_config.format` ile zorlatilir), JSON yukleme
+        (`POST /admin/program-imports/json`) ve sablon
+        (`GET /admin/program-imports/template.json`) uc noktalarinin
+        HEPSI bu semayi kullanir - tek kaynak
+        `shared/congress-program.schema.json` (JSON Schema draft
+        2020-12), burada ikinci kez ELLE KOPYALANMAZ, bu tanim o
+        dosyanin OpenAPI'ye yansitilmis halidir. Gun -> salon ->
+        etkinlik -> oge hiyerarsisi gercek kongre programlarinin dogal
+        yapisini izler (bkz. docs/decisions.md "Faz 4d"). Kok nesnede
+        ve her ic-ici nesnede ek alan KABUL EDILMEZ
+        (`additionalProperties: false`) - cikarim-sureci metalari
+        (`extraction`, `source_page` vb.) kanonik sozlesmenin PARCASI
+        DEGILDIR ve reddedilir.
+      required: [schemaVersion, congress, days]
+      properties:
+        schemaVersion:
+          type: string
+          enum: ['1.0']
+        congress:
+          type: object
+          required: [name, startDate]
+          properties:
+            name:
+              type: string
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+              nullable: true
+            venue:
+              type: string
+              nullable: true
+        days:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [date, halls]
+            properties:
+              date:
+                type: string
+                format: date
+              label:
+                type: string
+                nullable: true
+                description: "orn. '1. Gun'."
+              halls:
+                type: array
+                minItems: 1
+                items:
+                  type: object
+                  required: [name, events]
+                  properties:
+                    name:
+                      type: string
+                    nameEn:
+                      type: string
+                      nullable: true
+                    events:
+                      type: array
+                      description: Bos olabilir.
+                      items:
+                        type: object
+                        required: [startTime, endTime, type, title, items]
+                        properties:
+                          startTime:
+                            type: string
+                            description: "'HH:MM' formatinda."
+                          endTime:
+                            type: string
+                          type:
+                            type: string
+                            enum: [session, break, ceremony, live_case, other]
+                          title:
+                            type: string
+                          titleEn:
+                            type: string
+                            nullable: true
+                          series:
+                            type: string
+                            nullable: true
+                          keywords:
+                            type: array
+                            items:
+                              type: string
+                          chairs:
+                            type: array
+                            description: "-> ProgramRoleType.MODERATOR."
+                            items:
+                              type: string
+                          panelists:
+                            type: array
+                            description: "-> ProgramRoleType.DISCUSSANT."
+                            items:
+                              type: string
+                          items:
+                            type: array
+                            description: >-
+                              Bos olabilir. `type: discussion` ogeleri de
+                              (konusmacisiz olsa bile) birer Presentation
+                              satiri olarak yazilir, ATLANMAZ.
+                            items:
+                              type: object
+                              required: [type, title]
+                              properties:
+                                startTime:
+                                  type: string
+                                  nullable: true
+                                endTime:
+                                  type: string
+                                  nullable: true
+                                type:
+                                  type: string
+                                  enum: [presentation, discussion]
+                                code:
+                                  type: string
+                                  nullable: true
+                                  description: Bildiri kodu, orn. 'ZS 006'.
+                                title:
+                                  type: string
+                                speakers:
+                                  type: array
+                                  description: "-> ProgramRoleType.SPEAKER."
+                                  items:
+                                    type: string
+
+    UnmatchedNameGroup:
+      type: object
+      description: >-
+        Faz 4c §4 - ayni kisinin (searchName ile normalize edilmis) birden
+        fazla oturum/sunumdaki gorunumleri TEK grupta toplanir.
+      required: [searchName, rawName, occurrences]
+      properties:
+        searchName:
+          type: string
+        rawName:
+          type: string
+          description: Panelde gosterilecek orijinal isim.
+        occurrences:
+          type: array
+          items:
+            type: object
+            required:
+              - roleId
+              - type
+              - sessionId
+              - sessionTitle
+              - presentationId
+              - presentationTitle
+            properties:
+              roleId:
+                type: string
+                format: uuid
+              type:
+                $ref: '#/components/schemas/ProgramRoleType'
+              sessionId:
+                type: string
+                format: uuid
+                nullable: true
+              sessionTitle:
+                type: string
+                nullable: true
+              presentationId:
+                type: string
+                format: uuid
+                nullable: true
+              presentationTitle:
+                type: string
+                nullable: true

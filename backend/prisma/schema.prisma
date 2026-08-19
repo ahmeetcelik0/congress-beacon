@@ -14,13 +14,23 @@ datasource db {
 }
 
 model Congress {
-  id         String    @id @default(uuid())
-  name       String
-  code       String    @unique
-  accessCode String
-  beaconUuid String
-  startDate  DateTime?
-  endDate    DateTime?
+  id                         String    @id @default(uuid())
+  name                       String
+  code                       String    @unique
+  accessCode                 String
+  beaconUuid                 String
+  startDate                  DateTime?
+  endDate                    DateTime?
+  // Mobil ana sayfa kongre karti icin Faz 3 alanlari - hepsi nullable,
+  // mevcut kongreler (bu alanlar hic doldurulmadan) bozulmasin diye.
+  // `name` kisa/etiket adi olarak KALIYOR (kod/URL/panel listelerinde
+  // kullanilir); `fullName` resmi tam addir (mobil kartta gosterilir).
+  fullName                   String?
+  description                String?   @db.Text
+  coverImageUrl              String?
+  websiteUrl                 String?
+  contactEmail               String?
+  contactPhone               String?
   // Mobil cihazlarin observation batch'lerini kac saniyede bir gonderecegini
   // belirler. Panelden degistirilebilir; mobil uygulama bunu koda gomulu
   // sabit yerine her batch gonderiminde backend'den ogrenir (bkz.
@@ -50,13 +60,130 @@ model Congress {
   // olusmaz. Bkz. docs/decisions.md.
   staleGraceSeconds         Float @default(5)
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  halls    Hall[]
-  beacons  Beacon[]
-  users    User[]
-  sessions Session[]
+  halls               Hall[]
+  beacons             Beacon[]
+  sessions            Session[]
+  registrations       CongressRegistration[]
+  registrationImports RegistrationImport[]
+  venues              Venue[]
+  announcements       Announcement[]
+  sponsors            Sponsor[]
+  keynoteSpeakers     KeynoteSpeaker[]
+  infoSections        CongressInfoSection[]
+  programImports      ProgramImport[]
+  notificationLogs    NotificationLog[]
+}
+
+enum VenueType {
+  MAIN // kongre merkezi / ana mekan
+  HOTEL // konaklama oteli
+}
+
+model Venue {
+  id           String    @id @default(uuid())
+  congressId   String
+  type         VenueType @default(HOTEL)
+  name         String
+  address      String?   @db.Text
+  city         String?
+  phone        String?
+  websiteUrl   String?
+  mapUrl       String? // Google Maps baglantisi
+  latitude     Float?
+  longitude    Float?
+  description  String?   @db.Text
+  imageUrl     String?
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, type, displayOrder])
+}
+
+model Announcement {
+  id          String    @id @default(uuid())
+  congressId  String
+  title       String
+  body        String    @db.Text
+  isPinned    Boolean   @default(false)
+  // null = taslak, mobilde gorunmez. Push bildirimi bu fazda YOK (Faz 9) -
+  // yalnizca icerik.
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, publishedAt])
+}
+
+enum SponsorTier {
+  PLATINUM
+  GOLD
+  SILVER
+  BRONZE
+  SUPPORTER
+}
+
+model Sponsor {
+  id           String      @id @default(uuid())
+  congressId   String
+  name         String
+  tier         SponsorTier @default(SUPPORTER)
+  logoUrl      String?
+  websiteUrl   String?
+  description  String?     @db.Text
+  displayOrder Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, tier, displayOrder])
+}
+
+// Elle yonetilen bir VITRIN listesi - Faz 4'teki bilimsel program
+// konusmaci/moderator isimleriyle (isim eslestirmeyle ele alinacak) KASITLI
+// olarak bagli DEGIL, bkz. docs/decisions.md.
+model KeynoteSpeaker {
+  id           String   @id @default(uuid())
+  congressId   String
+  fullName     String // unvanli tam hali: "Prof. Dr. Ahmet Yilmaz"
+  title        String? // "Kardiyoloji Profesoru"
+  institution  String? // "Hacettepe Universitesi"
+  country      String?
+  bio          String?  @db.Text
+  photoUrl     String?
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, displayOrder])
+}
+
+// Sabit alanlar yerine serbest bolumler secildi cunku her kongrenin "genel
+// bilgi" icerigi farkli (biri "Ulasim" ister, biri "Duzenleme Kurulu").
+// Icerik Markdown olarak saklanir, mobil tarafta render edilir.
+model CongressInfoSection {
+  id           String   @id @default(uuid())
+  congressId   String
+  title        String // "Kongre Hakkinda", "Ulasim", "Duzenleme Kurulu", "Kayit Bilgileri"
+  body         String   @db.Text
+  displayOrder Int      @default(0)
+  isPublished  Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@index([congressId, displayOrder])
 }
 
 enum UserRole {
@@ -65,18 +192,43 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  congressId   String
-  firstName    String
-  lastName     String
-  phoneLast4   String
-  role         UserRole @default(PARTICIPANT)
-  tokenVersion Int      @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  firstName          String
+  lastName           String
+  // Faz 4a: bilimsel program konusmaci/moderator eslestirmesi icin -
+  // normalizeTurkishName(firstName + ' ' + lastName). Kullanici olusturulurken/
+  // ad-soyadi guncellenirken hesaplanir (bkz. common/normalize-turkish-name.ts).
+  // Nullable: Faz 4a ONCESI olusmus kayitlar icin migration ile geriye donuk
+  // dolduruldu, ama sema seviyesinde NOT NULL zorunlu tutulmadi (gelecekte
+  // farkli bir olusturma yolu bu adimi atlarsa sessizce hata vermesin diye).
+  searchName         String?
+  // Faz 1 oncesi tum kullanicilar icin doluydu (pilot-login eslestirmesi);
+  // artik nullable - Faz 2'de dernek kayit listesinden e-postasi olup
+  // telefonu olmayan katilimcilar gelecek. pilot-login bu alani hala her
+  // zaman doldurur.
+  phoneLast4         String?
+  // E.164 normalize edilmis (ornek: +905321234567). unique oldugu ve E.164
+  // bekledigi icin normalize EDILEMEYEN (unparseable) numaralar buraya
+  // YAZILMAZ - yalnizca phoneRaw'da yasarlar (bkz. asagisi, veri kaybini
+  // onleyen alan budur).
+  email              String?   @unique
+  phone              String?   @unique
+  // Katilimcinin/dernegin verdigi HAM telefon hali - normalize edilebilmis
+  // olsun ya da olmasin her zaman doldurulur. Panelde gosterilir, arama
+  // buna da bakar. Bkz. docs/decisions.md (Faz 2 - phone + phoneRaw ikilisi).
+  phoneRaw           String?
+  passwordHash       String?
+  // true ise kullanici gecici bir kodla/sifreyle giris yapmis demektir -
+  // ActiveCongressGuard bu durumda kongre gerektiren uc noktalari kapatir.
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  role               UserRole  @default(PARTICIPANT)
+  tokenVersion       Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  congress Congress @relation(fields: [congressId], references: [id])
-  devices  Device[]
+  devices       Device[]
+  registrations CongressRegistration[]
 
   observationBatches ObservationBatch[]
   beaconObservations BeaconObservation[]
@@ -84,8 +236,92 @@ model User {
   hallVisits         HallVisit[]
   presenceState      UserPresenceState?
   notificationLogs   NotificationLog[]
+  programRoles       ProgramRole[]
 
-  @@unique([congressId, firstName, lastName, phoneLast4])
+  @@index([searchName])
+}
+
+enum RegistrationSource {
+  API // dernek kayit sitesinden cekilen (Faz 2'de baglanacak)
+  IMPORT // Excel/CSV yuklemesi
+  MANUAL // panelden elle eklenen
+  PILOT // eski pilot-login akisinin otomatik olusturdugu
+}
+
+model CongressRegistration {
+  id           String             @id @default(uuid())
+  userId       String
+  congressId   String
+  source       RegistrationSource @default(MANUAL)
+  externalId   String? // dernek sistemindeki kayit numarasi
+  isActive     Boolean            @default(true)
+  registeredAt DateTime           @default(now())
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id])
+  congress Congress @relation(fields: [congressId], references: [id])
+
+  @@unique([congressId, userId])
+  @@index([congressId])
+  @@index([userId])
+}
+
+enum ImportStatus {
+  DRAFT // yuklendi, onay bekliyor
+  APPROVED // onaylandi, kayitlara islendi
+  CANCELLED // yetkili iptal etti
+}
+
+enum ImportRowStatus {
+  NEW // yeni kullanici olusturulacak
+  MATCHED // mevcut kullaniciyla eslesti, kaydi eklenecek/guncellenecek
+  DUPLICATE // ayni dosya icinde tekrar eden satir
+  INVALID // islenemez (bkz. RegistrationImportParser)
+  EXCLUDED // yetkili elle cikardi
+}
+
+model RegistrationImport {
+  id          String       @id @default(uuid())
+  congressId  String
+  adminUserId String
+  fileName    String
+  status      ImportStatus @default(DRAFT)
+  totalRows   Int
+  approvedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  congress  Congress                @relation(fields: [congressId], references: [id])
+  adminUser AdminUser               @relation(fields: [adminUserId], references: [id])
+  rows      RegistrationImportRow[]
+
+  @@index([congressId, status])
+}
+
+model RegistrationImportRow {
+  id              String          @id @default(uuid())
+  importId        String
+  rowNumber       Int // dosyadaki gercek satir numarasi (hata mesajlarinda kullanilir)
+  rawFirstName    String?
+  rawLastName     String?
+  rawEmail        String?
+  rawPhone        String?
+  normalizedEmail String?
+  // E.164; normalize edilemediyse null (rawPhone yine dolu - bkz. bolum 1).
+  normalizedPhone String?
+  externalId      String?
+  status          ImportRowStatus
+  // Satiri BLOKE eden hata - INVALID durumundaysa dolu, Turkce.
+  message         String?
+  // Satir islenebilir ama dikkat gerektiriyor - Turkce. message'dan AYRI:
+  // biri satiri onaydan cikarir, digeri sadece bilgi verir.
+  warning         String?
+  matchedUserId   String?
+
+  import RegistrationImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  @@index([importId, status])
 }
 
 enum DevicePlatform {
@@ -230,11 +466,11 @@ model AttendanceEvent {
   hallId String
   type   AttendanceEventType
 
-  occurredAt DateTime
+  occurredAt       DateTime
   // v2'de ham dB marjini tasiyordu, v3'ten itibaren 0-100 arasi guven YUZDESI
   // tasir. Gecmis veri icin backfill YAPILMADI - algorithmVersion ayrimi
   // ('v2' vs 'v3') sayesinde eski/yeni anlam karismaz.
-  confidenceScore Float?
+  confidenceScore  Float?
   // Karar gerekcesi: hangi salonlar, hangi yumusatilmis degerler, yuzdeler,
   // en yakin rakiple fark, kac okuma outlier diye elendi. Saha testinde
   // "neden burada yanlis salon secildi" sorusuna cevap verebilmek icin.
@@ -278,7 +514,9 @@ model AdminUser {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  auditLogs AuditLog[]
+  auditLogs           AuditLog[]
+  registrationImports RegistrationImport[]
+  programImports      ProgramImport[]
 }
 
 model AuditLog {
@@ -323,19 +561,43 @@ model UserPresenceState {
 }
 
 model Session {
-  id          String   @id @default(uuid())
-  congressId  String
-  hallId      String
-  title       String
-  speaker     String?
-  startTime   DateTime
-  endTime     DateTime
-  description String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(uuid())
+  congressId   String
+  hallId       String
+  // Faz 4b canli testinde gercek bir kongre programinda VARCHAR(191)'i asan
+  // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
+  // docs/decisions.md. @db.Text'e genisletildi.
+  title        String   @db.Text
+  // Faz 4d: kanonik semanin ayri `titleEn`/`series` alanlari - eskiden Faz
+  // 4b'de iki dilli basliklar TEK `title` alaninda BIRLESIK yaziliyordu
+  // (yukaridaki yorum), artik ayri tutuluyor. Nullable - eski veri ve
+  // tek dilli programlar icin bos kalabilir. Mobil `/mobile/*` yanitlarina
+  // BU FAZDA eklenmedi (bkz. Faz 4d talimati) - yalnizca veri kaybetmemek
+  // icin saklaniyor.
+  titleEn      String?  @db.Text
+  series       String?  @db.Text
+  // DEPRECATED: yeni programlarda moderator/konusmaci ProgramRole uzerinden
+  // tutulur (bkz. asagisi). Bu alan yalnizca Faz 4a ONCESI olusmus mevcut
+  // verinin ve /sessions panelinin eski gorunumunun bozulmamasi icin
+  // KORUNUYOR - silinmedi, yeni yazimlarda kullanilmasi beklenmiyor.
+  speaker      String?
+  startTime    DateTime
+  endTime      DateTime
+  description  String?
+  // --- Faz 4a: iki seviyeli bilimsel program alanlari (hepsi nullable/
+  // varsayilanli - mevcut oturumlar bozulmadan gecerli kalir) ---
+  sessionType  String? // "Panel", "Sempozyum", "Kurs", "Ana Konusma", "Uydu Sempozyumu"
+  dayLabel     String? // programdaki gun etiketi: "1. Gun", "Calistaylar"
+  keywords     String? // virgulle ayrilmis anahtar kelimeler (Faz 9 bildirimleri icin hazirlik - bu fazda KULLANILMIYOR)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   congress Congress @relation(fields: [congressId], references: [id])
   hall     Hall     @relation(fields: [hallId], references: [id])
+
+  presentations Presentation[]
+  roles         ProgramRole[]
 
   notificationLogs NotificationLog[]
 
@@ -343,26 +605,228 @@ model Session {
   @@index([hallId])
 }
 
+model Presentation {
+  id           String    @id @default(uuid())
+  sessionId    String
+  title        String    @db.Text
+  // Faz 4d: kanonik semanin `item.titleEn`/`item.code` alanlari (bkz.
+  // Session.titleEn/series yorumu - ayni gerekce). `code` bildiri/olgu
+  // kodu icin (ör. "ZS 006").
+  titleEn      String?   @db.Text
+  code         String?
+  startTime    DateTime?
+  endTime      DateTime?
+  abstract     String?   @db.Text
+  displayOrder Int       @default(0)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  session Session       @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  roles   ProgramRole[]
+
+  @@index([sessionId, displayOrder])
+}
+
+enum ProgramRoleType {
+  MODERATOR // oturum baskani
+  SPEAKER // konusmaci
+  DISCUSSANT // tartismaci
+}
+
+enum RoleMatchStatus {
+  MATCHED // otomatik eslesti (tek aday)
+  AMBIGUOUS // birden fazla aday - yetkili secmeli
+  UNMATCHED // aday yok
+  MANUAL // yetkili elle bagladi
+  IGNORED // yetkili "bu kisi katilimci degil" dedi
+}
+
+// Bir rol ya bir oturuma ya bir sunuma baglidir - ikisi birden dolu veya
+// ikisi birden bos OLAMAZ. Prisma/MySQL seviyesinde CHECK kisiti
+// yazilamadigi icin bu kural servis katmaninda (ProgramRoleService)
+// dogrulanir, bkz. docs/decisions.md "neden tek ProgramRole tablosu".
+model ProgramRole {
+  id             String          @id @default(uuid())
+  sessionId      String?
+  presentationId String?
+  type           ProgramRoleType
+  rawName        String // programda yazdigi hali: "Prof. Dr. Ahmet Yilmaz"
+  searchName     String // normalizeTurkishName(rawName)
+  userId         String? // eslesen katilimci
+  matchStatus    RoleMatchStatus @default(UNMATCHED)
+  displayOrder   Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  session      Session?      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  presentation Presentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
+  user         User?         @relation(fields: [userId], references: [id])
+
+  @@index([sessionId])
+  @@index([presentationId])
+  @@index([searchName])
+  @@index([userId])
+}
+
+enum ProgramSourceType {
+  PDF
+  EXCEL
+  // Faz 4c: hazir bir ExtractionResult JSON'u dogrudan yukler, LLM cagrisi
+  // YAPILMAZ - model/inputTokens/outputTokens/estimatedCostUsd hep null
+  // kalir (bkz. Faz 4c talimati §2).
+  JSON
+}
+
+enum ProgramImportStatus {
+  PENDING // dosya alindi, cikarim kuyruga girdi
+  EXTRACTING // LLM cagrisi suruyor
+  DRAFT // cikarim bitti, yetkili onayi bekliyor
+  APPROVED // canliya islendi
+  CANCELLED
+  FAILED // cikarim basarisiz (errorMessage dolu)
+}
+
+// LLM'in ham cikarimini tutan STAGING katmani (Faz 2'nin RegistrationImport
+// deseniyle ayni fikir: yukle -> onizle/duzelt -> onayla). Onaylanmadan
+// hicbir satir canli Session/Presentation/ProgramRole tablolarina yazilmaz.
+model ProgramImport {
+  id               String              @id @default(uuid())
+  congressId       String
+  adminUserId      String
+  fileName         String
+  sourceType       ProgramSourceType
+  status           ProgramImportStatus @default(PENDING)
+  model            String? // gercekte kullanilan model kimligi (env ANTHROPIC_MODEL o an ne ise)
+  inputTokens      Int?
+  outputTokens     Int?
+  estimatedCostUsd Float? // kayit aninda MODEL_PRICING ile hesaplanmis gercek maliyet
+  pageCount        Int?
+  errorMessage     String?             @db.Text
+  approvedAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  congress  Congress               @relation(fields: [congressId], references: [id])
+  adminUser AdminUser              @relation(fields: [adminUserId], references: [id])
+  sessions  ProgramImportSession[]
+
+  @@index([congressId, status])
+}
+
+// Faz 2'nin ImportRowStatus enum'u yeniden kullanilir (NEW/INVALID/EXCLUDED
+// bu baglamda da ayni anlami tasir: NEW = onaya hazir, INVALID = baslik
+// yoksa/kritik hata, EXCLUDED = yetkili elle cikardi).
+model ProgramImportSession {
+  id           String          @id @default(uuid())
+  importId     String
+  rowOrder     Int
+  // Faz 4b canli testinde gercek bir kongre programinda VARCHAR(191)'i asan
+  // iki dilli (TR/EN tek satirda birlesik) basliklarla karsilasildi - bkz.
+  // docs/decisions.md. @db.Text'e genisletildi (canli Session.title ile ayni).
+  title        String?         @db.Text
+  // Faz 4d: kanonik semanin `event.titleEn`/`event.series` alanlari (bkz.
+  // canli Session.titleEn/series yorumu - ayni gerekce).
+  titleEn      String?         @db.Text
+  series       String?         @db.Text
+  rawHallName  String? // belgede yazan salon adi
+  hallId       String? // eslesen Hall (backend hesaplar, bkz. hall-matching.ts)
+  dayLabel     String?
+  rawDate      String? // belgede yazan tarih metni, varsa
+  rawStartTime String? // "09:00"
+  rawEndTime   String?
+  startTime    DateTime? // backend hesaplar (bkz. derive-datetime.ts)
+  endTime      DateTime?
+  sessionType  String?
+  keywords     String?
+  status       ImportRowStatus
+  message      String? // status=INVALID oldugunda neden
+  warning      String? // islenebilir ama dikkat gerektiriyor (ornek: tarih kongre baslangicindan turetildi)
+  // Faz 4c: admin onizlemede "olusturulacak salonlar" listesinden bu satirin
+  // rawHallName'ini TEK TEK kaldirdiginda true olur - onayda bu satir icin
+  // salon OTOMATIK olusturulmaz, hallId hala null oldugundan mevcut
+  // "salon secilmemis" onay kontrolu bu satiri yine BLOKE eder (elle salon
+  // secimi gerekir, bkz. Faz 4c talimati §3).
+  hallAutoCreateExcluded Boolean @default(false)
+
+  import        ProgramImport               @relation(fields: [importId], references: [id], onDelete: Cascade)
+  presentations ProgramImportPresentation[]
+  roles         ProgramImportRole[]
+
+  @@index([importId, rowOrder])
+}
+
+model ProgramImportPresentation {
+  id              String    @id @default(uuid())
+  importSessionId String
+  rowOrder        Int
+  title           String?   @db.Text
+  // Faz 4d: canli Presentation.titleEn/code ile ayni gerekce.
+  titleEn         String?   @db.Text
+  code            String?
+  rawStartTime    String?
+  rawEndTime      String?
+  startTime       DateTime?
+  endTime         DateTime?
+  abstract        String?   @db.Text
+  warning         String?
+
+  importSession ProgramImportSession @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
+  roles         ProgramImportRole[]
+
+  @@index([importSessionId, rowOrder])
+}
+
+// Faz 4a'daki ProgramRole ile AYNI "ya oturuma ya sunuma, ikisi birden
+// degil" kurali burada da servis katmaninda dogrulanir. previewMatchStatus/
+// previewUserId onayda oldugu gibi canli ProgramRole'e tasinir - yeni bir
+// eslestirme calismasi yapilmaz, Faz 4a'nin matchRole() servisi cagrilir.
+model ProgramImportRole {
+  id                   String          @id @default(uuid())
+  importSessionId      String?
+  importPresentationId String?
+  type                 ProgramRoleType
+  rawName              String
+  searchName           String
+  previewMatchStatus   RoleMatchStatus
+  previewUserId        String?
+
+  importSession      ProgramImportSession?      @relation(fields: [importSessionId], references: [id], onDelete: Cascade)
+  importPresentation ProgramImportPresentation? @relation(fields: [importPresentationId], references: [id], onDelete: Cascade)
+
+  @@index([importSessionId])
+  @@index([importPresentationId])
+}
+
 enum NotificationStatus {
   SENT
   FAILED
+  // Faz 9: saatlik gonderim sinirini asan kullanicilar icin - sessizce
+  // yutulmaz, iz birakilir (bkz. notification-scheduler.service.ts).
+  SKIPPED
 }
 
 model NotificationLog {
-  id        String              @id @default(uuid())
+  id        String             @id @default(uuid())
   sessionId String?
+  // Faz 9: birlestirilmis (N>1 oturumu kapsayan) bildirimlerde sessionId
+  // NULL olabilir (bkz. notification-scheduler.service.ts) - panelde
+  // "kongre bazinda gonderilen/acilan bildirim sayisi" gibi raporlar bu
+  // yuzden session iliskisi UZERINDEN degil, DOGRUDAN bu alanla filtrelenir.
+  congressId String
   userId    String
   deviceId  String
   title     String
   body      String
   status    NotificationStatus
-  sentAt    DateTime            @default(now())
+  sentAt    DateTime           @default(now())
   openedAt  DateTime?
 
-  session Session? @relation(fields: [sessionId], references: [id])
-  user    User     @relation(fields: [userId], references: [id])
-  device  Device   @relation(fields: [deviceId], references: [id])
+  session  Session? @relation(fields: [sessionId], references: [id])
+  congress Congress @relation(fields: [congressId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+  device   Device   @relation(fields: [deviceId], references: [id])
 
   @@index([userId])
   @@index([sessionId])
+  @@index([congressId, sentAt])
 }

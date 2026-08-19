@@ -1,58 +1,68 @@
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import '../../../core/network/api_client.dart';
 import '../../../core/network/api_endpoints.dart';
 import '../../../models/device_models.dart';
 import '../../../models/notification_models.dart';
 
+/// Push bildirimleri icin BACKEND'e konusan ince bir istemci - Firebase
+/// SDK'sinin YASAM DONGUSU orkestrasyonu (izin isteme, token yenileme,
+/// mesaj dinleyicileri, derin baglanti) burada DEGIL,
+/// `PushNotificationLifecycleNotifier`de (bkz. Faz 9 - ayni ayrim
+/// `BeaconObservationService`/`ObservationLifecycleNotifier` ile).
 class PushNotificationService {
-  PushNotificationService({
-    ApiClient? apiClient,
-  }) : _apiClient = apiClient ?? ApiClient();
+  PushNotificationService({ApiClient? apiClient})
+    : _apiClient = apiClient ?? ApiClient();
 
   final ApiClient _apiClient;
 
-  /// Updates the push token on the backend server.
+  /// Push token'i backend'e kaydeder (`PUT /devices/push-token`).
   Future<void> updateTokenOnServer(String pushToken, String deviceId) async {
-    final request = PushTokenRequest(
-      deviceId: deviceId,
-      pushToken: pushToken,
-    );
-
+    final request = PushTokenRequest(deviceId: deviceId, pushToken: pushToken);
     try {
       await _apiClient.put(
         ApiEndpoints.pushToken,
         body: request.toJson(),
         requiresAuth: true,
       );
-    } catch (e) {
-      // Sadece konsol çıktısı (şimdilik) veya sessizce başarısız olabilir.
-      // print yasak olduğu için yorum olarak bırakıldı.
-      // Hata durumunda yeniden deneme eklenebilir.
+    } catch (_) {
+      // Sessizce basarisiz olur - bir sonraki `onTokenRefresh`/uygulama
+      // acilisinda tekrar denenir, kullaniciyi ENGELLEMEZ (bkz. Faz 9
+      // talimati §5).
     }
   }
 
-  /// Marks a notification as opened on the backend server for analytics.
+  /// Cihaz kaydi Faz 6.2 kurtarma akisiyla YENILENDIGINDE (yeni `deviceId`,
+  /// eski token'la ESLESMEZ) cagrilir - GUNCEL FCM token'ini alip yeni
+  /// `deviceId` ile tekrar gonderir. Firebase hic baslatilmamis olabilir
+  /// (izin verilmedi/yapilandirma yok) - bu durumda sessizce hicbir sey
+  /// yapmaz.
+  Future<void> reRegisterCurrentTokenIfAvailable(String deviceId) async {
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token != null) {
+        await updateTokenOnServer(token, deviceId);
+      }
+    } catch (_) {
+      // Firebase baslatilmamis/izin yok - sessizce gec.
+    }
+  }
+
+  /// Bildirime dokunuldugunda acilma analitigi icin (`POST
+  /// /notifications/opened`).
   Future<void> markNotificationAsOpened(String notificationLogId) async {
     final request = NotificationOpenedRequest(
       notificationLogId: notificationLogId,
     );
-
     try {
       await _apiClient.post(
         ApiEndpoints.notificationOpened,
         body: request.toJson(),
         requiresAuth: true,
       );
-    } catch (e) {
-      // Sadece konsol çıktısı (şimdilik) veya sessizce başarısız olabilir.
+    } catch (_) {
+      // Sessizce basarisiz olur - kullaniciyi ENGELLEMEZ (bkz. Faz 9
+      // talimati §5 "sessizce başarısız olabilir, kullanıcıyı engellemesin").
     }
-  }
-
-  /// Initialize Firebase messaging and listen to token refreshes.
-  /// (Dummy implementation for now, will be implemented with firebase_messaging)
-  Future<void> initialize(String deviceId) async {
-    // TODO: Initialize Firebase
-    // TODO: Request permissions
-    // TODO: Get initial token and send to server
-    // TODO: Listen to onTokenRefresh stream and send to server
   }
 }

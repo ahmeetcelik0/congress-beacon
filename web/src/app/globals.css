@@ -457,6 +457,16 @@ body::after {
   margin-top: 0.5rem;
 }
 
+/* Bir h2 bölümü içindeki alt başlık (ör. "Bildirimler" içindeki "Son
+   Gönderimler") — h2'den daha düşük görsel ağırlık, tablo hemen üstünde. */
+.reports-subheading {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+}
+
 @keyframes rise {
   from {
     opacity: 0;
@@ -544,6 +554,26 @@ body::after {
   color: var(--alert);
   width: 100%;
   font-size: 0.85rem;
+}
+
+.panel-warning {
+  color: var(--status-warning);
+  width: 100%;
+  font-size: 0.85rem;
+}
+
+.beacon-uuid-mismatch-badge {
+  margin-left: 0.5rem;
+}
+
+.reports-consistency-warning {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--status-warning-dim);
+  color: var(--text);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
 }
 
 /* ===== Tablo ===== */

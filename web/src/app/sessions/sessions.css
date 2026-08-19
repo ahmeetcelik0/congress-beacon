@@ -1,0 +1,464 @@
+/* Bilimsel Program (`/sessions`, `/sessions/matches`) — oturum/sunum/rol
+   iki seviyeli model. Tablo/form temeli paylaşılan `.panel-*` (globals.css)
+   ve `.content-form-optional` (content.css importu YOK, o sınıf yalnızca
+   ipucu metni içindir, burada da aynı isimle küçük bir kopyası tanımlanır
+   ki content modülüne bağımlılık oluşmasın) üzerine kuruludur. */
+
+.content-form-optional {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+/* ===== Oluşturma formu ===== */
+.sessions-create-form {
+  align-items: flex-end;
+}
+
+/* ===== Gün/salon filtre çubuğu ===== */
+.sessions-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.sessions-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  min-width: 12rem;
+}
+
+.sessions-filter-count {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+  padding-bottom: 0.55rem;
+}
+
+/* ===== Oturum listesi ===== */
+.sessions-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sessions-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.sessions-card-header {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.sessions-card-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.sessions-card-toggle:hover {
+  background: rgba(130, 170, 210, 0.05);
+}
+
+.sessions-card-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.sessions-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.sessions-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.75rem;
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+}
+
+.sessions-card-moderators {
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.sessions-card-chevron {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-right: 1.4px solid var(--text-faint);
+  border-bottom: 1.4px solid var(--text-faint);
+  transform: rotate(45deg);
+  transition: transform var(--transition-fast);
+}
+
+.sessions-card-chevron[data-open='true'] {
+  transform: rotate(-135deg);
+}
+
+.sessions-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0 1rem 1.1rem;
+  border-top: 1px solid var(--border);
+  margin-top: -1px;
+}
+
+.sessions-card-section {
+  padding-top: 1rem;
+}
+
+.sessions-subheading {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--text-faint);
+  margin-bottom: 0.6rem;
+}
+
+.sessions-row-error {
+  margin: 0 0.75rem 0.5rem;
+}
+
+/* ===== Genel satır-içi "sil" düğmesi (oturum/sunum/rol) ===== */
+.sessions-inline-delete {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0.35rem 0.7rem;
+  min-height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.sessions-inline-delete:hover {
+  border-color: var(--alert);
+  color: var(--alert);
+}
+
+/* ===== Yukarı/aşağı sıralama okları (oturum + sunum) ===== */
+.sessions-reorder-buttons {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.sessions-reorder-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.sessions-reorder-buttons button:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.sessions-reorder-buttons button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ===== Rol yöneticisi (oturum-rolü + sunum-rolü ortak) ===== */
+.sessions-role-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sessions-role-empty {
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.sessions-role-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sessions-role-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.sessions-role-item-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 0.84rem;
+}
+
+.sessions-role-type {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+
+.sessions-role-name {
+  color: var(--text);
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.sessions-role-user {
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.sessions-role-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sessions-role-type-trigger {
+  min-width: 9rem;
+}
+
+.sessions-role-form input[type='text'] {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.84rem;
+}
+
+.sessions-role-form input[type='text']:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.sessions-role-form button {
+  padding: 0.45rem 0.9rem;
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sessions-role-form button:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+}
+
+.sessions-role-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sessions-role-form-error {
+  width: 100%;
+}
+
+/* ===== Sunumlar paneli ===== */
+.sessions-presentations-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sessions-presentation-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sessions-presentation-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  background: var(--bg-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.sessions-presentation-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.sessions-presentation-header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.sessions-presentation-title {
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.sessions-presentation-time {
+  font-family: var(--font-mono), monospace;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+.sessions-presentation-abstract {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  max-width: 62ch;
+}
+
+.sessions-presentation-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.sessions-presentation-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.sessions-presentation-form input,
+.sessions-presentation-form textarea {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.84rem;
+  resize: vertical;
+}
+
+.sessions-presentation-form input:focus-visible,
+.sessions-presentation-form textarea:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.sessions-form-span-full {
+  grid-column: 1 / -1;
+}
+
+.sessions-presentation-form-footer {
+  display: flex;
+}
+
+.sessions-presentation-form-footer button,
+.sessions-presentation-form button[type='submit'] {
+  padding: 0.5rem 1.1rem;
+  min-height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.sessions-presentation-form button[type='submit']:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+}
+
+.sessions-presentation-form button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 720px) {
+  .sessions-card-header {
+    flex-wrap: wrap;
+  }
+
+  .sessions-card-toggle {
+    order: 1;
+    width: 100%;
+  }
+
+  .sessions-presentation-form {
+    grid-template-columns: 1fr;
+  }
+}

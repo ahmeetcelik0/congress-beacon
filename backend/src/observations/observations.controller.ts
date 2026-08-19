@@ -1,7 +1,8 @@
 import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ActiveCongressGuard } from '../auth/active-congress.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import type { User } from '../../generated/prisma/client';
+import type { AuthenticatedUser } from '../auth/authenticated-request';
 import { ObservationIngestionService } from './observation-ingestion.service';
 import { ObservationQueryService } from './observation-query.service';
 import { ObservationBatchDto } from './dto/observation-batch.dto';
@@ -24,13 +25,18 @@ export class ObservationsController {
   }
 
   @Post('batch')
-  @UseGuards(JwtAuthGuard)
-  async ingest(@CurrentUser() user: User, @Body() dto: ObservationBatchDto) {
+  @UseGuards(JwtAuthGuard, ActiveCongressGuard)
+  async ingest(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ObservationBatchDto,
+  ) {
     const result = await this.ingestionService.ingest(user, dto);
 
     if (result.acceptedSnapshots.length > 0) {
+      // ActiveCongressGuard congressId'nin dolu olmasini zaten garanti eder.
       await this.attendanceProcessingService.processSnapshots(
         user.id,
+        user.congressId as string,
         result.acceptedSnapshots,
       );
     }

@@ -7,6 +7,7 @@ import { deleteBeaconAction } from './actions';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { loadCongresses } from '@/lib/load-congresses';
 
 export default async function BeaconsPage({
@@ -27,6 +28,9 @@ export default async function BeaconsPage({
   }
 
   const congresses = congressesResult.congresses;
+  const selectedCongress = congressId
+    ? congresses.find((congress) => congress.id === congressId)
+    : undefined;
   const halls = congressId ? await api.listHalls(congressId) : [];
   const beacons = congressId ? await api.listBeacons(congressId) : [];
   const activeAssignments = hallId ? await api.listActiveHallBeacons(hallId) : [];
@@ -45,7 +49,17 @@ export default async function BeaconsPage({
 
       {congressId && (
         <>
-          <BeaconForm congressId={congressId} />
+          {/* `key={congressId}` kongre değiştirildiğinde (aynı route içinde
+              istemci-taraflı geçiş, bkz. `CongressSelector`) bileşeni yeniden
+              mount eder ki `uuid` iç state'i YENİ kongrenin `beaconUuid`
+              değerine sıfırlansın; aksi halde React eski state'i korur ve
+              alan bir önceki kongrenin UUID'sini gösterir (bkz.
+              `attendance/page.tsx`daki aynı desen). */}
+          <BeaconForm
+            key={congressId}
+            congressId={congressId}
+            congressBeaconUuid={selectedCongress?.beaconUuid ?? ''}
+          />
 
           <HallSelector halls={halls} selectedId={hallId} congressId={congressId} />
           {!hallId && (
@@ -64,9 +78,20 @@ export default async function BeaconsPage({
               </tr>
             </thead>
             <tbody>
-              {beacons.map((beacon) => (
+              {beacons.map((beacon) => {
+                const beaconUuidMismatch =
+                  !!selectedCongress?.beaconUuid &&
+                  beacon.uuid.toUpperCase() !== selectedCongress.beaconUuid.toUpperCase();
+                return (
                 <tr key={beacon.id}>
-                  <td>{beacon.uuid}</td>
+                  <td>
+                    {beacon.uuid}
+                    {beaconUuidMismatch && (
+                      <StatusBadge tone="critical" className="beacon-uuid-mismatch-badge">
+                        UUID uyuşmuyor
+                      </StatusBadge>
+                    )}
+                  </td>
                   <td>{beacon.major}</td>
                   <td>{beacon.minor}</td>
                   <td>{beacon.label ?? '-'}</td>
@@ -85,7 +110,8 @@ export default async function BeaconsPage({
                     </form>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {beacons.length === 0 && (
                 <tr>
                   <td colSpan={6}>Bu kongrede henüz beacon yok.</td>

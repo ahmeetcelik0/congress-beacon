@@ -1,0 +1,510 @@
+/* Katılımcılar sayfası (`/registrations`) ve içe aktarma önizleme sayfası
+   (`/registrations/imports/[id]`) için ortak, sayfaya özgü stiller. Tablo
+   gövdesi paylaşılan `.panel-table` sınıfını kullanır (bkz. globals.css,
+   mobilde otomatik yatay kaydırma da oradan gelir) - burada yalnızca bu iki
+   sayfaya özgü ekler tanımlanır: filtre satırı, sayfalama, satır-içi
+   düzenleme formu, içe aktarma araçları ve satır durum renkleri. */
+
+.reg-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-bottom: 1.75rem;
+}
+
+.reg-upload-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.reg-upload-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+}
+
+.reg-upload-form-label input[type='file'] {
+  font-size: 0.8rem;
+  color: var(--text);
+  max-width: 16rem;
+}
+
+.reg-upload-form-hint {
+  font-size: 0.7rem;
+  color: var(--text-faint);
+}
+
+.reg-upload-form button {
+  padding: 0.5rem 1.1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.reg-upload-form button:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.reg-upload-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reg-form-optional {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.reg-form-success {
+  width: 100%;
+  color: var(--status-positive);
+  font-size: 0.85rem;
+}
+
+/* ===== Filtre satırı ve sayfalama (Katılımcılar tablosu) ===== */
+.reg-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.reg-filters input[type='text'] {
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.85rem;
+  min-width: 15rem;
+  flex: 1 1 15rem;
+}
+
+.reg-filters input[type='text']:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.reg-filters > button {
+  padding: 0.5rem 1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), color var(--transition-fast);
+}
+
+.reg-filters > button:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.reg-stale-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--status-warning);
+  background: var(--status-warning-dim);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.reg-contact-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+}
+
+.reg-phone-unverified {
+  color: var(--status-warning);
+}
+
+.reg-contact-missing {
+  color: var(--text-faint);
+}
+
+.reg-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.reg-row-actions button {
+  padding: 0.3rem 0.65rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
+}
+
+.reg-row-actions button:hover:not(:disabled) {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.reg-row-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reg-row-error {
+  width: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+}
+
+/* ===== Satır-içi düzenleme formu (katılımcı VE içe aktarma satırı ortak) ===== */
+.reg-edit-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  padding: 0.35rem 0.1rem;
+}
+
+.reg-edit-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  min-width: 10rem;
+  flex: 1 1 10rem;
+}
+
+.reg-edit-form input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-family: var(--font-body), sans-serif;
+  font-size: 0.85rem;
+}
+
+.reg-edit-form input:focus-visible {
+  outline: none;
+  border-color: var(--signal);
+  box-shadow: var(--focus-ring);
+}
+
+.reg-edit-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reg-edit-form-actions button {
+  padding: 0.5rem 1rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reg-edit-form-actions button[type='submit'] {
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+}
+
+.reg-edit-form-actions button[type='submit']:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+}
+
+.reg-edit-form-actions button[type='button'] {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.reg-edit-form-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reg-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.reg-pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.reg-pagination button {
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.reg-pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* İçe aktarma önizleme sayfasındaki sayfalama linkleri (`<Link>` - gerçek
+   `disabled` özniteliği desteklemez, bkz. imports/[id]/page.tsx). */
+.reg-pagination-buttons a {
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.reg-pagination-buttons a:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.reg-pagination-disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* ===== İçe aktarma geçmişi (Katılımcılar sayfası alt bölümü) ===== */
+.reg-imports-section {
+  margin-top: 2.5rem;
+}
+
+.reg-imports-section table {
+  font-size: 0.85rem;
+}
+
+/* ===== İçe aktarma önizleme sayfası ===== */
+.reg-import-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+}
+
+.reg-import-meta strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.reg-import-columns {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.reg-import-columns strong {
+  color: var(--text);
+}
+
+.reg-status-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.reg-status-tab {
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  font-family: var(--font-mono), monospace;
+  white-space: nowrap;
+}
+
+.reg-status-tab:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
+.reg-status-tab[data-active='true'] {
+  border-color: var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+  font-weight: 600;
+}
+
+.reg-row-status-critical {
+  background: var(--status-critical-dim);
+}
+
+.reg-row-status-warning {
+  background: var(--status-warning-dim);
+}
+
+.reg-row-message {
+  font-size: 0.72rem;
+  margin-top: 0.2rem;
+}
+
+.reg-row-message-critical {
+  color: var(--status-critical);
+}
+
+.reg-row-message-warning {
+  color: var(--status-warning);
+}
+
+.reg-approve-panel {
+  margin-top: 2rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.reg-approve-summary {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.reg-approve-summary strong {
+  color: var(--text);
+}
+
+.reg-approve-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.reg-approve-actions button {
+  padding: 0.55rem 1.2rem;
+  min-height: 40px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-display), sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.reg-approve-actions button.reg-approve-confirm {
+  border: 1px solid var(--signal);
+  background: var(--signal-dim);
+  color: var(--signal);
+}
+
+.reg-approve-actions button.reg-approve-confirm:hover:not(:disabled) {
+  background: rgba(34, 232, 255, 0.22);
+  box-shadow: 0 0 16px -2px var(--signal-glow);
+}
+
+.reg-approve-actions button.reg-approve-cancel {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.reg-approve-actions button.reg-approve-cancel:hover:not(:disabled) {
+  border-color: var(--status-critical);
+  color: var(--status-critical);
+}
+
+.reg-approve-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.reg-approve-result {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--status-positive-dim);
+  color: var(--status-positive);
+  font-size: 0.85rem;
+}
+
+.reg-approve-result ul {
+  margin: 0.35rem 0 0 1.1rem;
+  padding: 0;
+}
+
+@media (max-width: 640px) {
+  .reg-edit-form label {
+    min-width: 100%;
+  }
+
+  .reg-filters input[type='text'] {
+    min-width: 100%;
+  }
+
+  /* Duzenleme formu bir <td colSpan> hucresinde render ediliyor. Bu
+     genislikte `.panel-table` `overflow-x:auto` + `white-space:nowrap`
+     olur (globals.css) - satirin DIGER hucreleri (rozet + isim + tarih +
+     birden fazla aksiyon butonu, hepsi nowrap) tabloyu zaten dogal olarak
+     genis tutuyor, ve bu nowrap miras alinip formun genisligini de o genis
+     tabloya gore hesaplatiyordu. Kullanici Telefon alanina/Kaydet
+     dugmesine ulasmak icin formu doldururken bile sagini kaydirmak zorunda
+     kaliyordu. Bu hucre + form ozelinde nowrap'i kirip genisligi ekrana
+     sabitliyoruz.
+  */
+  .reg-edit-cell {
+    white-space: normal;
+  }
+
+  .reg-edit-form {
+    white-space: normal;
+    width: min(22rem, calc(100vw - 3rem));
+  }
+}

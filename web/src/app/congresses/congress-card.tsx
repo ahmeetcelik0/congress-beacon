@@ -1,8 +1,7 @@
-import Link from 'next/link';
 import type { Congress } from '@/lib/api';
 import { StatusBadge } from '@/components/ui/status-badge';
 import type { CongressStatusInfo } from '@/lib/congress-status';
-import { CongressDeleteButton } from './congress-delete-button';
+import { CongressCardFooter } from './congress-card-footer';
 import './congress-card.css';
 
 function formatDate(iso: string | null): string {
@@ -57,21 +56,7 @@ export function CongressCard({
         </div>
       </dl>
 
-      <div className="congress-card-actions">
-        <Link
-          href={`/halls?congressId=${congress.id}`}
-          className="congress-card-action"
-        >
-          Salonlar
-        </Link>
-        <Link
-          href={`/beacons?congressId=${congress.id}`}
-          className="congress-card-action"
-        >
-          Beacon&apos;lar
-        </Link>
-        <CongressDeleteButton congressId={congress.id} congressName={congress.name} />
-      </div>
+      <CongressCardFooter congress={congress} />
     </article>
   );
 }

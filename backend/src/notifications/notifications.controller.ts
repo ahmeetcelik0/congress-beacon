@@ -7,8 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ActiveCongressGuard } from '../auth/active-congress.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import type { User } from '../../generated/prisma/client';
+import type { AuthenticatedUser } from '../auth/authenticated-request';
 import { MarkNotificationOpenedDto } from './dto/mark-notification-opened.dto';
 
 // Mobil, bildirime dokununca bunu cagirir (henuz mobil tarafta baglanmadi,
@@ -18,9 +19,9 @@ export class NotificationsController {
   constructor(private readonly prisma: PrismaService) {}
 
   @Post('opened')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ActiveCongressGuard)
   async markOpened(
-    @CurrentUser() user: User,
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: MarkNotificationOpenedDto,
   ) {
     const log = await this.prisma.notificationLog.findUnique({

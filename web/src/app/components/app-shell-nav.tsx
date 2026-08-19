@@ -37,6 +37,29 @@ const ICONS = {
       />
     </svg>
   ),
+  registrations: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <circle cx="7.5" cy="6.5" r="2.5" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M2.8 16c.5-2.8 2.4-4.3 4.7-4.3s4.2 1.5 4.7 4.3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M13 7.2a2.2 2.2 0 1 0 0-4.4M14.3 11.9c1.9.3 3.3 1.6 3.7 4"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  ),
+  content: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <rect x="3" y="3" width="14" height="14" rx="1.4" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M6.5 7.5h7M6.5 10.5h7M6.5 13.5h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
   live: (
     <svg viewBox="0 0 20 20" fill="none">
       <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.4" />
@@ -57,6 +80,14 @@ const ICONS = {
     <svg viewBox="0 0 20 20" fill="none">
       <rect x="3" y="3.5" width="14" height="13" rx="1" stroke="currentColor" strokeWidth="1.4" />
       <path d="M3 7.5h14M7 3.5v-1M13 3.5v-1" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  ),
+  match: (
+    <svg viewBox="0 0 20 20" fill="none">
+      <circle cx="6" cy="7" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="14" cy="13" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M8 8.5 12 11.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M14 5.5 16 3.5M16 7.5 18 5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   ),
 };
@@ -94,6 +125,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: 'Yönetim',
     items: [
       { href: '/sessions', label: 'Bilimsel Program', icon: ICONS.program },
+      { href: '/sessions/matches', label: 'Konuşmacı Eşleşmeleri', icon: ICONS.match },
       { href: '/reports', label: 'Raporlar', icon: ICONS.report },
     ],
   },
@@ -359,6 +391,20 @@ export function AppShellNav({
               >
                 <span className="shell-nav-icon">{ICONS.beacon}</span>
                 Beacon&apos;lar
+              </Link>
+              <Link
+                href={withCongressId('/registrations', congressId)}
+                className={`shell-nav-item${pathname === '/registrations' ? ' shell-nav-item-active' : ''}`}
+              >
+                <span className="shell-nav-icon">{ICONS.registrations}</span>
+                Katılımcılar
+              </Link>
+              <Link
+                href={withCongressId('/content', congressId)}
+                className={`shell-nav-item${pathname === '/content' ? ' shell-nav-item-active' : ''}`}
+              >
+                <span className="shell-nav-icon">{ICONS.content}</span>
+                İçerik Yönetimi
               </Link>
             </div>
 

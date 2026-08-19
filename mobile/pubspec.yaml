@@ -31,20 +31,73 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_beacon: ^0.5.1
-  
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   flutter_secure_storage: ^10.3.1
   http: ^1.6.0
   uuid: ^4.5.3
   url_launcher: ^6.3.1
 
+  # Faz 6 - mobil iskelet: durum yonetimi + yonlendirme + gercek cihaz/surum bilgisi.
+  flutter_riverpod: ^3.4.2
+  go_router: ^17.4.0
+  package_info_plus: ^10.2.1
+  device_info_plus: ^13.2.0
+
+  # Faz 7 - mobil ekranlar. Ikisi de pub.dev'den DOGRULANDI (2026-08-09):
+  # - flutter_markdown_plus: resmi `flutter_markdown` paketi DURDURULDU
+  #   ("discontinued", yayincisinin kendisi bu paketi resmi devam projesi
+  #   olarak gosteriyor); bu surum 1 aydan az once yayinlandi, SDK kisiti
+  #   projeyle uyumlu. Genel Bilgi bolumlerinin Markdown govdesini render
+  #   etmek icin.
+  # - extended_image: `cached_network_image` (en bilinen alternatif)
+  #   GitHub'da ~2 yildir commit almiyor (331 acik issue) - fiilen bakimsiz.
+  #   extended_image dogrulanmis yayinci (fluttercandies), 1 aydan az once
+  #   yayinlandi, azami pub points, agdan gorseli yerelde onbellekleyip
+  #   `cache: true` ile tekrar indirmeden gosteriyor - kapak/sponsor/
+  #   konusmaci gorselleri icin.
+  flutter_markdown_plus: ^1.0.12
+  extended_image: ^10.1.0
+
+  # Program/icerik onbellegi icin kalici JSON dosyasi yazmak amaciyla -
+  # uygulamanin kendi belge dizinine erisim saglar (bkz. Faz 7 talimati §1,
+  # `flutter_secure_storage` kucuk sirlar icindir, bu amac icin degil).
+  # Flutter ekibinin resmi eklentisi, halihazirda transitive bagimlilik
+  # olarak vardi, artik dogrudan kullaniliyor.
+  path_provider: ^2.1.6
+
+  # Faz 8 - kalici cevrimdisi gozlem kuyrugu. Ikisi de pub.dev'den DOGRULANDI
+  # (2026-08-10): sqflite 2.4.3 (2 ay once yayinlandi), path 1.9.1 (projede
+  # zaten transitive bagimlilik olarak vardi - `path_provider` uzerinden -
+  # artik dogrudan kullaniliyor, sadece pubspec'te ACIKCA belirtiliyor).
+  sqflite: ^2.4.3
+  path: ^1.9.1
+
+  # Faz 9 - push bildirimleri (FCM). Ikisi de pub.dev'den DOGRULANDI
+  # (2026-08-11): firebase_core 4.13.0, firebase_messaging 16.5.0 (ikisi de
+  # 7 gun once yayinlandi). Ek bir yerel-bildirim paketi (ör.
+  # flutter_local_notifications) EKLENMEDI: iOS'ta onplandayken sistem
+  # bildirim baloncugunu gostermek icin firebase_messaging'in kendi
+  # `setForegroundNotificationPresentationOptions` API'si yeterli - ayrica
+  # bir pakete GEREK YOK (bkz. push_notification_lifecycle_provider.dart).
+  firebase_core: ^4.13.0
+  firebase_messaging: ^16.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  
+
+  # Faz 8 - kuyruk testlerinde gercek SQLite semantigini (UNIQUE kisiti, ORDER
+  # BY, DELETE) fiziksel cihaz/emulator OLMADAN dogrulamak icin - sqflite'in
+  # resmi paketi, masaustunde saf FFI ile calisan bir SQLite motoru saglar.
+  # pub.dev'den DOGRULANDI (2026-08-10): 2.4.2, 60 gun once yayinlandi.
+  sqflite_common_ffi: ^2.4.2
+  # Faz 7 - XCUITest'in Flutter icin yanlis arac oldugu (widget agacini
+  # gormuyor, yalnizca Semantics ile ACIKCA verilmis identifier'lari
+  # gorebiliyor) canli denemeyle dogrulandiktan sonra bunun yerine
+  # kullanilan resmi Flutter paketi - widget agacina DOGRUDAN erisir, ek
+  # bir Xcode target'i gerektirmez.
+  integration_test:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

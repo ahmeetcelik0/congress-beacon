@@ -19,6 +19,10 @@ import { ReportsModule } from './reports/reports.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SessionModule } from './session/session.module';
 import { RedisModule } from './redis/redis.module';
+import { RegistrationsModule } from './registrations/registrations.module';
+import { UploadsModule } from './uploads/uploads.module';
+import { ContentModule } from './content/content.module';
+import { ProgramModule } from './program/program.module';
 
 @Module({
   imports: [
@@ -40,6 +44,10 @@ import { RedisModule } from './redis/redis.module';
     ReportsModule,
     NotificationsModule,
     SessionModule,
+    RegistrationsModule,
+    UploadsModule,
+    ContentModule,
+    ProgramModule,
   ],
   controllers: [AppController],
   providers: [AppService],

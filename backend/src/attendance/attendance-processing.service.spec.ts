@@ -97,9 +97,6 @@ function createFakePrisma() {
   };
 
   const prisma = {
-    user: {
-      findUnique: () => Promise.resolve({ congressId: CONGRESS_ID }),
-    },
     congress: {
       findUnique: () => Promise.resolve(CONGRESS_CONFIG),
     },
@@ -171,7 +168,7 @@ describe('AttendanceProcessingService', () => {
     const { store } = createFakeStore();
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -60 },
       ]),
@@ -197,7 +194,7 @@ describe('AttendanceProcessingService', () => {
     const service = buildService(prisma, store);
 
     // Bilincli olarak ters sirada verildi.
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:10.000Z', [
         { beaconId: 'beacon-1', rssi: -60 },
       ]),
@@ -217,7 +214,7 @@ describe('AttendanceProcessingService', () => {
     const { store, bumped } = createFakeStore();
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [{ beaconId: 'beacon-1', rssi: 0 }]),
       snapshot('2026-07-22T10:00:10.000Z', [{ beaconId: 'beacon-1', rssi: 0 }]),
     ]);
@@ -245,7 +242,7 @@ describe('AttendanceProcessingService', () => {
     );
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -40 },
       ]),
@@ -271,7 +268,7 @@ describe('AttendanceProcessingService', () => {
     );
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -40 },
       ]),
@@ -304,7 +301,7 @@ describe('AttendanceProcessingService', () => {
 
     // Ayni salonun (Salon 1) iki beacon'i: biri temiz, digeri anormal deger
     // donuyor. Salon yine aday olur ama elenen beacon izde gorunmelidir.
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -60 },
         { beaconId: 'beacon-3', rssi: -20 },
@@ -351,7 +348,7 @@ describe('AttendanceProcessingService', () => {
       const service = buildService(prisma, store);
 
       // Salon 2'ye (tek beacon: beacon-2) net giris yapilir.
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:00.000Z', [
           { beaconId: 'beacon-2', rssi: -30 },
         ]),
@@ -365,7 +362,7 @@ describe('AttendanceProcessingService', () => {
       // Simdi beacon-2, 2 ardisik turda sentinel (0) donuyor - saha testindeki
       // tam senaryo - Salon 1'in (beacon-1) beacon'i ise gecerli okuma veriyor.
       // Aradaki sure grace penceresinin (5sn) cok altinda (1sn).
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:02.000Z', [
           { beaconId: 'beacon-2', rssi: 0 },
           { beaconId: 'beacon-1', rssi: -60 },
@@ -388,7 +385,7 @@ describe('AttendanceProcessingService', () => {
       const { store } = createFakeStore();
       const service = buildService(prisma, store);
 
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:00.000Z', [
           { beaconId: 'beacon-2', rssi: -30 },
         ]),
@@ -400,7 +397,7 @@ describe('AttendanceProcessingService', () => {
 
       // Bu kez beacon-2'nin son gecerli okumasindan (10:00:01) sonraki
       // olcumler grace suresini (5sn) acikca asiyor (20sn, 21sn sonra).
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:21.000Z', [
           { beaconId: 'beacon-2', rssi: 0 },
           { beaconId: 'beacon-1', rssi: -60 },
@@ -423,7 +420,7 @@ describe('AttendanceProcessingService', () => {
       const { store } = createFakeStore();
       const service = buildService(prisma, store);
 
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:00.000Z', [
           { beaconId: 'beacon-2', rssi: -30 },
         ]),
@@ -434,7 +431,7 @@ describe('AttendanceProcessingService', () => {
 
       // beacon-2 bu turlarda okuma listesinde HIC yok (sentinel bile degil) -
       // telefon taramada hic yakalayamadi. beacon-1 gecerli.
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:02.000Z', [
           { beaconId: 'beacon-1', rssi: -60 },
         ]),
@@ -456,7 +453,7 @@ describe('AttendanceProcessingService', () => {
       // turunda beacon-3 taramada hic gorunmuyor ama son gecerli okumasindan
       // yalnizca 1sn gecmis (grace=5sn icinde) - donmus EMA'siyla ortalamaya
       // katilmaya devam etmeli ve giris onaylanmali.
-      await service.processSnapshots(USER_ID, [
+      await service.processSnapshots(USER_ID, CONGRESS_ID, [
         snapshot('2026-07-22T10:00:00.000Z', [
           { beaconId: 'beacon-1', rssi: -50 },
           { beaconId: 'beacon-3', rssi: -50 },
@@ -505,6 +502,7 @@ describe('AttendanceProcessingService', () => {
     const ramp = [-68, -66, -64, -62, -60, -58, -56, -55, -55, -55];
     await service.processSnapshots(
       USER_ID,
+      CONGRESS_ID,
       ramp.map((rssi, index) =>
         snapshot(
           new Date(
@@ -525,7 +523,7 @@ describe('AttendanceProcessingService', () => {
     const { store } = createFakeStore();
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -65 },
         { beaconId: 'beacon-2', rssi: -65 },
@@ -545,7 +543,7 @@ describe('AttendanceProcessingService', () => {
     const { store } = createFakeStore();
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -85 },
       ]),
@@ -566,7 +564,7 @@ describe('AttendanceProcessingService', () => {
     const { store } = createFakeStore(new Map());
     const service = buildService(prisma, store);
 
-    await service.processSnapshots(USER_ID, [
+    await service.processSnapshots(USER_ID, CONGRESS_ID, [
       snapshot('2026-07-22T10:00:00.000Z', [
         { beaconId: 'beacon-1', rssi: -60 },
       ]),

@@ -40,7 +40,11 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Token artik gecerli degil');
     }
 
-    request.user = user;
+    // User modelinde artik congressId kolonu yok (Faz 1) - aktif kongre
+    // token'in kendisinde tasinir. Buraya enjekte edilmesinin tek amaci,
+    // user.congressId okuyan mevcut kodun (attendance/observation/devices)
+    // degismeden calismasidir.
+    request.user = { ...user, congressId: payload.activeCongressId };
     return true;
   }
 }
