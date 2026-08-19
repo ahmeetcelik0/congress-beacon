@@ -343,9 +343,9 @@ class _DayTabs extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  formatShortDate(day.date),
+                  formatShortDateWithYear(day.date),
                   style: TextStyle(
-                    color: isSelected ? Colors.white : AppColors.textPrimary,
+                    color: isSelected ? AppColors.accent : AppColors.textPrimary,
                     fontWeight: FontWeight.w800,
                     fontSize: 13,
                   ),
@@ -353,7 +353,7 @@ class _DayTabs extends StatelessWidget {
                 Text(
                   formatTurkishWeekday(day.date),
                   style: TextStyle(
-                    color: isSelected ? Colors.white70 : AppColors.textFaint,
+                    color: isSelected ? AppColors.accent : AppColors.textFaint,
                     fontWeight: FontWeight.w600,
                     fontSize: 10,
                   ),
@@ -362,10 +362,10 @@ class _DayTabs extends StatelessWidget {
             ),
             selected: isSelected,
             onSelected: (_) => onSelect(day.key),
-            selectedColor: AppColors.primary,
+            selectedColor: AppColors.accentSoft,
             backgroundColor: AppColors.surface,
             side: BorderSide(
-              color: isSelected ? AppColors.primary : AppColors.border,
+              color: isSelected ? AppColors.accent : AppColors.border,
             ),
           );
         },

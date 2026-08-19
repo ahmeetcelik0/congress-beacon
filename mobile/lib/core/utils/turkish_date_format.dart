@@ -46,6 +46,12 @@ String formatShortDate(DateTime date) {
   return '${_twoDigits(local.day)}.${_twoDigits(local.month)}';
 }
 
+/// Program ekranindaki gun sekmeleri icin tarih - "09.04.2026" (gun.ay.yil).
+String formatShortDateWithYear(DateTime date) {
+  final local = date.toLocal();
+  return '${_twoDigits(local.day)}.${_twoDigits(local.month)}.${local.year}';
+}
+
 /// "Perşembe"
 String formatTurkishWeekday(DateTime date) {
   final local = date.toLocal();
