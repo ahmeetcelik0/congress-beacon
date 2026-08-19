@@ -46,3 +46,11 @@ backend/uploads/
 # konusmaci isimleri gibi kisisel veri iceriyor, yanlislikla commit
 # edilmemeli.
 /docs/program.pdf
+
+# Faz 11 temizliginde bulundu: ayni gerekcedeki (gercek katilimci/konusmaci
+# kisisel verisi) diger test/kaynak dosyalari da gitignore'a EKLENMEMISTI -
+# yanlislikla commit edilme riskini kapatir, dosyalar diskte kalir.
+/docs/1ve2_gün_program.pdf
+/docs/33-ulusal-uygulamali-girisimsel-kardiyoloji-kongresi-programi.json
+/docs/test-verileri-2026-07-21.xlsx
+/docs/test2-veri-analizi-2026-07-23.xlsx
