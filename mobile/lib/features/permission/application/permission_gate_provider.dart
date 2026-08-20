@@ -74,6 +74,22 @@ class PermissionGateNotifier extends Notifier<PermissionGateStatus> {
   /// pencere hic gelmedi) kisa bir bekleme sonrasi BIR KEZ tekrar denenir;
   /// bu, CBCentralManager'in gercek durumuna kavusmasi icin yeterli oluyor.
   Future<bool> requestPermission() async {
+    // `BeaconObservationService` kok seviyesinde ACILISTA KENDILIGINDEN
+    // ayni native baslatmayi (flutter_beacon) tetikliyor (bkz. Faz 6 §7,
+    // "arka planda ranging asla durdurulmaz"). Izin o akistan zaten
+    // yeterli hale geldiyse burada `initializeAndCheckScanning`i TEKRAR
+    // cagirmak, native tarafta CBCentralManager'in AYNI ANDA iki kez
+    // baslatilmasina yol acip Future'in HIC TAMAMLANMAMASINA sebep
+    // olabiliyor - ekran sonsuza dek "Izin Ver" yukleme durumunda kaliyor
+    // (saha testinde dogrulandi, uygulamayi kapatip acinca duzeliyordu
+    // cunku `build()`teki ilk kontrol izni zaten yeterli bulup bu ikinci
+    // native cagriyi hic yapmiyordu). Native cagriya gitmeden once ucuz
+    // bir durum kontrolu yeterliyse dogrudan donulur.
+    final current = await _check();
+    if (current != null && _isSufficient(current)) {
+      return true;
+    }
+
     final firstAttempt = await _requestOnce();
     if (firstAttempt == AuthorizationStatus.notDetermined) {
       await Future<void>.delayed(const Duration(milliseconds: 700));
