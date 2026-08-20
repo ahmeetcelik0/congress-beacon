@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../models/auth_models.dart';
 
@@ -136,6 +138,32 @@ class SecureStorageService {
   Future<bool> isPushPermissionRequested() async {
     final value = await _storage.read(key: _pushPermissionRequestedKey);
     return value == 'true';
+  }
+
+  /// iOS'ta Keychain, uygulama SILINSE bile telefonda kalir - bu yuzden
+  /// `_pushPermissionRequestedKey` gibi "bu kurulumda zaten soruldu mu"
+  /// bayraklari, uygulama silinip yeniden kurulunca da 'true' okunmaya
+  /// devam eder. Ama gercek iOS bildirim izni bu durumda SIFIRLANMIS olur -
+  /// sonuc: kullaniciya bir DAHA HIC izin ekrani cikmaz (bkz. Faz 9 sonrasi
+  /// saha testinde bulunan gercek hata - bkz. docs/KARARLAR.md).
+  ///
+  /// Uygulamanin kendi belge dizini (path_provider) ise silme ile GERCEKTEN
+  /// temizlenir - bu yuzden "gercek ilk kurulum" tespiti Keychain DEGIL,
+  /// oradaki bir isaret dosyasiyla yapilir. Isaret dosyasi yoksa (silinip
+  /// yeniden kurulmus VEYA gercekten ilk kurulum) push-izin bayragi
+  /// sifirlanir, boylece `_requestPermissionIfNeverAsked()` iznin GERCEK
+  /// OS durumuna gore tekrar sorabilir.
+  Future<void> resetPushPermissionFlagIfFreshInstall() async {
+    try {
+      final docsDir = await getApplicationDocumentsDirectory();
+      final marker = File('${docsDir.path}/.install_marker');
+      if (await marker.exists()) return;
+      await _storage.delete(key: _pushPermissionRequestedKey);
+      await marker.writeAsString(DateTime.now().toIso8601String());
+    } catch (_) {
+      // Sessizce gec - basarisiz olursa normal (soruldu-varsayilan) akis
+      // devam eder, uygulama COKMEZ.
+    }
   }
 
   /// Cikis yapinca veya 401 ile oturum dusunce cagrilir - cihaz kaydi
