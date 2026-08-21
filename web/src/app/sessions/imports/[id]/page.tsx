@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api } from '@/lib/api';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import { PageHeader } from '@/components/ui/page-header';
 import { MetricCard } from '@/components/ui/metric-card';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -20,16 +21,6 @@ import '../../sessions.css';
 import '../imports.css';
 
 const SOURCE_TYPE_LABELS = { PDF: 'PDF', EXCEL: 'Excel', JSON: 'JSON' } as const;
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function formatUsd(value: number | null): string {
   if (value === null) return 'hesaplanamadı';

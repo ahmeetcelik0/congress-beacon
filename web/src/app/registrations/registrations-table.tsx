@@ -15,6 +15,7 @@ import {
   type CongressRegistrationPage,
   type RegistrationSource,
 } from '@/lib/api';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -43,17 +44,6 @@ const SOURCE_TONES: Record<RegistrationSource, StatusTone> = {
   MANUAL: 'neutral',
   PILOT: 'neutral',
 };
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 const emptyRowState: RowFormState = { error: null, saved: false };
 

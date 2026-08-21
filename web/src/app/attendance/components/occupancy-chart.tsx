@@ -15,11 +15,8 @@ import type {
   ValueType,
 } from 'recharts/types/component/DefaultTooltipContent';
 import { getHallColor } from '@/lib/hall-colors';
+import { formatIstanbulTime as formatTime } from '@/lib/congress-time';
 import type { OccupancySeries } from '@/lib/api';
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-}
 
 function ChartTooltip({ active, payload, label }: TooltipContentProps<ValueType, NameType>) {
   if (!active || !payload?.length) {

@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useActionState, useTransition } from 'react';
 import type { Presentation } from '@/lib/api';
+import { formatIstanbulDateTime as formatTime } from '@/lib/congress-time';
 import { RoleManager } from './role-manager';
 import { ReorderButtons } from './reorder-buttons';
 import { computeReorderedIds } from './reorder';
@@ -14,16 +15,6 @@ import {
 import type { DeleteTarget } from './delete-target';
 
 const initialState: FormState = { error: null };
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function PresentationItem({
   presentation,

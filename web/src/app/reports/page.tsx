@@ -7,20 +7,11 @@ import { MetricCard } from '@/components/ui/metric-card';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 import { loadCongresses } from '@/lib/load-congresses';
+import { formatIstanbulDateTime as formatTime } from '@/lib/congress-time';
 
 function formatPercent(ratio: number | null): string {
   if (ratio === null) return '—';
   return `%${Math.round(ratio * 100)}`;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 function truncate(text: string, maxLength: number): string {

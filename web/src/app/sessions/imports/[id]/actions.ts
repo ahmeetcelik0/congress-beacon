@@ -7,19 +7,10 @@ import {
   type ProgramImportApproveSummary,
   type ProgramRoleType,
 } from '@/lib/api';
+import { datetimeLocalToIsoOrUndefined as toIsoOrUndefined } from '@/lib/congress-time';
 
 function refresh(importId: string) {
   revalidatePath(`/sessions/imports/${importId}`);
-}
-
-// datetime-local input'u ISO'ya cevirir - BOS deger DONMEZ (`undefined`),
-// cunku backend DTO'lari (`UpdateProgramImportSessionDto` vb.) `startTime`i
-// `dto.startTime !== undefined` ile kontrol eder: `undefined` "degistirme",
-// ama bos string GONDERMEK `new Date('')` (Invalid Date) hatasina yol acar.
-// Bu yuzden alan BOS birakildiginda anahtar objeden TAMAMEN CIKARILIR.
-function toIsoOrUndefined(value: FormDataEntryValue | null): string | undefined {
-  const str = String(value ?? '').trim();
-  return str ? new Date(str).toISOString() : undefined;
 }
 
 // --- Oturum satirlari ---

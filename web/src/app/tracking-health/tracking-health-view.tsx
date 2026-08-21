@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api, type TrackingHealth } from '@/lib/api';
+import { formatIstanbulDateTimeWithSeconds as formatTime } from '@/lib/congress-time';
 import { StatusBadge, type StatusTone } from '@/components/ui/status-badge';
 
 const REFRESH_INTERVAL_MS = 10_000;
@@ -33,17 +34,6 @@ const PRESENCE_TONE: Record<string, StatusTone> = {
 function formatRate(rate: number | null): string {
   if (rate === null) return '—';
   return `%${Math.round(rate * 100)}`;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
 }
 
 export function TrackingHealthView({

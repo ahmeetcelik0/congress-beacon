@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { api, ApiError } from '@/lib/api';
+import { datetimeLocalToIsoOrUndefined } from '@/lib/congress-time';
 
 export type FormState = { error: string | null };
 export type ActionResult = { error: string | null };
@@ -24,8 +25,8 @@ export async function createPresentationAction(
     await api.createPresentation({
       sessionId,
       title,
-      startTime: startTime ? new Date(startTime).toISOString() : undefined,
-      endTime: endTime ? new Date(endTime).toISOString() : undefined,
+      startTime: datetimeLocalToIsoOrUndefined(startTime),
+      endTime: datetimeLocalToIsoOrUndefined(endTime),
       abstract: abstractText || undefined,
     });
   } catch (error) {

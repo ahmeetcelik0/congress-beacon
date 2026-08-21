@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { api, ApiError } from '@/lib/api';
+import { datetimeLocalToIso } from '@/lib/congress-time';
 
 export type FormState = { error: string | null };
 export type ActionResult = { error: string | null };
@@ -29,8 +30,8 @@ export async function createSessionAction(
       congressId,
       hallId,
       title,
-      startTime: new Date(startTime).toISOString(),
-      endTime: new Date(endTime).toISOString(),
+      startTime: datetimeLocalToIso(startTime),
+      endTime: datetimeLocalToIso(endTime),
       description: description || undefined,
       sessionType: sessionType || undefined,
       dayLabel: dayLabel || undefined,

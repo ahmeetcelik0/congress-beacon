@@ -5,6 +5,7 @@ import { useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { ProgramImport, ProgramImportEstimate } from '@/lib/api';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import { CollapsibleRegion } from '@/components/ui/collapsible';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { estimateProgramImportAction, createProgramImportAction } from './actions';
@@ -22,15 +23,6 @@ function formatUsd(value: number | null): string {
   return `$${value.toFixed(2)}`;
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * Bilimsel programı PDF/Excel'den otomatik çıkarmak için iki aşamalı akış:

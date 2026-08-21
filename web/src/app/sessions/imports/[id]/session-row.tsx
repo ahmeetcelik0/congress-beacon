@@ -3,6 +3,10 @@
 import * as React from 'react';
 import { useActionState } from 'react';
 import type { Hall, ProgramImportSession } from '@/lib/api';
+import {
+  formatIstanbulDateTime as formatDateTime,
+  isoToDatetimeLocal as toDateTimeLocal,
+} from '@/lib/congress-time';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CollapsibleRegion } from '@/components/ui/collapsible';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -13,27 +17,6 @@ import { ROW_STATUS_LABELS, ROW_STATUS_TONES } from '../status-labels';
 import type { DeleteTarget } from './delete-target';
 
 const initialState: FormState = { error: null, saved: false };
-
-function toDateTimeLocal(iso: string | null): string {
-  if (!iso) return '';
-  // <input type="datetime-local"> tarayicinin YEREL saatini bekler - ISO
-  // metni UTC oldugu icin dogrudan slice(0,16) yapmak saati kaydirir
-  // (ör. 14:00 yerel -> "...T11:00:00.000Z" -> slice ile yanlislikla "11:00"
-  // gösterilip öyle kaydedilirdi). Date nesnesinin yerel getter'lari kullanilir.
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * Tek bir staging oturum kartı. Üç görsel durum kasıtlı olarak ayrışır (bkz.
