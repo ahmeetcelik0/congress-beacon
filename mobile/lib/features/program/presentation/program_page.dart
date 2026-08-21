@@ -33,7 +33,7 @@ List<_DayInfo> _deriveDayOrder(List<MobileSession> sessions) {
   final firstSeenByKey = <String, DateTime>{};
   for (final session in sessions) {
     final key = dayKey(session.startTime);
-    firstSeenByKey.putIfAbsent(key, () => session.startTime.toLocal());
+    firstSeenByKey.putIfAbsent(key, () => toIstanbulTime(session.startTime));
   }
   final days = [
     for (final entry in firstSeenByKey.entries) _DayInfo(entry.key, entry.value),
