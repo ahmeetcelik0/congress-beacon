@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { CongressLoadError } from '@/components/ui/congress-load-error';
 import { loadCongresses } from '@/lib/load-congresses';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import type { RegistrationImportStatus } from '@/lib/api';
 import './registrations.css';
 
@@ -17,16 +18,6 @@ const IMPORT_STATUS_LABELS: Record<RegistrationImportStatus, string> = {
   APPROVED: 'Onaylandı',
   CANCELLED: 'İptal edildi',
 };
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default async function RegistrationsPage({
   searchParams,

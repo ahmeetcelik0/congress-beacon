@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type HallVisitSummary } from '@/lib/api';
 import { getHallColor } from '@/lib/hall-colors';
+import { formatIstanbulDateTime as formatDateTime } from '@/lib/congress-time';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ErrorState } from '@/components/ui/error-state';
@@ -10,6 +11,8 @@ import { ErrorState } from '@/components/ui/error-state';
 const PAGE_SIZE = 10;
 const ALL_HALLS_VALUE = 'all';
 
+// Faz 12: TZ-bagimsiz - iki epoch farki (sure), saat dilimi donusumune
+// hic girmez, congress-time.ts'e TASINMADI.
 function formatDuration(startedAt: string, endedAt: string | null): string {
   const start = new Date(startedAt).getTime();
   const end = endedAt ? new Date(endedAt).getTime() : Date.now();
@@ -21,15 +24,6 @@ function formatDuration(startedAt: string, endedAt: string | null): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes > 0 ? `${hours} sa ${minutes} dk` : `${hours} sa`;
-}
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
 }
 
 // v3 kararlarinda guven, 0-100 arasi gercek bir yuzdedir; v2'de yalnizca

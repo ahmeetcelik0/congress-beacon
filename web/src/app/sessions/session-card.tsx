@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useTransition } from 'react';
 import type { Session } from '@/lib/api';
+import { formatIstanbulDateTime as formatDateTime } from '@/lib/congress-time';
 import { CollapsibleRegion } from '@/components/ui/collapsible';
 import { RoleManager } from './role-manager';
 import { PresentationsPanel } from './presentations-panel';
@@ -10,15 +11,6 @@ import { ReorderButtons } from './reorder-buttons';
 import { computeReorderedIds } from './reorder';
 import { reorderSessionsAction } from './session-actions';
 import type { DeleteTarget } from './delete-target';
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 /**
  * Tek bir oturumun genisleyebilir karti. `items`/`index`, GORUNEN

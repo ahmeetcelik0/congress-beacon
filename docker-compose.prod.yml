@@ -38,6 +38,13 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     environment:
+      # Faz 12: kod tarafinda kongre saati Europe/Istanbul olarak SABIT
+      # (bkz. backend/src/common/congress-time.ts) - bu asil garanti,
+      # kodun hangi TZ'de calistigindan BAGIMSIZ dogru sonuc uretir. Bu
+      # satir ikinci bir guvenlik agidir: sunucu loglarinin da Turkiye
+      # saatinde olmasini saglar (teshis kolayligi) - TZ ayarlanmadan
+      # node:22-alpine varsayilan olarak UTC calisir.
+      TZ: Europe/Istanbul
       DATABASE_URL: mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
       JWT_SECRET: ${JWT_SECRET}
       CORS_ORIGIN: https://beacon.photofocustr.com
@@ -87,6 +94,11 @@ services:
         NEXT_PUBLIC_API_URL: https://beacon.photofocustr.com/api
         NEXT_BASE_PATH: /yetkili
     restart: unless-stopped
+    environment:
+      # Faz 12: bkz. backend servisindeki ayni satirin yorumu - panel
+      # server component'leri/server action'lari da sunucu saatini
+      # kullanabiliyor, ikisi ayni TZ'de calismali.
+      TZ: Europe/Istanbul
     depends_on:
       - backend
 

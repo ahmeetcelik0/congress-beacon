@@ -2,19 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { api, type HallVisitSummary, type HallVisitTrace } from '@/lib/api';
+import { formatIstanbulDateTimeWithSeconds as formatDateTime } from '@/lib/congress-time';
 import { ErrorState } from '@/components/ui/error-state';
 
 const VISIT_LIMIT = 15;
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
 
 // Uc durumu ayirt eder: taze okuma (etiket yok), grace suresiyle donmus
 // (hala ortalamaya dahil, ELENMEDI), gercekten elenmis (Hampel/sentinel,

@@ -96,8 +96,15 @@ describe('writeExtractionToStaging', () => {
     expect(data.keywords).toBe('kardiyoloji');
     expect(data.status).toBe(ImportRowStatus.NEW);
     expect(data.warning).toBeNull();
-    expect((data.startTime as Date).getHours()).toBe(9);
-    expect((data.endTime as Date).getHours()).toBe(10);
+    // Faz 12: `getHours()` (yerel saat getter'i) DEGIL, `toISOString()`
+    // (mutlak UTC) kontrol edilir - "10 Eylul 09:00 Turkiye saati" ->
+    // 2026-09-10T06:00:00.000Z olmali (bkz. docs/decisions.md "Faz 12").
+    expect((data.startTime as Date).toISOString()).toBe(
+      '2026-09-10T06:00:00.000Z',
+    );
+    expect((data.endTime as Date).toISOString()).toBe(
+      '2026-09-10T07:00:00.000Z',
+    );
   });
 
   it('yalnızca boşluktan oluşan başlığı INVALID işaretler', async () => {

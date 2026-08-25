@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { api, type RegistrationImportRowStatus } from '@/lib/api';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import { PageHeader } from '@/components/ui/page-header';
 import { MetricCard } from '@/components/ui/metric-card';
 import { EmptyState } from '@/components/ui/empty-state';
@@ -21,15 +22,6 @@ function isValidRowStatus(value: string | undefined): value is RegistrationImpor
   return !!value && (ROW_STATUSES as string[]).includes(value);
 }
 
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export default async function ImportPreviewPage({
   params,

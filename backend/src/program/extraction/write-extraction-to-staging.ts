@@ -60,24 +60,37 @@ async function buildRoleCreateInputs(
 // `validate-extraction-result.ts`de DEĞİL - onlar upload'ı REDDETMEZ,
 // yalnızca ilgili satırın `warning` alanına yazılır (bkz. docs/decisions.md
 // "Faz 4d").
-// `dayDate` (bkz. `parseCanonicalDate`) YEREL saat diliminde gece yarisi
-// olarak kurulur (`combineDateAndTime`in `setHours` ile dogru yerel saat
-// uretebilmesi icin - bkz. derive-datetime.ts). `congress.startDate`/
-// `endDate` ise `congress.service.ts`de `new Date(dto.startDate)` ile,
-// yani tarih-only ISO string'ler JS'te UTC gece yarisi olarak yorumlanir.
-// Iki farkli saat dilimi kuralinda kurulmus Date'i DOGRUDAN karsilastirmak
-// (server UTC+0 disinda calisirken) ayni takvim gunu icin bile yanlislikla
-// "once/sonra" uyarisi uretir - bu yuzden kongre sinirlari, KENDI UTC
-// takvim gunu bilesenleri YEREL gece yarisina cevrilerek karsilastirilir.
+// Faz 12: `dayDate` artik bir Date DEGIL, "YYYY-MM-DD" STRING'i (bkz.
+// `parseCanonicalDate` - Turkiye saatine gercek UTC donusumden AYRI,
+// yalnizca bicim dogrulamasi yapar). Bu fonksiyon SADECE gun-bazli bir
+// SINIR KARSILASTIRMASI yapiyor (saat/UTC an ile hicbir ilgisi yok) - bu
+// yuzden dilimsiz string'i, `congress.startDate`/`endDate` (bkz.
+// `congress.service.ts`de `new Date(dto.startDate)` ile tarih-only ISO
+// string'ler UTC gece yarisi olarak yorumlanir) ile AYNI "uzayda"
+// karsilastirabilmek icin YEREL gece yarisina cevirir. Iki farkli saat
+// dilimi kuralinda kurulmus Date'i DOGRUDAN karsilastirmak (server UTC+0
+// disinda calisirken) ayni takvim gunu icin bile yanlislikla "once/sonra"
+// uyarisi uretir - bu yuzden kongre sinirlari, KENDI UTC takvim gunu
+// bilesenleri YEREL gece yarisina cevrilerek karsilastirilir. Bu, GERCEK
+// bir zaman anini TEMSIL ETMEZ, yalnizca bu dosya icinde kullanilan
+// simetrik bir karsilastirma yardimcisidir - disariya hic sizmaz.
+function parseLocalMidnight(dateStr: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+  if (!match) return null;
+  const [, year, month, day] = match;
+  return new Date(Number(year), Number(month) - 1, Number(day));
+}
+
 function toLocalMidnightFromUtcCalendarDate(date: Date): Date {
   return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
 function buildDayRangeWarning(
-  dayDate: Date | null,
+  dayDateStr: string | null,
   congressStartDate: Date | null,
   congressEndDate: Date | null,
 ): string | null {
+  const dayDate = dayDateStr ? parseLocalMidnight(dayDateStr) : null;
   if (!dayDate) return null;
   if (
     congressStartDate &&

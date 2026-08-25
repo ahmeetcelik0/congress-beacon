@@ -2,16 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { api, type ObservationSummary } from '@/lib/api';
+import { formatIstanbulTimeWithSeconds as formatTime } from '@/lib/congress-time';
 
 const PAGE_SIZE = 20;
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString('tr-TR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
 
 export function RawObservationFeed({ congressId }: { congressId: string }) {
   const [open, setOpen] = useState(false);

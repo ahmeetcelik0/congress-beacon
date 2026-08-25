@@ -3,6 +3,7 @@
 import * as React from 'react';
 import { useActionState, useTransition } from 'react';
 import type { Announcement } from '@/lib/api';
+import { formatIstanbulDateTimeWithYear as formatDateTime } from '@/lib/congress-time';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { ReorderButtons } from '../components/reorder-buttons';
 import { computeReorderedIds } from '../reorder';
@@ -15,16 +16,6 @@ import {
 } from './actions';
 
 const emptyState: FormState = { error: null };
-
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 export function AnnouncementRow({
   item,

@@ -110,6 +110,11 @@ class PushNotificationLifecycleNotifier extends Notifier<void> {
           );
     }
 
+    // Izin bayragi kontrol edilmeden ONCE tamamlanmali - bkz.
+    // `resetPushPermissionFlagIfFreshInstall` yorumu (Keychain silme
+    // sonrasinda da kalici kalir, "gercek ilk kurulum" ayrica tespit edilir).
+    await ref.read(secureStorageProvider).resetPushPermissionFlagIfFreshInstall();
+
     unawaited(_requestPermissionIfNeverAsked());
     unawaited(_registerCurrentToken());
 

@@ -3,6 +3,10 @@
 import * as React from 'react';
 import { useActionState } from 'react';
 import type { ProgramImportPresentation } from '@/lib/api';
+import {
+  formatIstanbulDateTime as formatTime,
+  isoToDatetimeLocal as toDateTimeLocal,
+} from '@/lib/congress-time';
 import { RoleManager } from './role-manager';
 import {
   createProgramImportPresentationAction,
@@ -12,27 +16,6 @@ import {
 import type { DeleteTarget } from './delete-target';
 
 const initialState: FormState = { error: null, saved: false };
-
-function toDateTimeLocal(iso: string | null): string {
-  if (!iso) return '';
-  // <input type="datetime-local"> tarayicinin YEREL saatini bekler - ISO
-  // metni UTC oldugu icin dogrudan slice(0,16) yapmak saati kaydirir
-  // (ör. 14:00 yerel -> "...T11:00:00.000Z" -> slice ile yanlislikla "11:00"
-  // gösterilip öyle kaydedilirdi). Date nesnesinin yerel getter'lari kullanilir.
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function formatTime(iso: string | null): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
 
 function PresentationRow({
   importId,
