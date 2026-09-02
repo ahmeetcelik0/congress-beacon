@@ -1,4 +1,4 @@
-import { combineIstanbulDateTime } from './congress-time';
+import { combineIstanbulDateTime, toIstanbulWallClockDate } from './congress-time';
 
 // Faz 12: bu testler `process.env.TZ`den BAĞIMSIZ aynı sonucu vermelidir -
 // asıl kanıtladığımız şey bu (bkz. docs/decisions.md "Faz 12"). Eski
@@ -35,5 +35,25 @@ describe('combineIstanbulDateTime', () => {
   it('saat/dakika sınır dışıysa null döner', () => {
     expect(combineIstanbulDateTime('2026-09-10', '25:00')).toBeNull();
     expect(combineIstanbulDateTime('2026-09-10', '10:75')).toBeNull();
+  });
+});
+
+// Faz 13a: `toIstanbulWallClockDate` `combineIstanbulDateTime`in TAM
+// TERSİDİR - round-trip testi asıl kanıt (bkz. docs/decisions.md
+// "Faz 13a" - Excel'in kendi tarih sistemi TZ taşımadığı için dışa
+// aktarım hücrelerine bu fonksiyondan geçmemiş bir Date yazılırsa
+// Excel UTC saatini gösterir, Türkiye saatini değil).
+describe('toIstanbulWallClockDate', () => {
+  it('combineIstanbulDateTime ile round-trip: aynı duvar saati bileşenlerini üretir', () => {
+    const gercekUtc = combineIstanbulDateTime('2026-04-09', '14:00');
+    const duvarSaati = toIstanbulWallClockDate(gercekUtc!);
+    expect(duvarSaati.getUTCHours()).toBe(14);
+    expect(duvarSaati.getUTCDate()).toBe(9);
+    expect(duvarSaati.getUTCMonth()).toBe(3);
+  });
+
+  it('UTC 11:00 -> duvar saati bileşenleri 14:00 taşır (+3 sabit fark)', () => {
+    const result = toIstanbulWallClockDate(new Date('2026-04-09T11:00:00.000Z'));
+    expect(result.toISOString()).toBe('2026-04-09T14:00:00.000Z');
   });
 });
