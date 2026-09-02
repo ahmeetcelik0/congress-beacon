@@ -1,10 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttendanceQueryService } from '../attendance/attendance-query.service';
-import { HallVisitsQueryDto } from '../attendance/dto/hall-visits-query.dto';
 import { NotificationStatus } from '../../generated/prisma/client';
 
-const CSV_EXPORT_MAX_ROWS = 5000;
 // Faz 9: panelde "son gonderimler" listesi icin ust sinir - sinirsiz
 // buyumeyi onlemek amacli, sayfalama bu kapsamda YOK (kucuk bir liste
 // yeterli, bkz. Faz 9 talimati §6 "kucuk bir ekleme").
@@ -12,10 +9,7 @@ const RECENT_NOTIFICATIONS_LIMIT = 20;
 
 @Injectable()
 export class ReportsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly attendanceQueryService: AttendanceQueryService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async getDataQuality(congressId: string) {
     const [totalObservations, matchedObservations, congress, unmatchedGroups] =
@@ -197,45 +191,5 @@ export class ReportsService {
         userName: `${log.user.firstName} ${log.user.lastName}`,
       })),
     };
-  }
-
-  async getHallVisitsCsv(query: HallVisitsQueryDto): Promise<string> {
-    const { items } = await this.attendanceQueryService.getHallVisits({
-      ...query,
-      page: 1,
-      pageSize: CSV_EXPORT_MAX_ROWS,
-    });
-
-    const escape = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
-    const header = [
-      'Katilimci',
-      'Salon',
-      'Giris',
-      'Cikis',
-      'Sure (dk)',
-      'Guven',
-      'Durum',
-    ].join(',');
-
-    const rows = items.map((visit) => {
-      const durationMinutes = Math.round(
-        ((visit.endedAt ? new Date(visit.endedAt).getTime() : Date.now()) -
-          new Date(visit.startedAt).getTime()) /
-          60000,
-      );
-
-      return [
-        escape(`${visit.userFirstName} ${visit.userLastName}`),
-        escape(visit.hallName),
-        visit.startedAt.toISOString(),
-        visit.endedAt ? visit.endedAt.toISOString() : '',
-        String(durationMinutes),
-        visit.confidenceLevel ?? '',
-        visit.isOpen ? 'icerde' : 'cikti',
-      ].join(',');
-    });
-
-    return [header, ...rows].join('\n');
   }
 }

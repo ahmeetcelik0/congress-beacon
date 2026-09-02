@@ -50,7 +50,7 @@ function createFakePrisma(options: {
 }
 
 function buildService(prisma: unknown) {
-  return new ReportsService(prisma as never, {} as never);
+  return new ReportsService(prisma as never);
 }
 
 describe('ReportsService.getDataQuality()', () => {
