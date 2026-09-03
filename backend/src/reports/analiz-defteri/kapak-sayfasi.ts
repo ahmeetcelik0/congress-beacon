@@ -18,7 +18,9 @@ export type KapakOzet = {
   olusturanAdmin: string;
   olusturmaZamani: Date;
   sayfaSatirSayilari: { sayfa: string; satir: number }[];
-  hamGozlemSonuc: HamGozlemSonuc;
+  // Faz 13b: sayfa seçim kutucukları eklendiğinde Ham Gözlem sayfası
+  // KAPATILABİLİR hale geldi - o durumda kesme kontrolü ANLAMSIZDIR, null.
+  hamGozlemSonuc: HamGozlemSonuc | null;
   enGecUlasan: Date | null;
   sonBirSaatteGecikmeliSayisi: number;
 };
@@ -35,7 +37,7 @@ export async function collectKapakOzet(
   filter: ResolvedFilter,
   lookups: LookupTables,
   olusturanAdmin: string,
-  hamGozlemSonuc: HamGozlemSonuc,
+  hamGozlemSonuc: HamGozlemSonuc | null,
   sayfaSatirSayilari: { sayfa: string; satir: number }[],
 ): Promise<KapakOzet> {
   const congress = await prisma.congress.findUniqueOrThrow({
@@ -165,7 +167,7 @@ export function yazKapakSayfasi(
   }
   bosSatir();
 
-  if (ozet.hamGozlemSonuc.kesildi) {
+  if (ozet.hamGozlemSonuc?.kesildi) {
     baslik('Kesme uyarısı');
     uyari(
       `Ham gözlem ${(1_048_576).toLocaleString('tr-TR')} satırda kesildi, ` +

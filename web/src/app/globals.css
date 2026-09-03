@@ -683,6 +683,61 @@ body::after {
   box-shadow: 0 0 16px -2px var(--signal-glow);
 }
 
+/* ===== Beacon Analiz Defteri formu (sayfa seçimi + tahmin) ===== */
+.analiz-defteri-sayfa-secimi {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.analiz-defteri-sayfa-secimi-baslik {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.analiz-defteri-sayfa-gruplari {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.analiz-defteri-sayfa-grubu {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.75rem;
+}
+
+.analiz-defteri-sayfa-grubu legend {
+  font-family: var(--font-display), sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0 0.3rem;
+}
+
+.analiz-defteri-sayfa-grubu legend label,
+.analiz-defteri-sayfa-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text);
+  padding: 0.15rem 0;
+  cursor: pointer;
+}
+
+.analiz-defteri-form-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.analiz-defteri-tahmin {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
 /* KPI/istatistik kartları artık paylaşılan bileşendedir:
    bkz. `src/components/ui/metric-card.tsx` (`.ui-metric-card` / `.ui-metric-grid`). */
 

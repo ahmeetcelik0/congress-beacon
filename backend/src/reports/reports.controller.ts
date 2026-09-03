@@ -46,6 +46,13 @@ export class ReportsController {
   // alınır - `AnalizDefteriService` kendi içinde AYRICA kongre bilgisini
   // sorgular (kapak sayfası için), bu tekrar kabul edilebilir bir maliyet
   // (tek satırlık, index'li sorgu).
+  // Faz 13b: panel "İndir"e basmadan ÖNCE bunu çağırır - dosya ÜRETİLMEZ,
+  // yalnızca sayfa/satır sayısı tahmini döner (bkz. `satir-tahmini.ts`).
+  @Get('analiz-defteri/tahmin')
+  getAnalizDefteriTahmin(@Query() query: AnalizDefteriQueryDto) {
+    return this.analizDefteriService.hesaplaTahmin(query);
+  }
+
   @Get('analiz-defteri.xlsx')
   async getAnalizDefteri(
     @Query() query: AnalizDefteriQueryDto,

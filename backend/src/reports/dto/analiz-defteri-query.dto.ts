@@ -26,6 +26,39 @@ function parseIdList(value: unknown): string[] | undefined {
     .filter((id) => id.length > 0);
 }
 
+// Faz 13b: Kapak hariç 13 sayfanın her biri kapatılabilir - panelde
+// kutucuklarla seçilir. Anahtarlar burada TEK yerde tanımlanır, hem DTO
+// doğrulaması hem `analiz-defteri.service.ts`'teki yazma sırası hem panel
+// (aynı listeyi `PAGE_KEYS` üzerinden dolaylı paylaşır) buradan besleniyor.
+export const ANALIZ_DEFTERI_SAYFA_ANAHTARLARI = [
+  'hamGozlem',
+  'dakikaOzeti',
+  'girisCikisOlaylari',
+  'kararDetayi',
+  'salonZiyaretleri',
+  'kullaniciSalonOzeti',
+  'cihazVeRssi',
+  'gonderimSagligi',
+  'katilimcilar',
+  'beaconEnvanteri',
+  'kongreAyarlari',
+  'program',
+  'veriSozlugu',
+] as const;
+
+export type AnalizDefteriSayfaAnahtari =
+  (typeof ANALIZ_DEFTERI_SAYFA_ANAHTARLARI)[number];
+
+function parsePageKeys(
+  value: unknown,
+): AnalizDefteriSayfaAnahtari[] | undefined {
+  const list = parseIdList(value);
+  if (!list) return undefined;
+  return list.filter((key): key is AnalizDefteriSayfaAnahtari =>
+    (ANALIZ_DEFTERI_SAYFA_ANAHTARLARI as readonly string[]).includes(key),
+  );
+}
+
 export class AnalizDefteriQueryDto {
   @IsUUID()
   congressId: string;
@@ -50,6 +83,15 @@ export class AnalizDefteriQueryDto {
   @IsArray()
   @IsUUID('4', { each: true })
   hallIds?: string[];
+
+  // Boş/verilmemiş = TÜMÜ (varsayılan). Geçersiz bir anahtar sessizce
+  // filtrelenir (whitelist zaten `parsePageKeys` içinde uygulanıyor) - kapak
+  // bu listede YOKTUR, her zaman yazılır (bkz. `analiz-defteri.service.ts`).
+  @IsOptional()
+  @Transform(({ value }) => parsePageKeys(value))
+  @IsArray()
+  @IsString({ each: true })
+  pages?: AnalizDefteriSayfaAnahtari[];
 
   // İndirme linki doğrudan tarayıcı navigasyonuyla tetiklendiği (fetch
   // değil) için Authorization header'ı eklenemiyor, `AdminJwtGuard` bu

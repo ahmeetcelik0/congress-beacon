@@ -250,8 +250,9 @@ export default async function ReportsPage({
             }))}
           />
           <p className="reports-subheading">
-            Ham gözlem, dakika bazlı özet, salon ziyaretleri ve kullanıcı-salon özetini içeren
-            çok sayfalı bir Excel defteri indirir. Tarih-saat aralığı zorunludur.
+            Ham veri, karar izleri, ziyaretler ve referans bilgilerini içeren 14 sayfalık bir
+            Excel defteri indirir - hangi sayfaların dahil edileceği aşağıdan seçilebilir.
+            Tarih-saat aralığı zorunludur.
           </p>
         </>
       )}
