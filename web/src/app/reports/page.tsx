@@ -1,6 +1,6 @@
 import { api, type NotificationDeliveryStatus } from '@/lib/api';
 import { CongressSelector } from '../components/congress-selector';
-import { ReportsDownloadLink } from './reports-download-link';
+import { AnalizDefteriForm } from './analiz-defteri-form';
 import { PageHeader } from '@/components/ui/page-header';
 import { EmptyState } from '@/components/ui/empty-state';
 import { MetricCard } from '@/components/ui/metric-card';
@@ -31,6 +31,29 @@ const NOTIFICATION_STATUS_LABEL: Record<NotificationDeliveryStatus, string> = {
   SKIPPED: 'atlandı',
 };
 
+// `listRegistrations` sayfa başına en fazla 200 kayıt döner (bkz. backend
+// `registrations-query.dto.ts` `@Max(200)`) - Analiz Defteri'nin kullanıcı
+// çoklu seçimi TÜM aktif katılımcıları listelemek istediği için burada
+// 200'lük sayfalar halinde döngüyle tamamı toplanır.
+const REGISTRATIONS_PAGE_SIZE = 200;
+
+async function listAllActiveRegistrations(congressId: string) {
+  const items: Awaited<ReturnType<typeof api.listRegistrations>>['items'] = [];
+  let page = 1;
+  while (true) {
+    const result = await api.listRegistrations({
+      congressId,
+      isActive: true,
+      page,
+      pageSize: REGISTRATIONS_PAGE_SIZE,
+    });
+    items.push(...result.items);
+    if (items.length >= result.total || result.items.length === 0) break;
+    page++;
+  }
+  return items;
+}
+
 export default async function ReportsPage({
   searchParams,
 }: {
@@ -49,13 +72,15 @@ export default async function ReportsPage({
   }
 
   const congresses = congressesResult.congresses;
-  const [dataQuality, beaconHealth, notificationSummary] = congressId
+  const [dataQuality, beaconHealth, notificationSummary, halls, registrations] = congressId
     ? await Promise.all([
         api.getDataQualityReport(congressId),
         api.getBeaconHealthReport(congressId),
         api.getNotificationSummaryReport(congressId),
+        api.listHalls(congressId),
+        listAllActiveRegistrations(congressId),
       ])
-    : [null, null, null];
+    : [null, null, null, [], []];
 
   return (
     <main className="panel-page">
@@ -214,8 +239,21 @@ export default async function ReportsPage({
             </>
           )}
 
-          <h2>Dışa Aktar</h2>
-          <ReportsDownloadLink congressId={congressId} />
+          <h2>Beacon Analiz Defteri</h2>
+          <AnalizDefteriForm
+            congressId={congressId}
+            halls={halls}
+            users={registrations.map((item) => ({
+              userId: item.userId,
+              firstName: item.firstName,
+              lastName: item.lastName,
+            }))}
+          />
+          <p className="reports-subheading">
+            Ham veri, karar izleri, ziyaretler ve referans bilgilerini içeren 14 sayfalık bir
+            Excel defteri indirir - hangi sayfaların dahil edileceği aşağıdan seçilebilir.
+            Tarih-saat aralığı zorunludur.
+          </p>
         </>
       )}
     </main>

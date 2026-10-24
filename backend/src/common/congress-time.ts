@@ -83,3 +83,26 @@ export function combineIstanbulDateTime(
   const offsetMinutes = istanbulOffsetMinutesAt(naiveUtcMs);
   return new Date(naiveUtcMs - offsetMinutes * 60000);
 }
+
+/**
+ * Faz 13a: gerçek bir UTC anını, İstanbul'da GÖRÜNEN duvar saati
+ * bileşenlerini (yıl/ay/gün/saat/dakika) TAŞIYAN ama HÂLÂ "UTC" olarak
+ * ETİKETLİ bir `Date`e çevirir - `toIstanbulDateTime`'ın (gerçek an
+ * üretir) TAM TERSİ yönde çalışır.
+ *
+ * SADECE Excel/CSV gibi dışa aktarım formatlarına yazarken kullanılır.
+ * Excel'in kendi tarih sistemi saat dilimi TAŞIMAZ - bir hücreye JS
+ * `Date` atandığında ExcelJS bunu `d.getTime()` (mutlak UTC epoch)
+ * üzerinden kendi seri numarasına çevirir (bkz. `exceljs/lib/utils/
+ * utils.js` `dateToExcel`), yani ham UTC an DOĞRUDAN yazılırsa Excel'i
+ * açan kişi UTC saatini görür, Türkiye saatini DEĞİL - bu, gerçek bir
+ * .xlsx dosyası üretip ham seri numarası üzerinden doğrulandı (bkz.
+ * docs/decisions.md "Faz 13a").
+ *
+ * DÖNEN DEĞER gerçek bir zaman anı DEĞİLDİR - API yanıtına veya
+ * veritabanına ASLA yazılmaz, yalnızca dışa aktarım hücresi için.
+ */
+export function toIstanbulWallClockDate(date: Date): Date {
+  const offsetMinutes = istanbulOffsetMinutesAt(date.getTime());
+  return new Date(date.getTime() + offsetMinutes * 60000);
+}

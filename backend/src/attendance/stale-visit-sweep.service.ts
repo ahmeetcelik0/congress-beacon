@@ -11,9 +11,12 @@ import {
   PresenceStatus,
 } from '../../generated/prisma/client';
 
-const STALE_AFTER_MS = 5 * 60 * 1000;
+// Faz 13b: Kongre Ayarları raporu bu ikisini KAYNAKTAN OKUMASI için export
+// edildi (bkz. `analiz-defteri/kongre-ayarlari-sayfasi.ts`) - süpürme
+// mantığı DEĞİŞMEDİ, yalnızca görünürlük arttı.
+export const STALE_AFTER_MS = 5 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 2 * 60 * 1000;
-const SWEEP_ALGORITHM_VERSION = 'v1-stale-sweep';
+export const SWEEP_ALGORITHM_VERSION = 'v1-stale-sweep';
 const QUEUE_NAME = 'stale-visit-sweep';
 
 // lastConfirmedAt'i STALE_AFTER_MS'den eski, hala "acik" gorunen HallVisit'leri

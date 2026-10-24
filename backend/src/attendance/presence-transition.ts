@@ -7,8 +7,11 @@ import { PresenceStatus } from '../../generated/prisma/client';
 // Boylece giris/cikis/belirsizlik senaryolari veritabani olmadan, dogrudan
 // birim testiyle dogrulanabiliyor.
 
-const ENTRY_STREAK_THRESHOLD = 2;
-const EXIT_STREAK_THRESHOLD = 2;
+// Faz 13b: Kongre Ayarları raporu bu iki sabiti KAYNAKTAN OKUMASI için
+// export edildi (bkz. `analiz-defteri/kongre-ayarlari-sayfasi.ts`) - karar
+// mantığı DEĞİŞMEDİ, yalnızca görünürlük arttı.
+export const ENTRY_STREAK_THRESHOLD = 2;
+export const EXIT_STREAK_THRESHOLD = 2;
 
 export type HallScore = {
   hallId: string;

@@ -9,8 +9,9 @@ function readAdminTokenClient(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-// `ReportsDownloadLink` ile BİREBİR aynı desen (bkz. o dosyadaki yorum):
-// binary xlsx indirme dogrudan tarayici navigasyonuyla oldugu icin
+// Panelin diğer dosya indirme linkleriyle (bkz. `analiz-defteri-form.tsx`)
+// BİREBİR aynı desen: binary xlsx indirme dogrudan tarayici navigasyonuyla
+// oldugu icin
 // Authorization header'i eklenemiyor, token query string'den geciriliyor
 // (backend AdminJwtGuard bunu destekliyor). Hydration mismatch'i onlemek
 // icin token yalnizca mount SONRASI okunuyor.

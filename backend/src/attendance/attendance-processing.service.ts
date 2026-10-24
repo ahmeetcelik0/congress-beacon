@@ -18,7 +18,10 @@ import {
   TransitionEffect,
 } from './presence-transition';
 
-const ALGORITHM_VERSION = 'v3';
+// Faz 13b: Kongre Ayarları raporu bunu KAYNAKTAN OKUMASI için export
+// edildi (bkz. `analiz-defteri/kongre-ayarlari-sayfasi.ts`) - algoritma
+// DEĞİŞMEDİ, yalnızca görünürlük arttı.
+export const ALGORITHM_VERSION = 'v3';
 
 // CoreLocation/flutter_beacon bazen gercek bir olcum yerine 0 dBm doner - bu,
 // "bu taramada guvenilir bir deger alinamadi" anlamina gelen bir sentinel
